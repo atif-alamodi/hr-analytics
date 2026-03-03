@@ -117,91 +117,115 @@ def generate_ai_insights(df, active, df_salary, df_turnover):
     """توليد رؤى ذكية تلقائية من البيانات"""
     insights = []
     
-    # 1. تحليل الرواتب
-    dept_avg = active.groupby('القسم')['الراتب الأساسي'].mean()
-    highest_dept = dept_avg.idxmax()
-    lowest_dept = dept_avg.idxmin()
-    gap = dept_avg.max() - dept_avg.min()
-    insights.append({
-        'type': 'info',
-        'category': 'الرواتب',
-        'text': f'فجوة الرواتب بين الأقسام: {gap:,.0f} ريال. أعلى قسم: {highest_dept} ({dept_avg.max():,.0f} ريال)، أقل قسم: {lowest_dept} ({dept_avg.min():,.0f} ريال)'
-    })
-    
-    # 2. تحليل الدوران
-    left = df[df['الحالة'] != 'نشط']
-    if len(left) > 0:
-        turnover_rate = round(len(left) / len(df) * 100, 1)
-        dept_turnover = left['القسم'].value_counts()
-        worst_dept = dept_turnover.index[0] if len(dept_turnover) > 0 else 'غير محدد'
-        t_type = 'danger' if turnover_rate > 20 else 'warning' if turnover_rate > 10 else 'success'
-        insights.append({
-            'type': t_type,
-            'category': 'الدوران',
-            'text': f'معدل الدوران الإجمالي: {turnover_rate}%. أعلى قسم دوراناً: {worst_dept} ({dept_turnover.iloc[0] if len(dept_turnover) > 0 else 0} موظف). {"يحتاج تدخل عاجل!" if turnover_rate > 20 else ""}'
-        })
-        
-        if 'سبب المغادرة' in left.columns:
-            top_reason = left['سبب المغادرة'].value_counts()
-            if len(top_reason) > 0 and top_reason.index[0]:
-                insights.append({
-                    'type': 'warning',
-                    'category': 'الدوران',
-                    'text': f'أكثر سبب للمغادرة: "{top_reason.index[0]}" ({top_reason.iloc[0]} موظف). يُنصح بمعالجة هذا السبب لتقليل الدوران.'
-                })
-    
-    # 3. تحليل الأداء
-    if 'تقييم الأداء %' in active.columns:
-        avg_perf = active['تقييم الأداء %'].mean()
-        low_perf = active[active['تقييم الأداء %'] < 70]
-        high_perf = active[active['تقييم الأداء %'] >= 90]
-        
-        insights.append({
-            'type': 'success' if avg_perf >= 80 else 'warning',
-            'category': 'الأداء',
-            'text': f'متوسط الأداء العام: {avg_perf:.1f}%. عدد الموظفين الممتازين (90%+): {len(high_perf)}. يحتاج تطوير (أقل من 70%): {len(low_perf)}.'
-        })
-        
-        # ربط الأداء بالدوران
-        if len(left) > 0 and 'تقييم الأداء %' in left.columns:
-            left_avg_perf = left['تقييم الأداء %'].mean()
-            if left_avg_perf < avg_perf:
+    try:
+        # 1. تحليل الرواتب
+        if 'القسم' in active.columns and 'الراتب الأساسي' in active.columns:
+            dept_avg = active.groupby('القسم')['الراتب الأساسي'].mean()
+            if len(dept_avg) > 0:
+                highest_dept = dept_avg.idxmax()
+                lowest_dept = dept_avg.idxmin()
+                gap = dept_avg.max() - dept_avg.min()
                 insights.append({
                     'type': 'info',
-                    'category': 'الأداء',
-                    'text': f'متوسط أداء الموظفين المغادرين ({left_avg_perf:.1f}%) أقل من المتوسط العام ({avg_perf:.1f}%). هناك علاقة بين انخفاض الأداء والمغادرة.'
+                    'category': 'الرواتب',
+                    'text': f'فجوة الرواتب بين الأقسام: {gap:,.0f} ريال. أعلى قسم: {highest_dept} ({dept_avg.max():,.0f} ريال)، أقل قسم: {lowest_dept} ({dept_avg.min():,.0f} ريال)'
                 })
+        
+        # 2. تحليل الدوران
+        if 'الحالة' in df.columns:
+            left = df[df['الحالة'] != 'نشط']
+            if len(left) > 0:
+                turnover_rate = round(len(left) / len(df) * 100, 1)
+                if 'القسم' in left.columns:
+                    dept_turnover = left['القسم'].value_counts()
+                    worst_dept = dept_turnover.index[0] if len(dept_turnover) > 0 else 'غير محدد'
+                    worst_count = dept_turnover.iloc[0] if len(dept_turnover) > 0 else 0
+                else:
+                    worst_dept = 'غير محدد'
+                    worst_count = 0
+                t_type = 'danger' if turnover_rate > 20 else 'warning' if turnover_rate > 10 else 'success'
+                insights.append({
+                    'type': t_type,
+                    'category': 'الدوران',
+                    'text': f'معدل الدوران الإجمالي: {turnover_rate}%. أعلى قسم دوراناً: {worst_dept} ({worst_count} موظف). {"يحتاج تدخل عاجل!" if turnover_rate > 20 else ""}'
+                })
+                
+                if 'سبب المغادرة' in left.columns:
+                    top_reason = left['سبب المغادرة'].value_counts()
+                    top_reason = top_reason[top_reason.index != '']
+                    if len(top_reason) > 0:
+                        insights.append({
+                            'type': 'warning',
+                            'category': 'الدوران',
+                            'text': f'أكثر سبب للمغادرة: "{top_reason.index[0]}" ({top_reason.iloc[0]} موظف). يُنصح بمعالجة هذا السبب لتقليل الدوران.'
+                        })
+        
+        # 3. تحليل الأداء
+        if 'تقييم الأداء %' in active.columns:
+            avg_perf = active['تقييم الأداء %'].mean()
+            low_perf = active[active['تقييم الأداء %'] < 70]
+            high_perf = active[active['تقييم الأداء %'] >= 90]
+            
+            insights.append({
+                'type': 'success' if avg_perf >= 80 else 'warning',
+                'category': 'الأداء',
+                'text': f'متوسط الأداء العام: {avg_perf:.1f}%. عدد الموظفين الممتازين (90%+): {len(high_perf)}. يحتاج تطوير (أقل من 70%): {len(low_perf)}.'
+            })
+            
+            if 'الحالة' in df.columns:
+                left = df[df['الحالة'] != 'نشط']
+                if len(left) > 0 and 'تقييم الأداء %' in left.columns:
+                    left_avg_perf = left['تقييم الأداء %'].mean()
+                    if left_avg_perf < avg_perf:
+                        insights.append({
+                            'type': 'info',
+                            'category': 'الأداء',
+                            'text': f'متوسط أداء الموظفين المغادرين ({left_avg_perf:.1f}%) أقل من المتوسط العام ({avg_perf:.1f}%). هناك علاقة بين انخفاض الأداء والمغادرة.'
+                        })
+        
+        # 4. تحليل التكلفة
+        if df_salary is not None and 'إجمالي التكلفة الشهرية' in df_salary.columns:
+            total_monthly = df_salary['إجمالي التكلفة الشهرية'].sum()
+            avg_cost = df_salary['إجمالي التكلفة الشهرية'].mean()
+            insights.append({
+                'type': 'info',
+                'category': 'التكلفة',
+                'text': f'إجمالي التكلفة الشهرية: {total_monthly:,.0f} ريال. متوسط التكلفة لكل موظف: {avg_cost:,.0f} ريال (الراتب + 30% بدلات وتأمينات تقريباً).'
+            })
+        
+        # 5. تحليل التوظيف
+        if 'الجنسية' in active.columns and len(active) > 0:
+            saudi = active[active['الجنسية'].isin(['سعودي', 'سعودية'])]
+            saudization = round(len(saudi) / len(active) * 100, 1)
+            s_type = 'success' if saudization >= 70 else 'warning' if saudization >= 50 else 'danger'
+            insights.append({
+                'type': s_type,
+                'category': 'السعودة',
+                'text': f'نسبة السعودة: {saudization}% ({len(saudi)} من {len(active)} موظف). {"ممتازة!" if saudization >= 70 else "تحتاج تحسين لتحقيق نسب نطاقات."}'
+            })
+        
+        # 6. الغياب
+        if 'أيام الغياب' in active.columns:
+            high_absence = active[active['أيام الغياب'] > 10]
+            if len(high_absence) > 0:
+                insights.append({
+                    'type': 'warning',
+                    'category': 'الغياب',
+                    'text': f'{len(high_absence)} موظف لديهم أكثر من 10 أيام غياب. متوسط الغياب: {active["أيام الغياب"].mean():.1f} يوم. يُنصح بمراجعة سياسات الحضور.'
+                })
+    except Exception as e:
+        insights.append({
+            'type': 'warning',
+            'category': 'النظام',
+            'text': f'تعذر توليد بعض التحليلات. تأكد من تطابق أسماء الأعمدة مع التنسيق المطلوب.'
+        })
     
-    # 4. تحليل التكلفة
-    if df_salary is not None and 'إجمالي التكلفة الشهرية' in df_salary.columns:
-        total_monthly = df_salary['إجمالي التكلفة الشهرية'].sum()
-        avg_cost = df_salary['إجمالي التكلفة الشهرية'].mean()
+    if not insights:
         insights.append({
             'type': 'info',
-            'category': 'التكلفة',
-            'text': f'إجمالي التكلفة الشهرية: {total_monthly:,.0f} ريال. متوسط التكلفة لكل موظف: {avg_cost:,.0f} ريال (الراتب + 30% بدلات وتأمينات تقريباً).'
+            'category': 'عام',
+            'text': f'تم تحميل البيانات بنجاح. عدد السجلات: {len(df)}.'
         })
-    
-    # 5. تحليل التوظيف
-    if 'الجنسية' in active.columns:
-        saudi = active[active['الجنسية'].isin(['سعودي', 'سعودية'])]
-        saudization = round(len(saudi) / len(active) * 100, 1)
-        s_type = 'success' if saudization >= 70 else 'warning' if saudization >= 50 else 'danger'
-        insights.append({
-            'type': s_type,
-            'category': 'السعودة',
-            'text': f'نسبة السعودة: {saudization}% ({len(saudi)} من {len(active)} موظف). {"ممتازة!" if saudization >= 70 else "تحتاج تحسين لتحقيق نسب نطاقات."}'
-        })
-    
-    # 6. الغياب
-    if 'أيام الغياب' in active.columns:
-        high_absence = active[active['أيام الغياب'] > 10]
-        if len(high_absence) > 0:
-            insights.append({
-                'type': 'warning',
-                'category': 'الغياب',
-                'text': f'{len(high_absence)} موظف لديهم أكثر من 10 أيام غياب. متوسط الغياب: {active["أيام الغياب"].mean():.1f} يوم. يُنصح بمراجعة سياسات الحضور.'
-            })
     
     return insights
 
