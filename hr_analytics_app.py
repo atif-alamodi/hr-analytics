@@ -1,736 +1,738 @@
 # ===================================================
-# منصة تحليلات الموارد البشرية الذكية v3.0
-# Smart HR Analytics - يقرأ أي ملف Excel تلقائياً
+# منصة تحليلات الموارد البشرية الذكية v4.0
 # رسال الود لتقنية المعلومات
+# المرحلة 2: ميزانية التدريب + ROI + الاحتياجات التدريبية
 # ===================================================
 
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import io, re
+import io, json, math
 from datetime import datetime
 
 st.set_page_config(page_title="تحليلات HR | رسال الود", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;500;600;700;800&display=swap');
-    * { font-family: 'Noto Sans Arabic', sans-serif; }
-    .main .block-container { padding-top: 1rem; max-width: 1400px; }
-    [data-testid="stSidebar"] { background: linear-gradient(180deg, #0F4C5C 0%, #1A1A2E 100%); }
-    [data-testid="stSidebar"] * { color: white !important; }
-    [data-testid="stMetric"] { background: white; border-radius: 12px; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1px solid #E2E8F0; }
-    [data-testid="stMetric"] label { font-size: 13px !important; color: #64748B !important; }
-    [data-testid="stMetric"] [data-testid="stMetricValue"] { font-size: 24px !important; font-weight: 700 !important; }
-    h1 { color: #0F4C5C !important; font-weight: 800 !important; }
-    .insight-box { background: #EFF6FF; border-radius: 12px; padding: 16px 20px; border-right: 4px solid #3B82F6; margin-bottom: 12px; font-size: 14px; line-height: 1.8; }
-    .insight-warning { background: #FFF7ED; border-right-color: #F97316; }
-    .insight-success { background: #F0FDF4; border-right-color: #22C55E; }
-    .insight-danger { background: #FEF2F2; border-right-color: #EF4444; }
-    .app-header { background: linear-gradient(135deg, #0F4C5C, #1A1A2E); padding: 24px 32px; border-radius: 16px; margin-bottom: 24px; color: white; }
-    .app-header h1 { color: white !important; margin: 0; font-size: 28px; }
-    .app-header p { color: rgba(255,255,255,0.7); margin: 4px 0 0; font-size: 14px; }
-    #MainMenu { visibility: hidden; }
-    footer { visibility: hidden; }
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;500;600;700;800&display=swap');
+*{font-family:'Noto Sans Arabic',sans-serif}
+.main .block-container{padding-top:1rem;max-width:1400px}
+[data-testid="stSidebar"]{background:linear-gradient(180deg,#0F4C5C 0%,#1A1A2E 100%)}
+[data-testid="stSidebar"] *{color:white !important}
+[data-testid="stMetric"]{background:white;border-radius:12px;padding:16px 20px;box-shadow:0 1px 3px rgba(0,0,0,.06);border:1px solid #E2E8F0}
+[data-testid="stMetric"] label{font-size:13px !important;color:#64748B !important}
+[data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:22px !important;font-weight:700 !important}
+h1{color:#0F4C5C !important;font-weight:800 !important}
+.hdr{background:linear-gradient(135deg,#0F4C5C,#1A1A2E);padding:24px 32px;border-radius:16px;margin-bottom:24px;color:white}
+.hdr h1{color:white !important;margin:0;font-size:26px}
+.hdr p{color:rgba(255,255,255,.7);margin:4px 0 0;font-size:14px}
+.ibox{background:#EFF6FF;border-radius:12px;padding:14px 18px;border-right:4px solid #3B82F6;margin-bottom:10px;font-size:14px;line-height:1.7}
+.ibox.warn{background:#FFF7ED;border-right-color:#F97316}
+.ibox.ok{background:#F0FDF4;border-right-color:#22C55E}
+.ibox.bad{background:#FEF2F2;border-right-color:#EF4444}
+.kpi-card{background:linear-gradient(135deg,#0F4C5C,#1B4D5C);color:white;border-radius:14px;padding:20px;text-align:center;margin-bottom:12px}
+.kpi-card h3{font-size:28px;margin:8px 0 4px;font-weight:800}
+.kpi-card p{font-size:12px;opacity:.7;margin:0}
+#MainMenu,footer{visibility:hidden}
 </style>
 """, unsafe_allow_html=True)
 
-CL = {'primary':'#0F4C5C','accent':'#9A031E','success':'#2D6A4F','dept':px.colors.qualitative.Set2}
+CL = {'primary':'#0F4C5C','accent':'#E36414','success':'#2D6A4F','danger':'#9A031E','dept':px.colors.qualitative.Set2}
 
-def insight_box(text, t="info"):
-    cls = f"insight-box insight-{t}" if t != "info" else "insight-box"
+def hdr(title, sub=""):
+    st.markdown(f'<div class="hdr"><h1>{title}</h1><p>{sub}</p></div>', unsafe_allow_html=True)
+
+def ibox(text, t="info"):
+    c = {"info":"ibox","warning":"ibox warn","success":"ibox ok","danger":"ibox bad"}
     icons = {"info":"💡","warning":"⚠️","success":"✅","danger":"🚨"}
-    st.markdown(f'<div class="{cls}">{icons.get(t,"💡")} {text}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="{c.get(t,"ibox")}">{icons.get(t,"💡")} {text}</div>', unsafe_allow_html=True)
 
-# ===== SMART DATA LOADER =====
-# Column name mapping: English -> Arabic standard names
-COL_MAP = {
-    'emp id': 'رقم الموظف', 'employee id': 'رقم الموظف', 'id': 'رقم الموظف',
-    'name (english)': 'الاسم الإنجليزي', 'name (arabic)': 'الاسم', 'الاسم': 'الاسم',
-    'name': 'الاسم', 'employee name': 'الاسم',
-    'department': 'القسم', 'القسم': 'القسم', 'dept': 'القسم',
-    'job title': 'المسمى الوظيفي', 'المسمى الوظيفي': 'المسمى الوظيفي', 'title': 'المسمى الوظيفي', 'position': 'المسمى الوظيفي',
-    'join date': 'تاريخ التعيين', 'تاريخ التعيين': 'تاريخ التعيين', 'hire date': 'تاريخ التعيين', 'start date': 'تاريخ التعيين',
-    'location': 'الموقع', 'الموقع': 'الموقع', 'city': 'الموقع', 'المدينة': 'الموقع',
-    'tenure (yrs)': 'سنوات الخدمة', 'tenure': 'سنوات الخدمة', 'سنوات الخدمة': 'سنوات الخدمة',
-    'salary': 'الراتب الأساسي', 'الراتب الأساسي': 'الراتب الأساسي', 'basic salary': 'الراتب الأساسي',
-    'الجنسية': 'الجنسية', 'nationality': 'الجنسية',
-    'الحالة': 'الحالة', 'status': 'الحالة',
-    'تقييم الأداء %': 'تقييم الأداء %', 'performance': 'تقييم الأداء %', 'performance %': 'تقييم الأداء %',
-    'الرضا الوظيفي %': 'الرضا الوظيفي %', 'satisfaction': 'الرضا الوظيفي %',
-    'أيام الغياب': 'أيام الغياب', 'absence': 'أيام الغياب', 'absence days': 'أيام الغياب',
-    'ساعات التدريب': 'ساعات التدريب', 'training hours': 'ساعات التدريب',
-    'الدرجة': 'الدرجة', 'grade': 'الدرجة', 'level': 'الدرجة',
-    'الجنس': 'الجنس', 'gender': 'الجنس',
-    'العمر': 'العمر', 'age': 'العمر',
+def kpi(label, value):
+    st.markdown(f'<div class="kpi-card"><p>{label}</p><h3>{value}</h3></div>', unsafe_allow_html=True)
+
+def fmt(v): return f"{v:,.0f}"
+
+def has(df, n): return df is not None and n in df.columns
+
+def safe_mean(df, n): return df[n].mean() if has(df,n) and len(df)>0 else 0
+
+# ===== TRAINING PROVIDERS DATABASE =====
+PROVIDERS = {
+    "السعودية": [
+        {"name": "معهد الإدارة العامة (IPA)", "speciality": "الإدارة والقيادة", "type": "حكومي", "url": "ipa.edu.sa"},
+        {"name": "غرفة جدة - بيت التدريب", "speciality": "المهارات المهنية", "type": "شبه حكومي", "url": "jcci.org.sa"},
+        {"name": "KPMG Academy", "speciality": "المالية والمحاسبة", "type": "خاص", "url": "kpmg.com/sa"},
+        {"name": "PwC Academy ME", "speciality": "التحول الرقمي والمالية", "type": "خاص", "url": "pwcacademy.me"},
+        {"name": "Misk Academy", "speciality": "التقنية والابتكار", "type": "غير ربحي", "url": "misk.org.sa"},
+        {"name": "بكه للتعليم", "speciality": "إدارة المشاريع PMP/Agile", "type": "خاص", "url": "bakkah.com"},
+        {"name": "معهد تيك كورنر", "speciality": "البرمجة والبيانات", "type": "خاص", "url": "techcorner.sa"},
+        {"name": "BIBF الشرق الأوسط", "speciality": "الخدمات المالية والفنتك", "type": "خاص", "url": "bibf.com"},
+        {"name": "معهد الأمير مشعل للتدريب", "speciality": "الأمن السيبراني", "type": "خاص", "url": ""},
+        {"name": "Udacity MENA", "speciality": "الذكاء الاصطناعي والبيانات", "type": "أونلاين", "url": "udacity.com"},
+    ],
+    "الخليج": [
+        {"name": "BIBF البحرين", "speciality": "البنوك والمالية", "type": "حكومي", "url": "bibf.com"},
+        {"name": "Informa Connect", "speciality": "القيادة والاستراتيجية", "type": "خاص", "url": "informaconnect.com"},
+        {"name": "London Business School ME", "speciality": "MBA والقيادة التنفيذية", "type": "خاص", "url": "lbs.ac.uk"},
+        {"name": "Dale Carnegie UAE", "speciality": "المهارات القيادية", "type": "خاص", "url": "dalecarnegie.com"},
+        {"name": "QA International (Doha)", "speciality": "IT وتحول رقمي", "type": "خاص", "url": "qa.com"},
+    ],
+    "مصر": [
+        {"name": "الجامعة الأمريكية بالقاهرة (AUC)", "speciality": "إدارة الأعمال والتسويق", "type": "أكاديمي", "url": "aucegypt.edu"},
+        {"name": "IMI Egypt", "speciality": "الإدارة والقيادة", "type": "خاص", "url": "imi-eg.com"},
+        {"name": "Sprints", "speciality": "البرمجة والتقنية", "type": "خاص", "url": "sprints.ai"},
+        {"name": "Manara", "speciality": "التطوير المهني التقني", "type": "خاص", "url": "manara.tech"},
+        {"name": "Digital Egypt Pioneers", "speciality": "التحول الرقمي", "type": "حكومي", "url": "mcit.gov.eg"},
+    ],
+    "أونلاين عالمي": [
+        {"name": "Coursera for Business", "speciality": "متعدد", "type": "أونلاين", "url": "coursera.org"},
+        {"name": "LinkedIn Learning", "speciality": "مهارات مهنية", "type": "أونلاين", "url": "linkedin.com/learning"},
+        {"name": "Udemy Business", "speciality": "متعدد", "type": "أونلاين", "url": "udemy.com"},
+        {"name": "HBS Online", "speciality": "القيادة والاستراتيجية", "type": "أونلاين", "url": "online.hbs.edu"},
+        {"name": "Google Career Certificates", "speciality": "التقنية والبيانات", "type": "أونلاين", "url": "grow.google"},
+    ]
 }
 
-def smart_read_sheet(xl, sheet_name):
-    """Read a sheet with auto-detection of header row"""
-    df_raw = pd.read_excel(xl, sheet_name=sheet_name, header=None)
-    # Try to find the header row (row with most non-null string values)
-    best_row = 0
-    best_score = 0
-    for i in range(min(5, len(df_raw))):
-        row = df_raw.iloc[i]
-        score = sum(1 for v in row if isinstance(v, str) and len(str(v).strip()) > 1 and not str(v).startswith('Total') and not str(v).startswith('Unnamed'))
-        if score > best_score:
-            best_score = score
-            best_row = i
+# Training categories -> skills mapping
+TRAINING_CATEGORIES = {
+    "المبيعات والإيرادات": ["مبيعات استشارية","إدارة حسابات","تفاوض","CRM","خدمة عملاء","NPS/CSAT"],
+    "التسويق والنمو": ["تسويق رقمي","Growth Hacking","SEO","تحليلات تسويقية","بناء علامة تجارية","شراكات"],
+    "تطوير الأعمال": ["شراكات استراتيجية","توسع إقليمي","بناء عروض","ذكاء تنافسي","عروض المستثمرين"],
+    "عمليات المنتجات": ["إدارة منتجات رقمية","Agile/Scrum","تصميم UX","Product-Led Growth","OKRs"],
+    "البيانات والذكاء": ["Python/SQL","Power BI/Tableau","AI تنبؤي","هندسة بيانات","حوكمة بيانات"],
+    "المالية": ["نمذجة مالية","IFRS","تحليل مالي","تقييم شركات"],
+    "الموارد البشرية": ["استقطاب مواهب تقنية","إدارة أداء","OKRs","ثقافة مؤسسية","تفاعل موظفين"],
+    "الحوكمة والمخاطر": ["إدارة مخاطر فنتك","SAMA/PCI-DSS","أمن سيبراني"],
+    "الشؤون القانونية": ["عقود رقمية","حماية ملكية فكرية","تنظيمات تجارة إلكترونية"],
+}
 
-    df = pd.read_excel(xl, sheet_name=sheet_name, header=best_row)
-    # Drop unnamed and empty columns
-    df = df[[c for c in df.columns if not str(c).startswith('Unnamed')]]
-    # Drop rows that are all NaN
-    df = df.dropna(how='all').reset_index(drop=True)
-    # Remove header-like rows (e.g. row containing '#' as value)
-    if len(df) > 0 and '#' in df.columns:
-        df = df[df['#'].apply(lambda x: not isinstance(x, str) or x != '#')]
+# Default budget template (based on Resal's actual structure)
+DEFAULT_BUDGET = [
+    {"dept":"المبيعات والإيرادات","budget":16000,"pct":22.9,"priority":"حرج","fit":"مباشر","cat":"محرك إيرادات"},
+    {"dept":"التسويق والنمو","budget":13000,"pct":18.6,"priority":"حرج","fit":"مباشر","cat":"محرك إيرادات"},
+    {"dept":"تطوير الأعمال","budget":11000,"pct":15.7,"priority":"عالي","fit":"مباشر","cat":"محرك إيرادات"},
+    {"dept":"عمليات المنتجات","budget":9000,"pct":12.9,"priority":"عالي","fit":"مباشر","cat":"ممكّن نمو"},
+    {"dept":"البيانات والذكاء","budget":7000,"pct":10.0,"priority":"عالي","fit":"مباشر","cat":"ممكّن نمو"},
+    {"dept":"المالية","budget":5000,"pct":7.1,"priority":"متوسط","fit":"داعم","cat":"بنية تحتية"},
+    {"dept":"الموارد البشرية","budget":4000,"pct":5.7,"priority":"متوسط","fit":"داعم","cat":"بنية تحتية"},
+    {"dept":"الحوكمة والمخاطر","budget":3000,"pct":4.3,"priority":"متوسط","fit":"داعم","cat":"بنية تحتية"},
+    {"dept":"الشؤون القانونية","budget":2000,"pct":2.9,"priority":"أساسي","fit":"داعم","cat":"بنية تحتية"},
+]
+
+DEFAULT_PROGRAMS = {
+    "المبيعات والإيرادات": [
+        {"program":"مهارات البيع الاستشاري المتقدم","budget":3600,"source":"خارجي","timing":"Q1-Q2","impact":"زيادة معدل التحويل وإغلاق الصفقات الكبرى"},
+        {"program":"نجاح العملاء وتعظيم CLV","budget":3000,"source":"خارجي","timing":"Q1","impact":"تحسين الاحتفاظ بالعملاء وزيادة البيع"},
+        {"program":"إدارة الحسابات الاستراتيجية","budget":2800,"source":"خارجي","timing":"Q2","impact":"تعظيم الإيرادات من الحسابات الرئيسية"},
+        {"program":"تجربة العملاء ومقاييس NPS/CSAT","budget":2400,"source":"داخلي","timing":"Q1-Q3","impact":"تعزيز تجربة العملاء وزيادة الولاء"},
+        {"program":"التفاوض ومعالجة الاعتراضات","budget":2200,"source":"خارجي","timing":"Q2-Q3","impact":"تحسين شروط العقود وزيادة هوامش الربح"},
+        {"program":"أدوات CRM وأتمتة المبيعات","budget":2000,"source":"داخلي","timing":"Q1","impact":"زيادة كفاءة فريق المبيعات"},
+    ],
+    "التسويق والنمو": [
+        {"program":"التسويق الرقمي المتقدم وإدارة الحملات","budget":3000,"source":"خارجي","timing":"Q1","impact":"زيادة ROAS العائد على الإنفاق الإعلاني"},
+        {"program":"استراتيجيات Growth Hacking","budget":2800,"source":"خارجي","timing":"Q1-Q2","impact":"تسريع اكتساب المستخدمين بتكلفة أقل"},
+        {"program":"SEO والتسويق بالمحتوى","budget":2000,"source":"أونلاين","timing":"Q2","impact":"زيادة الزيارات العضوية والتحويلات"},
+        {"program":"تحليلات التسويق وقياس الأداء","budget":2000,"source":"أونلاين","timing":"Q1-Q2","impact":"قرارات تسويقية مبنية على البيانات"},
+        {"program":"إدارة العلامة التجارية وتحديد المواقع","budget":1600,"source":"خارجي","timing":"Q3","impact":"تعزيز مكانة رسال في السوق"},
+        {"program":"تسويق الشراكات والتحالفات","budget":1600,"source":"داخلي","timing":"Q2-Q3","impact":"توسيع شبكة الشركاء التجاريين"},
+    ],
+    "تطوير الأعمال": [
+        {"program":"استراتيجية BD والشراكات","budget":3000,"source":"خارجي","timing":"Q1","impact":"بناء شراكات مع قطاعات رئيسية"},
+        {"program":"التوسع في أسواق MENA","budget":2400,"source":"خارجي","timing":"Q1-Q2","impact":"دعم خطة التوسع الإقليمي"},
+        {"program":"بناء العروض وتصميم الحلول","budget":2000,"source":"داخلي","timing":"Q2","impact":"تحسين معدل الفوز بالعروض"},
+        {"program":"الاستخبارات السوقية والتنافسية","budget":2000,"source":"أونلاين","timing":"Q1-Q3","impact":"فهم أعمق للفرص والتهديدات"},
+        {"program":"عروض المستثمرين والعرض التقديمي","budget":1600,"source":"خارجي","timing":"Q2","impact":"الاستعداد لجولات التمويل"},
+    ],
+    "عمليات المنتجات": [
+        {"program":"إدارة المنتجات الرقمية المتقدمة","budget":2400,"source":"خارجي","timing":"Q1","impact":"تحسين دورة المنتج وسرعة الإطلاق"},
+        {"program":"منهجيات Agile/Scrum المتقدمة","budget":2000,"source":"أونلاين","timing":"Q1-Q2","impact":"زيادة كفاءة فريق التطوير"},
+        {"program":"تصميم UX مبني على البيانات","budget":2000,"source":"خارجي","timing":"Q2","impact":"تحسين معدل التحويل داخل التطبيق"},
+        {"program":"إدارة النمو عبر المنتج (PLG)","budget":1600,"source":"أونلاين","timing":"Q2-Q3","impact":"النمو من خلال المنتج بدل المبيعات التقليدية"},
+        {"program":"OKRs ومقاييس أداء المنتج","budget":1000,"source":"داخلي","timing":"Q1","impact":"مواءمة أهداف المنتج مع الأهداف المالية"},
+    ],
+    "البيانات والذكاء": [
+        {"program":"تحليلات بيانات متقدمة Python/SQL","budget":2000,"source":"أونلاين","timing":"Q1-Q2","impact":"تحليلات متقدمة لدعم القرار"},
+        {"program":"لوحات بيانات Power BI/Tableau","budget":1600,"source":"أونلاين","timing":"Q1","impact":"رؤى فورية للإدارة"},
+        {"program":"BI تنبؤي وتطبيقات AI","budget":1600,"source":"خارجي","timing":"Q2-Q3","impact":"التنبؤ بسلوك العملاء والإيرادات"},
+        {"program":"هندسة البيانات والمستودعات","budget":1000,"source":"أونلاين","timing":"Q2","impact":"بنية بيانات قوية وقابلة للتوسع"},
+        {"program":"حوكمة البيانات والخصوصية","budget":800,"source":"داخلي","timing":"Q3","impact":"الامتثال للوائح حماية البيانات"},
+    ],
+    "المالية": [
+        {"program":"النمذجة المالية وتقييم الشركات الناشئة","budget":2000,"source":"خارجي","timing":"Q1","impact":"دعم التقييم السوقي والتمويل"},
+        {"program":"التقارير المالية IFRS","budget":1600,"source":"أونلاين","timing":"Q2","impact":"تقارير مالية بمعايير دولية"},
+        {"program":"التحليل المالي وإدارة التدفقات","budget":1400,"source":"أونلاين","timing":"Q1-Q2","impact":"تحسين إدارة السيولة والربحية"},
+    ],
+    "الموارد البشرية": [
+        {"program":"استقطاب المواهب التقنية والاحتفاظ","budget":1600,"source":"خارجي","timing":"Q1-Q2","impact":"جذب أفضل الكفاءات في سوق تنافسي"},
+        {"program":"إدارة الأداء وOKRs الاستراتيجية","budget":1400,"source":"أونلاين","timing":"Q1","impact":"ربط أداء الموظفين بنمو الأعمال"},
+        {"program":"بناء الثقافة وتفاعل الموظفين","budget":1000,"source":"داخلي","timing":"Q2-Q3","impact":"تعزيز الإنتاجية وتقليل الدوران"},
+    ],
+    "الحوكمة والمخاطر": [
+        {"program":"إدارة مخاطر الفنتك","budget":1200,"source":"خارجي","timing":"Q2","impact":"إدارة المخاطر التنظيمية والتشغيلية"},
+        {"program":"الامتثال التنظيمي SAMA/PCI-DSS","budget":1000,"source":"أونلاين","timing":"Q1","impact":"ضمان الامتثال للمتطلبات التنظيمية"},
+        {"program":"أمن المعلومات والسيبراني","budget":800,"source":"أونلاين","timing":"Q1-Q3","impact":"حماية البيانات والأنظمة"},
+    ],
+    "الشؤون القانونية": [
+        {"program":"العقود التجارية الرقمية وSLAs","budget":1000,"source":"خارجي","timing":"Q2","impact":"حماية مصالح الشركة في الشراكات"},
+        {"program":"حماية الملكية الفكرية والعلامات","budget":600,"source":"أونلاين","timing":"Q3","impact":"حماية الأصول الفكرية"},
+        {"program":"تنظيمات التجارة الإلكترونية والمدفوعات","budget":400,"source":"داخلي","timing":"Q1","impact":"الامتثال لأنظمة التجارة الإلكترونية"},
+    ],
+}
+
+Q_SPLIT = {"Q1":0.35,"Q2":0.30,"Q3":0.20,"Q4":0.15}
+
+# ===== ROI CALCULATION (Phillips 5-Level Model) =====
+def calc_roi(total_budget, expected_revenue_increase_pct, current_revenue, retention_improvement_pct, avg_salary, headcount, productivity_gain_pct):
+    """Phillips ROI Methodology"""
+    # Level 1: Reaction (assumed 90% satisfaction)
+    l1_satisfaction = 90
+
+    # Level 2: Learning (assumed 85% pass rate)
+    l2_learning = 85
+
+    # Level 3: Application (75% apply within 30 days)
+    l3_application = 75
+
+    # Level 4: Business Impact
+    revenue_gain = current_revenue * (expected_revenue_increase_pct / 100)
+    retention_savings = (retention_improvement_pct / 100) * headcount * avg_salary * 0.5  # 50% of salary = replacement cost
+    productivity_value = productivity_gain_pct / 100 * headcount * avg_salary * 0.1  # 10% of salary = productivity value
+
+    total_benefits = revenue_gain + retention_savings + productivity_value
+
+    # Level 5: ROI
+    roi_pct = ((total_benefits - total_budget) / total_budget) * 100
+    payback_months = (total_budget / max(total_benefits/12, 1))
+
+    return {
+        "satisfaction": l1_satisfaction,
+        "learning": l2_learning,
+        "application": l3_application,
+        "revenue_gain": revenue_gain,
+        "retention_savings": retention_savings,
+        "productivity_value": productivity_value,
+        "total_benefits": total_benefits,
+        "roi_pct": roi_pct,
+        "payback_months": payback_months,
+        "bcr": total_benefits / max(total_budget, 1),
+    }
+
+
+# ===== SMART DATA LOADER (from v3) =====
+COL_MAP = {
+    'emp id':'رقم الموظف','employee id':'رقم الموظف','name (english)':'الاسم الإنجليزي',
+    'name (arabic)':'الاسم','name':'الاسم','department':'القسم','dept':'القسم',
+    'job title':'المسمى الوظيفي','position':'المسمى الوظيفي','join date':'تاريخ التعيين',
+    'hiring date':'تاريخ التعيين','location':'الموقع','city':'الموقع',
+    'tenure (yrs)':'سنوات الخدمة','tenure':'سنوات الخدمة',
+    'basic salary':'الراتب الأساسي','salary':'الراتب الأساسي','الراتب الأساسي':'الراتب الأساسي',
+    'nationality group':'الجنسية','nationality':'الجنسية','الجنسية':'الجنسية',
+    'gender':'الجنس','الجنس':'الجنس','status':'الحالة','الحالة':'الحالة',
+    'القسم':'القسم','الاسم':'الاسم','الموقع':'الموقع',
+    'gross salary':'الراتب الإجمالي','net salary':'صافي الراتب',
+    'housing allowance':'بدل السكن','transportation allowance':'بدل النقل',
+    'grade':'الدرجة','level':'المستوى','age':'العمر','age group':'الفئة العمرية',
+    'generation':'الجيل','employment type':'نوع التوظيف','division':'القطاع',
+}
+
+def smart_read(xl, sheet):
+    df_raw = pd.read_excel(xl, sheet_name=sheet, header=None)
+    best_row, best_score = 0, 0
+    for i in range(min(5, len(df_raw))):
+        score = sum(1 for v in df_raw.iloc[i] if isinstance(v, str) and len(str(v).strip())>1 and not str(v).startswith('Unnamed') and not str(v).startswith('Total'))
+        if score > best_score: best_score, best_row = score, i
+    df = pd.read_excel(xl, sheet_name=sheet, header=best_row)
+    df = df[[c for c in df.columns if not str(c).startswith('Unnamed')]].dropna(how='all').reset_index(drop=True)
     return df
 
-def normalize_columns(df):
-    """Map column names to standard Arabic names"""
-    new_cols = {}
+def norm_cols(df):
+    new = {}
     for c in df.columns:
-        key = str(c).strip().lower()
-        if key in COL_MAP:
-            new_cols[c] = COL_MAP[key]
-        else:
-            new_cols[c] = c
-    df = df.rename(columns=new_cols)
-    # If we have Arabic name, use it as primary name column
+        k = str(c).strip().lower()
+        new[c] = COL_MAP.get(k, c)
+    df = df.rename(columns=new)
     if 'الاسم' not in df.columns and 'الاسم الإنجليزي' in df.columns:
         df['الاسم'] = df['الاسم الإنجليزي']
     return df
 
 def parse_dashboard(xl):
-    """Extract structured data from Dashboard sheet"""
     sections = {}
     try:
         df_raw = pd.read_excel(xl, sheet_name='Dashboard', header=None)
-        current_section = None
-        section_data = []
-        headers = []
-
+        cur, data, hdrs = None, [], []
         for _, row in df_raw.iterrows():
             vals = [v for v in row if pd.notna(v)]
-            if len(vals) == 0:
-                if current_section and section_data:
-                    sections[current_section] = pd.DataFrame(section_data, columns=headers if headers else None)
-                    section_data = []
-                    headers = []
-                    current_section = None
+            if not vals:
+                if cur and data: sections[cur] = pd.DataFrame(data, columns=hdrs if hdrs else None)
+                data, hdrs, cur = [], [], None
                 continue
-
-            text = str(vals[0]).strip() if vals else ""
-
-            if len(vals) == 1 and len(text) > 3 and text.isupper() and text not in ['TOTAL']:
-                if current_section and section_data:
-                    sections[current_section] = pd.DataFrame(section_data, columns=headers if headers else None)
-                    section_data = []
-                current_section = text
-                headers = []
-            elif current_section and not headers and any(isinstance(v, str) for v in vals):
-                headers = [str(v).strip() for v in vals if pd.notna(v)]
-            elif current_section and headers:
+            text = str(vals[0]).strip()
+            if len(vals)==1 and len(text)>3 and text.isupper() and text!='TOTAL':
+                if cur and data: sections[cur] = pd.DataFrame(data, columns=hdrs if hdrs else None)
+                cur, data, hdrs = text, [], []
+            elif cur and not hdrs and any(isinstance(v,str) for v in vals):
+                hdrs = [str(v).strip() for v in vals if pd.notna(v)]
+            elif cur and hdrs:
                 clean = [v for v in vals if pd.notna(v)]
-                if clean and str(clean[0]).strip() != 'TOTAL':
-                    if len(clean) == len(headers):
-                        section_data.append(clean)
-                    elif len(clean) > 0:
-                        padded = clean + [None] * (len(headers) - len(clean))
-                        section_data.append(padded[:len(headers)])
-
-        if current_section and section_data:
-            sections[current_section] = pd.DataFrame(section_data, columns=headers if headers else None)
-    except:
-        pass
+                if clean and str(clean[0]).strip()!='TOTAL':
+                    padded = (clean + [None]*len(hdrs))[:len(hdrs)]
+                    data.append(padded)
+        if cur and data: sections[cur] = pd.DataFrame(data, columns=hdrs if hdrs else None)
+    except: pass
     return sections
 
-def has(df, name):
-    return df is not None and name in df.columns
 
-def safe_mean(df, name):
-    return df[name].mean() if has(df, name) and len(df) > 0 else 0
-
-def safe_sum(df, name):
-    return df[name].sum() if has(df, name) else 0
-
-def fmt(v): return f"{v:,.0f} ريال"
-
-
-# ===== INSIGHTS GENERATOR =====
-def gen_insights(emp, dashboard_sections, all_sheets):
-    ins = []
-    try:
-        n = len(emp)
-        ins.append({'t':'info','c':'عام','x':f'إجمالي الموظفين: {n} موظف'})
-
-        # Department analysis
-        if has(emp, 'القسم') and n > 0:
-            dc = emp['القسم'].value_counts()
-            ins.append({'t':'info','c':'الأقسام','x':f'عدد الأقسام: {len(dc)}. الأكبر: {dc.index[0]} ({dc.iloc[0]} موظف). الأصغر: {dc.index[-1]} ({dc.iloc[-1]} موظف)'})
-
-        # Location analysis
-        if has(emp, 'الموقع') and n > 0:
-            lc = emp['الموقع'].value_counts()
-            total_local = lc.get('Jeddah', 0) + lc.get('Riyadh', 0) + lc.get('جدة', 0) + lc.get('الرياض', 0)
-            if total_local > 0:
-                ins.append({'t':'info','c':'المواقع','x':f'الموظفين في السعودية: {total_local} ({round(total_local/n*100,1)}%). خارج السعودية: {n-total_local} ({round((n-total_local)/n*100,1)}%)'})
-
-        # Tenure analysis
-        if has(emp, 'سنوات الخدمة') and n > 0:
-            avg_t = emp['سنوات الخدمة'].mean()
-            new_hires = len(emp[emp['سنوات الخدمة'] < 1])
-            veterans = len(emp[emp['سنوات الخدمة'] >= 5])
-            ins.append({'t':'info','c':'الخدمة','x':f'متوسط الخدمة: {avg_t:.1f} سنة. جدد (<سنة): {new_hires}. خبراء (5+ سنوات): {veterans}'})
-            if new_hires > n * 0.3:
-                ins.append({'t':'warning','c':'الخدمة','x':f'{round(new_hires/n*100)}% من الموظفين خدمتهم أقل من سنة. نسبة عالية تحتاج خطة تأهيل واحتفاظ.'})
-
-        # Hiring trend from dashboard
-        if 'HIRING TREND BY YEAR' in dashboard_sections:
-            ht = dashboard_sections['HIRING TREND BY YEAR']
-            if len(ht) > 0 and 'Year' in ht.columns and 'Joiners' in ht.columns:
-                last_year = ht.iloc[-1]
-                prev_year = ht.iloc[-2] if len(ht) > 1 else None
-                ins.append({'t':'info','c':'التوظيف','x':f'آخر سنة ({last_year["Year"]}): {last_year["Joiners"]} تعيين جديد.'})
-                if prev_year is not None:
-                    try:
-                        growth = int(last_year["Joiners"]) - int(prev_year["Joiners"])
-                        if growth > 0:
-                            ins.append({'t':'success','c':'التوظيف','x':f'نمو التوظيف: +{growth} مقارنة بـ {prev_year["Year"]} ({prev_year["Joiners"]} تعيين). الشركة في توسع!'})
-                    except: pass
-
-        # Salary analysis
-        if has(emp, 'الراتب الأساسي') and n > 0:
-            avg_s = emp['الراتب الأساسي'].mean()
-            if has(emp, 'القسم'):
-                da = emp.groupby('القسم')['الراتب الأساسي'].mean()
-                ins.append({'t':'info','c':'الرواتب','x':f'متوسط الراتب: {avg_s:,.0f} ريال. الأعلى: {da.idxmax()} ({da.max():,.0f}). الأقل: {da.idxmin()} ({da.min():,.0f})'})
-
-        # Nationality/Saudization
-        if has(emp, 'الجنسية') and n > 0:
-            sa = emp[emp['الجنسية'].isin(['سعودي','سعودية','Saudi'])]
-            p = round(len(sa)/n*100, 1)
-            ins.append({'t':'success' if p>=70 else 'warning','c':'السعودة','x':f'نسبة السعودة: {p}% ({len(sa)} من {n})'})
-
-        # Performance
-        if has(emp, 'تقييم الأداء %') and n > 0:
-            ap = emp['تقييم الأداء %'].mean()
-            ins.append({'t':'success' if ap>=80 else 'warning','c':'الأداء','x':f'متوسط الأداء: {ap:.1f}%'})
-
-        # Turnover
-        if has(emp, 'الحالة'):
-            left = emp[emp['الحالة'] != 'نشط']
-            if len(left) > 0:
-                rate = round(len(left)/n*100, 1)
-                ins.append({'t':'danger' if rate>20 else 'warning','c':'الدوران','x':f'معدل الدوران: {rate}% ({len(left)} موظف)'})
-
-    except: pass
-    if not ins: ins.append({'t':'info','c':'عام','x':f'تم تحميل البيانات'})
-    return ins
-
-
-# ===== SMART QUERY ANSWERER =====
-def answer_query(query, emp, dashboard_sections, all_sheets):
-    """Answer any question by searching across all data"""
-    answer = ""
-    q = query.lower()
-    n = len(emp)
-
-    # Saudization
-    if any(w in q for w in ['سعودة', 'سعودي', 'جنسية', 'nationality', 'saudi']):
-        if has(emp, 'الجنسية'):
-            sa = emp[emp['الجنسية'].isin(['سعودي','سعودية','Saudi'])]
-            answer = f"نسبة السعودة: {round(len(sa)/n*100,1)}% ({len(sa)} سعودي من {n} موظف)"
-        elif has(emp, 'الموقع'):
-            sa_loc = emp[emp['الموقع'].isin(['Jeddah','Riyadh','جدة','الرياض'])]
-            answer = f"لا يوجد عمود جنسية في البيانات.\n\nلكن بناءً على الموقع: {len(sa_loc)} موظف في السعودية ({round(len(sa_loc)/n*100,1)}%) و{n-len(sa_loc)} خارج السعودية ({round((n-len(sa_loc))/n*100,1)}%)\n\n"
-            if has(emp, 'الموقع'):
-                answer += "التوزيع الجغرافي:\n"
-                for loc, cnt in emp['الموقع'].value_counts().items():
-                    answer += f"  - {loc}: {cnt} ({round(cnt/n*100,1)}%)\n"
-            answer += "\nملاحظة: لحساب السعودة بدقة، يحتاج الملف عمود 'الجنسية' أو 'Nationality'"
-        else:
-            answer = "لا يوجد بيانات جنسية أو موقع في الملف لحساب نسبة السعودة."
-
-    # Department
-    elif any(w in q for w in ['قسم', 'أقسام', 'department']):
-        if has(emp, 'القسم'):
-            dc = emp['القسم'].value_counts()
-            answer = f"عدد الأقسام: {len(dc)}\n\nالتوزيع:\n"
-            for d, c in dc.items():
-                answer += f"  - {d}: {c} موظف ({round(c/n*100,1)}%)\n"
-
-    # Location
-    elif any(w in q for w in ['موقع', 'مدينة', 'مواقع', 'جغرافي', 'location', 'city']):
-        if has(emp, 'الموقع'):
-            lc = emp['الموقع'].value_counts()
-            answer = f"التوزيع الجغرافي ({len(lc)} مواقع):\n\n"
-            for l, c in lc.items():
-                answer += f"  - {l}: {c} موظف ({round(c/n*100,1)}%)\n"
-
-    # Hiring / Recruitment
-    elif any(w in q for w in ['توظيف', 'تعيين', 'hiring', 'recruit', 'نمو']):
-        if 'HIRING TREND BY YEAR' in dashboard_sections:
-            ht = dashboard_sections['HIRING TREND BY YEAR']
-            answer = "اتجاه التوظيف:\n\n"
-            for _, r in ht.iterrows():
-                try:
-                    answer += f"  - {r['Year']}: {r['Joiners']} تعيين (إجمالي تراكمي: {r['Cumulative']})\n"
-                except: pass
-        else:
-            if has(emp, 'تاريخ التعيين'):
-                emp['سنة التعيين'] = pd.to_datetime(emp['تاريخ التعيين']).dt.year
-                yc = emp['سنة التعيين'].value_counts().sort_index()
-                answer = "التعيينات حسب السنة:\n\n"
-                for y, c in yc.items():
-                    answer += f"  - {int(y)}: {c} موظف\n"
-
-    # Tenure / Service
-    elif any(w in q for w in ['خدمة', 'خبرة', 'tenure', 'أقدمية', 'جدد']):
-        if 'SERVICE TENURE DISTRIBUTION' in dashboard_sections:
-            td = dashboard_sections['SERVICE TENURE DISTRIBUTION']
-            answer = "توزيع سنوات الخدمة:\n\n"
-            for _, r in td.iterrows():
-                try:
-                    answer += f"  - {r['Category']}: {r['Count']} موظف ({round(float(r['%'])*100,1)}%)\n"
-                except: pass
-        elif has(emp, 'سنوات الخدمة'):
-            avg = emp['سنوات الخدمة'].mean()
-            answer = f"متوسط سنوات الخدمة: {avg:.1f}\n\n"
-            bins = [(0,1,'< سنة'),(1,2,'1-2 سنة'),(2,3,'2-3 سنوات'),(3,5,'3-5 سنوات'),(5,99,'5+ سنوات')]
-            for lo,hi,label in bins:
-                c = len(emp[(emp['سنوات الخدمة']>=lo)&(emp['سنوات الخدمة']<hi)])
-                answer += f"  - {label}: {c} ({round(c/n*100,1)}%)\n"
-
-    # Salary / Cost
-    elif any(w in q for w in ['راتب', 'رواتب', 'تكلفة', 'salary', 'cost']):
-        if has(emp, 'الراتب الأساسي'):
-            answer = f"متوسط الراتب: {emp['الراتب الأساسي'].mean():,.0f} ريال\n"
-            if has(emp, 'القسم'):
-                answer += "\nحسب القسم:\n"
-                for d, v in emp.groupby('القسم')['الراتب الأساسي'].mean().sort_values(ascending=False).items():
-                    answer += f"  - {d}: {v:,.0f} ريال\n"
-        else:
-            answer = "لا يوجد بيانات رواتب في الملف المرفوع."
-
-    # Performance
-    elif any(w in q for w in ['أداء', 'أفضل', 'تقييم', 'performance']):
-        if has(emp, 'تقييم الأداء %'):
-            answer = f"متوسط الأداء: {emp['تقييم الأداء %'].mean():.1f}%\n"
-            if has(emp, 'الاسم'):
-                top = emp.nlargest(5, 'تقييم الأداء %')
-                answer += "\nأفضل 5:\n"
-                for _, r in top.iterrows():
-                    answer += f"  - {r['الاسم']}: {r['تقييم الأداء %']}%\n"
-        else:
-            answer = "لا يوجد بيانات تقييم أداء في الملف المرفوع."
-
-    # Turnover
-    elif any(w in q for w in ['دوران', 'استقالة', 'مغادرة', 'turnover']):
-        if has(emp, 'الحالة'):
-            left = emp[emp['الحالة'] != 'نشط']
-            answer = f"معدل الدوران: {round(len(left)/n*100,1)}%\n"
-        else:
-            answer = "لا يوجد بيانات حالة الموظف (نشط/مستقيل) في الملف."
-
-    # General / default
-    else:
-        answer = f"ملخص البيانات المتاحة:\n\n"
-        answer += f"  - إجمالي الموظفين: {n}\n"
-        if has(emp, 'القسم'): answer += f"  - عدد الأقسام: {emp['القسم'].nunique()}\n"
-        if has(emp, 'الموقع'): answer += f"  - عدد المواقع: {emp['الموقع'].nunique()}\n"
-        if has(emp, 'سنوات الخدمة'): answer += f"  - متوسط الخدمة: {emp['سنوات الخدمة'].mean():.1f} سنة\n"
-        if has(emp, 'الراتب الأساسي'): answer += f"  - متوسط الراتب: {emp['الراتب الأساسي'].mean():,.0f} ريال\n"
-        if has(emp, 'تقييم الأداء %'): answer += f"  - متوسط الأداء: {emp['تقييم الأداء %'].mean():.1f}%\n"
-
-        answer += f"\nالأعمدة المتاحة: {', '.join(emp.columns)}\n"
-        answer += f"\nالأوراق المتاحة: {', '.join(dashboard_sections.keys()) if dashboard_sections else 'لا يوجد'}\n"
-        answer += "\nجرب أسئلة مثل: القسم الأكبر؟ توزيع المواقع؟ اتجاه التوظيف؟ سنوات الخدمة؟"
-
-    return answer if answer else "لم أتمكن من العثور على إجابة. جرب صياغة مختلفة."
-
-
-# ===== MAIN APP =====
+# ===== MAIN =====
 def main():
     with st.sidebar:
-        st.markdown("<div style='text-align:center;padding:20px 0;'><div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:60px;height:60px;border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:24px;font-weight:800;color:white;'>HR</div><h2 style='margin:0;font-size:18px;'>تحليلات الموارد البشرية</h2><p style='opacity:0.6;font-size:12px;'>رسال الود لتقنية المعلومات</p></div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align:center;padding:20px 0;'><div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:60px;height:60px;border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:24px;font-weight:800;color:white;'>HR</div><h2 style='margin:0;font-size:17px;'>تحليلات الموارد البشرية</h2><p style='opacity:.6;font-size:11px;'>رسال الود لتقنية المعلومات</p></div>", unsafe_allow_html=True)
         st.markdown("---")
-        page = st.radio("📌", ["🏠 نظرة عامة","💰 الرواتب والتكاليف","🔄 الدوران الوظيفي","⚡ الأداء","👥 التوظيف","📊 الأقسام والمواقع","🤖 المحلل الذكي","📋 بيانات الموظفين","📥 تصدير"], label_visibility="collapsed")
+        section = st.radio("📌 القسم", ["📊 التحليلات العامة", "📚 التدريب والتطوير"], label_visibility="collapsed")
         st.markdown("---")
-        st.markdown("##### 📁 مصدر البيانات")
-        file = st.file_uploader("ارفع Excel", type=["xlsx","xls","csv"], label_visibility="collapsed")
+
+        if section == "📊 التحليلات العامة":
+            page = st.radio("📌", ["🏠 نظرة عامة","📊 الأقسام والمواقع","🤖 المحلل الذكي","📋 بيانات الموظفين","📥 تصدير"], label_visibility="collapsed")
+        else:
+            page = st.radio("📌", ["📚 ميزانية التدريب","💹 عائد التدريب ROI","📋 الاحتياجات التدريبية","🏫 جهات التدريب","📥 تصدير التدريب"], label_visibility="collapsed")
+
+        st.markdown("---")
+        st.markdown("##### 📁 بيانات الموظفين")
+        file = st.file_uploader("ارفع Excel", type=["xlsx","xls","csv"], label_visibility="collapsed", key="emp_file")
         if file: st.success("✅ تم التحميل")
 
-    if not file:
-        st.markdown("<div class='app-header'><h1>📊 منصة تحليلات الموارد البشرية الذكية</h1><p>رسال الود لتقنية المعلومات | يقرأ أي ملف Excel تلقائياً</p></div>", unsafe_allow_html=True)
-        st.info("📁 ارفع أي ملف بيانات موظفين من القائمة الجانبية")
-        return
 
-    # === SMART DATA LOADING ===
-    try:
-        if file.name.endswith('.csv'):
-            emp = pd.read_csv(file)
-            emp = normalize_columns(emp)
-            all_sheets = {'البيانات': emp}
-            dash_sections = {}
-        else:
-            xl = pd.ExcelFile(file)
-            all_sheets = {}
-            emp = None
-            dash_sections = {}
+    # ===== LOAD DATA =====
+    emp = pd.DataFrame()
+    all_sheets = {}
+    dash_sections = {}
 
-            for sheet in xl.sheet_names:
-                try:
-                    df_s = smart_read_sheet(xl, sheet)
-                    df_s = normalize_columns(df_s)
-                    all_sheets[sheet] = df_s
+    if file:
+        try:
+            if file.name.endswith('.csv'):
+                emp = norm_cols(pd.read_csv(file))
+                all_sheets = {'البيانات': emp}
+            else:
+                xl = pd.ExcelFile(file)
+                for s in xl.sheet_names:
+                    try:
+                        df_s = norm_cols(smart_read(xl, s))
+                        all_sheets[s] = df_s
+                        if len(emp)==0 and len(df_s)>5:
+                            name_cols = [c for c in df_s.columns if any(x in str(c).lower() for x in ['name','اسم','emp','موظف'])]
+                            if name_cols: emp = df_s
+                    except: pass
+                if len(emp)==0 and all_sheets: emp = list(all_sheets.values())[0]
+                if 'Dashboard' in xl.sheet_names:
+                    file.seek(0)
+                    dash_sections = parse_dashboard(pd.ExcelFile(file))
+        except: pass
 
-                    if emp is None and len(df_s) > 5:
-                        # Find the main employee sheet (largest with name-like columns)
-                        name_cols = [c for c in df_s.columns if any(x in str(c).lower() for x in ['name','اسم','emp','موظف'])]
-                        if name_cols:
-                            emp = df_s
-
-                    if sheet.lower() == 'dashboard':
-                        file.seek(0)
-                        dash_sections = parse_dashboard(pd.ExcelFile(file))
-                except:
-                    pass
-
-            if emp is None:
-                emp = list(all_sheets.values())[0] if all_sheets else pd.DataFrame()
-    except Exception as e:
-        st.error(f"خطأ: {e}")
-        return
-
-    # Remove summary rows
-    if '#' in emp.columns:
+    if '#' in emp.columns and len(emp)>0:
         emp = emp[pd.to_numeric(emp['#'], errors='coerce').notna()].reset_index(drop=True)
 
     n = len(emp)
 
-    # Detect available features
-    has_salary = has(emp, 'الراتب الأساسي')
-    has_perf = has(emp, 'تقييم الأداء %')
-    has_status = has(emp, 'الحالة')
-    has_nationality = has(emp, 'الجنسية')
-    has_dept = has(emp, 'القسم')
-    has_location = has(emp, 'الموقع')
-    has_tenure = has(emp, 'سنوات الخدمة')
 
-    active = emp[emp['الحالة']=='نشط'] if has_status else emp
-    left = emp[emp['الحالة']!='نشط'] if has_status else pd.DataFrame()
+    # =========================================
+    #         📊 GENERAL ANALYTICS PAGES
+    # =========================================
+    if section == "📊 التحليلات العامة":
 
-    # Filters
-    with st.sidebar:
-        st.markdown("##### 🔍 الفلاتر")
-        af = active.copy()
-        if has_dept:
-            df2 = st.multiselect("القسم", list(active['القسم'].unique()), default=list(active['القسم'].unique()))
-            af = af[af['القسم'].isin(df2)]
-        if has_location:
-            lf = st.multiselect("الموقع", list(active['الموقع'].unique()), default=list(active['الموقع'].unique()))
-            af = af[af['الموقع'].isin(lf)]
+        if page == "🏠 نظرة عامة":
+            hdr("📊 نظرة عامة", "ملخص شامل لبيانات القوى العاملة")
+            if n == 0:
+                st.info("📁 ارفع ملف بيانات الموظفين من القائمة الجانبية")
+                return
+            cols = st.columns(4)
+            with cols[0]: st.metric("👥 الموظفين", n)
+            with cols[1]: st.metric("🏢 الأقسام", emp['القسم'].nunique() if has(emp,'القسم') else '-')
+            with cols[2]: st.metric("📍 المواقع", emp['الموقع'].nunique() if has(emp,'الموقع') else '-')
+            with cols[3]: st.metric("📅 متوسط الخدمة", f"{safe_mean(emp,'سنوات الخدمة'):.1f}" if has(emp,'سنوات الخدمة') else '-')
 
-    if 'ins' not in st.session_state:
-        st.session_state.ins = gen_insights(emp, dash_sections, all_sheets)
-
-    # Show detected info
-    with st.sidebar:
-        st.markdown("---")
-        st.markdown(f"##### 📊 تم اكتشاف")
-        st.markdown(f"- {n} موظف")
-        st.markdown(f"- {len(all_sheets)} ورقة")
-        if dash_sections:
-            st.markdown(f"- {len(dash_sections)} قسم بيانات")
-
-
-    # === 🏠 OVERVIEW ===
-    if page == "🏠 نظرة عامة":
-        st.markdown("<div class='app-header'><h1>📊 نظرة عامة</h1><p>ملخص شامل</p></div>", unsafe_allow_html=True)
-
-        cols = st.columns(5)
-        with cols[0]: st.metric("👥 الموظفين", len(af))
-        with cols[1]:
-            if has_dept: st.metric("🏢 الأقسام", af['القسم'].nunique())
-            elif has_salary: st.metric("💰 متوسط الراتب", fmt(int(safe_mean(af,'الراتب الأساسي'))))
-        with cols[2]:
-            if has_location: st.metric("📍 المواقع", af['الموقع'].nunique())
-            elif has_perf: st.metric("⚡ الأداء", f"{safe_mean(af,'تقييم الأداء %'):.1f}%")
-        with cols[3]:
-            if has_tenure: st.metric("📅 متوسط الخدمة", f"{safe_mean(af,'سنوات الخدمة'):.1f} سنة")
-            elif has_status: st.metric("🔄 الدوران", f"{round(len(left)/max(n,1)*100,1)}%")
-        with cols[4]:
-            if has_salary: st.metric("🏦 إجمالي الرواتب", fmt(int(safe_sum(af,'الراتب الأساسي'))))
-            else: st.metric("📋 الأوراق", len(all_sheets))
-
-        st.markdown("---")
-        c1, c2 = st.columns(2)
-
-        with c1:
-            if has_dept:
-                dc = af['القسم'].value_counts().reset_index()
-                dc.columns = ['القسم','العدد']
-                fig = px.pie(dc, values='العدد', names='القسم', title='توزيع الموظفين حسب القسم', hole=0.4, color_discrete_sequence=CL['dept'])
-                fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
-                st.plotly_chart(fig, use_container_width=True)
-
-        with c2:
-            if has_location:
-                lc = af['الموقع'].value_counts().reset_index()
-                lc.columns = ['الموقع','العدد']
-                fig = px.pie(lc, values='العدد', names='الموقع', title='التوزيع الجغرافي', hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
-                fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
-                st.plotly_chart(fig, use_container_width=True)
-            elif 'HIRING TREND BY YEAR' in dash_sections:
-                ht = dash_sections['HIRING TREND BY YEAR']
-                try:
-                    fig = go.Figure()
-                    fig.add_trace(go.Bar(x=ht['Year'], y=pd.to_numeric(ht['Joiners']), name='تعيينات', marker_color=CL['primary']))
-                    fig.update_layout(title='اتجاه التوظيف', font=dict(family="Noto Sans Arabic"), height=400)
-                    st.plotly_chart(fig, use_container_width=True)
-                except: pass
-
-        c1, c2 = st.columns(2)
-        with c1:
-            if has_dept:
-                dc2 = af['القسم'].value_counts().reset_index()
-                dc2.columns = ['القسم','العدد']
-                dc2 = dc2.sort_values('العدد', ascending=True)
-                fig = px.bar(dc2, x='العدد', y='القسم', orientation='h', title='عدد الموظفين حسب القسم', color='العدد', color_continuous_scale='teal')
-                fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
-                st.plotly_chart(fig, use_container_width=True)
-
-        with c2:
-            if has_tenure:
-                fig = px.histogram(af, x='سنوات الخدمة', nbins=10, title='توزيع سنوات الخدمة', color_discrete_sequence=[CL['primary']])
-                fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
-                st.plotly_chart(fig, use_container_width=True)
-            elif 'SERVICE TENURE DISTRIBUTION' in dash_sections:
-                td = dash_sections['SERVICE TENURE DISTRIBUTION']
-                try:
-                    fig = px.bar(td, x='Category', y=pd.to_numeric(td['Count']), title='توزيع سنوات الخدمة', color_discrete_sequence=[CL['primary']])
-                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
-                    st.plotly_chart(fig, use_container_width=True)
-                except: pass
-
-        st.markdown("### 🤖 رؤى ذكية")
-        for i in st.session_state.ins:
-            insight_box(i['x'], i['t'])
-
-
-    # === 💰 SALARIES ===
-    elif page == "💰 الرواتب والتكاليف":
-        st.markdown("<div class='app-header'><h1>💰 الرواتب والتكاليف</h1></div>", unsafe_allow_html=True)
-        if has_salary:
-            k1,k2,k3,k4 = st.columns(4)
-            with k1: st.metric("💵 الإجمالي", fmt(int(af['الراتب الأساسي'].sum())))
-            with k2: st.metric("📊 المتوسط", fmt(int(af['الراتب الأساسي'].mean())))
-            with k3: st.metric("📈 الأعلى", fmt(int(af['الراتب الأساسي'].max())))
-            with k4: st.metric("📉 الأقل", fmt(int(af['الراتب الأساسي'].min())))
-            st.markdown("---")
-            c1,c2 = st.columns(2)
-            with c1:
-                if has_dept:
-                    ds = af.groupby('القسم')['الراتب الأساسي'].mean().reset_index().sort_values('الراتب الأساسي',ascending=True)
-                    fig = px.bar(ds,x='الراتب الأساسي',y='القسم',orientation='h',title='متوسط الراتب حسب القسم',color='الراتب الأساسي',color_continuous_scale='teal')
-                    fig.update_layout(font=dict(family="Noto Sans Arabic"),height=400,xaxis_tickformat=','); st.plotly_chart(fig,use_container_width=True)
-            with c2:
-                fig = px.histogram(af,x='الراتب الأساسي',nbins=15,title='توزيع الرواتب',color_discrete_sequence=[CL['primary']])
-                fig.update_layout(font=dict(family="Noto Sans Arabic"),height=400); st.plotly_chart(fig,use_container_width=True)
-        else:
-            st.warning("⚠️ لا يوجد بيانات رواتب في الملف المرفوع. أضف عمود 'Salary' أو 'الراتب الأساسي' للتحليل.")
-
-
-    # === 🔄 TURNOVER ===
-    elif page == "🔄 الدوران الوظيفي":
-        st.markdown("<div class='app-header'><h1>🔄 الدوران الوظيفي</h1></div>", unsafe_allow_html=True)
-        if has_status:
-            k1,k2 = st.columns(2)
-            with k1: st.metric("🔄 الدوران", f"{round(len(left)/max(n,1)*100,1)}%")
-            with k2: st.metric("✅ نشطين", len(active))
-        else:
-            st.info("لا يوجد عمود حالة الموظف. يُعرض اتجاه التوظيف بدلاً من ذلك.")
-            if 'HIRING TREND BY YEAR' in dash_sections:
-                ht = dash_sections['HIRING TREND BY YEAR']
-                try:
-                    fig = go.Figure()
-                    fig.add_trace(go.Bar(x=ht['Year'], y=pd.to_numeric(ht['Joiners']), name='تعيينات جديدة', marker_color=CL['success']))
-                    fig.add_trace(go.Scatter(x=ht['Year'], y=pd.to_numeric(ht['Cumulative']), name='الإجمالي التراكمي', mode='lines+markers', yaxis='y2'))
-                    fig.update_layout(title='اتجاه التوظيف السنوي', font=dict(family="Noto Sans Arabic"), height=450,
-                        yaxis2=dict(overlaying='y', side='right', title='التراكمي'))
-                    st.plotly_chart(fig, use_container_width=True)
-                except: pass
-            elif has(emp, 'تاريخ التعيين'):
-                emp_copy = emp.copy()
-                emp_copy['سنة'] = pd.to_datetime(emp_copy['تاريخ التعيين']).dt.year
-                yc = emp_copy['سنة'].value_counts().sort_index().reset_index()
-                yc.columns = ['السنة','العدد']
-                fig = px.bar(yc, x='السنة', y='العدد', title='التعيينات حسب السنة', color_discrete_sequence=[CL['primary']])
-                fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
-                st.plotly_chart(fig, use_container_width=True)
-
-
-    # === ⚡ PERFORMANCE ===
-    elif page == "⚡ الأداء":
-        st.markdown("<div class='app-header'><h1>⚡ الأداء</h1></div>", unsafe_allow_html=True)
-        if has_perf:
-            ap = af['تقييم الأداء %'].mean()
-            k1,k2,k3 = st.columns(3)
-            with k1: st.metric("⚡ المتوسط", f"{ap:.1f}%")
-            with k2: st.metric("🌟 ممتاز", len(af[af['تقييم الأداء %']>=90]))
-            with k3: st.metric("⚠️ تطوير", len(af[af['تقييم الأداء %']<70]))
-        else:
-            st.warning("⚠️ لا يوجد بيانات أداء. أضف عمود 'Performance %' أو 'تقييم الأداء %'")
-
-
-    # === 👥 RECRUITMENT ===
-    elif page == "👥 التوظيف":
-        st.markdown("<div class='app-header'><h1>👥 التوظيف</h1></div>", unsafe_allow_html=True)
-        if 'HIRING TREND BY YEAR' in dash_sections:
-            ht = dash_sections['HIRING TREND BY YEAR']
-            try:
+            if has(emp,'القسم'):
                 c1,c2 = st.columns(2)
                 with c1:
-                    fig = px.bar(ht, x='Year', y=pd.to_numeric(ht['Joiners']), title='التعيينات السنوية', color_discrete_sequence=[CL['success']], text=ht['Joiners'])
-                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
-                    st.plotly_chart(fig, use_container_width=True)
+                    dc = emp['القسم'].value_counts().reset_index(); dc.columns=['القسم','العدد']
+                    fig = px.pie(dc, values='العدد', names='القسم', title='توزيع الموظفين', hole=.4, color_discrete_sequence=CL['dept'])
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400); st.plotly_chart(fig, use_container_width=True)
                 with c2:
-                    fig = go.Figure()
-                    fig.add_trace(go.Scatter(x=ht['Year'], y=pd.to_numeric(ht['Cumulative']), mode='lines+markers+text', text=ht['Cumulative'], textposition='top center', line=dict(color=CL['primary'], width=3), fill='tozeroy', fillcolor='rgba(15,76,92,0.1)'))
-                    fig.update_layout(title='النمو التراكمي', font=dict(family="Noto Sans Arabic"), height=400)
-                    st.plotly_chart(fig, use_container_width=True)
-            except: pass
-        elif has(emp, 'تاريخ التعيين'):
-            ec = emp.copy()
-            ec['سنة'] = pd.to_datetime(ec['تاريخ التعيين']).dt.year
-            yc = ec['سنة'].value_counts().sort_index().reset_index()
-            yc.columns = ['السنة','العدد']
-            fig = px.bar(yc, x='السنة', y='العدد', title='التعيينات حسب السنة', text='العدد', color_discrete_sequence=[CL['success']])
-            fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
-            st.plotly_chart(fig, use_container_width=True)
+                    if has(emp,'الموقع'):
+                        lc = emp['الموقع'].value_counts().reset_index(); lc.columns=['الموقع','العدد']
+                        fig = px.pie(lc, values='العدد', names='الموقع', title='التوزيع الجغرافي', hole=.4)
+                        fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400); st.plotly_chart(fig, use_container_width=True)
 
-        # Department hiring
-        if has_dept and has(emp, 'تاريخ التعيين'):
-            ec = emp.copy()
-            ec['سنة'] = pd.to_datetime(ec['تاريخ التعيين']).dt.year
-            recent = ec[ec['سنة'] >= ec['سنة'].max() - 1]
-            if len(recent) > 0:
-                fig = px.bar(recent['القسم'].value_counts().reset_index().rename(columns={'index':'القسم','القسم':'القسم','count':'العدد'}),
-                    x='القسم', y='العدد' if 'العدد' in recent['القسم'].value_counts().reset_index().columns else 'count',
-                    title=f'التعيينات حسب القسم (آخر سنتين)', color_discrete_sequence=[CL['primary']])
-                fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
-                st.plotly_chart(fig, use_container_width=True)
+        elif page == "📊 الأقسام والمواقع":
+            hdr("📊 الأقسام والمواقع")
+            if n==0: st.info("📁 ارفع ملف بيانات"); return
+            if has(emp,'القسم'):
+                dc = emp['القسم'].value_counts().reset_index(); dc.columns=['القسم','العدد']
+                fig = px.bar(dc.sort_values('العدد'), x='العدد', y='القسم', orientation='h', color='العدد', color_continuous_scale='teal')
+                fig.update_layout(font=dict(family="Noto Sans Arabic"), height=500); st.plotly_chart(fig, use_container_width=True)
 
+        elif page == "🤖 المحلل الذكي":
+            hdr("🤖 المحلل الذكي", "يبحث في كل الأوراق")
+            if n==0: st.info("📁 ارفع ملف"); return
+            q = st.text_input("💬 اسأل:", placeholder="مثال: كم موظف في جدة؟ ما نسبة السعودة؟")
+            if st.button("🔍 تحليل", type="primary", use_container_width=True) and q:
+                # Simplified answerer
+                a = f"إجمالي الموظفين: {n}\n"
+                if has(emp,'القسم'): a += f"الأقسام: {emp['القسم'].nunique()}\n"
+                if has(emp,'الموقع'):
+                    for l,c in emp['الموقع'].value_counts().items(): a += f"  - {l}: {c}\n"
+                st.info(a)
 
-    # === 📊 DEPARTMENTS & LOCATIONS ===
-    elif page == "📊 الأقسام والمواقع":
-        st.markdown("<div class='app-header'><h1>📊 الأقسام والمواقع</h1></div>", unsafe_allow_html=True)
+        elif page == "📋 بيانات الموظفين":
+            hdr("📋 بيانات الموظفين")
+            if n==0: st.info("📁 ارفع ملف"); return
+            if all_sheets:
+                sn = st.selectbox("الورقة:", list(all_sheets.keys()))
+                st.dataframe(all_sheets[sn], use_container_width=True, hide_index=True, height=600)
 
-        if has_dept:
-            c1,c2 = st.columns(2)
-            with c1:
-                dc = af['القسم'].value_counts().reset_index()
-                dc.columns = ['القسم','العدد']
-                fig = px.bar(dc, x='العدد', y='القسم', orientation='h', title='حجم كل قسم', color='العدد', color_continuous_scale='teal')
-                fig.update_layout(font=dict(family="Noto Sans Arabic"), height=500)
-                st.plotly_chart(fig, use_container_width=True)
-            with c2:
-                if has_tenure:
-                    dt2 = af.groupby('القسم')['سنوات الخدمة'].mean().reset_index().sort_values('سنوات الخدمة', ascending=True)
-                    dt2.columns = ['القسم','المتوسط']
-                    fig = px.bar(dt2, x='المتوسط', y='القسم', orientation='h', title='متوسط سنوات الخدمة', color='المتوسط', color_continuous_scale='oranges')
-                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=500)
-                    st.plotly_chart(fig, use_container_width=True)
-
-        if has_location:
-            lc = af['الموقع'].value_counts().reset_index()
-            lc.columns = ['الموقع','العدد']
-            fig = px.bar(lc, x='الموقع', y='العدد', title='التوزيع الجغرافي', color='الموقع', color_discrete_sequence=CL['dept'])
-            fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
-            st.plotly_chart(fig, use_container_width=True)
-
-
-    # === 🤖 SMART ANALYST ===
-    elif page == "🤖 المحلل الذكي":
-        st.markdown("<div class='app-header'><h1>🤖 المحلل الذكي</h1><p>يجيب من كل الأوراق تلقائياً</p></div>", unsafe_allow_html=True)
-
-        st.markdown("### 📊 رؤى تلقائية")
-        for i in st.session_state.ins:
-            insight_box(f"**[{i['c']}]** {i['x']}", i['t'])
-
-        st.markdown("---")
-        st.markdown("### 💬 اسأل أي سؤال")
-
-        # Dynamic quick questions based on available data
-        qq = ["كم عدد الأقسام وتوزيع الموظفين؟"]
-        if has_location: qq.append("ما التوزيع الجغرافي؟")
-        if has_tenure: qq.append("ما متوسط سنوات الخدمة؟")
-        if has_salary: qq.append("ما القسم الأعلى تكلفة؟")
-        if has_perf: qq.append("من أفضل 5 أداءً؟")
-        qq.append("ما نسبة السعودة؟")
-        qq.append("ما اتجاه التوظيف؟")
-
-        sq = st.selectbox("أسئلة سريعة:", ["اختر..."] + qq)
-        uq = st.text_input("أو اكتب:", placeholder="مثال: كم موظف في جدة؟")
-        q = uq if uq else (sq if sq != "اختر..." else "")
-
-        if st.button("🔍 تحليل", type="primary", use_container_width=True) and q:
-            with st.spinner("جاري البحث في كل الأوراق..."):
-                answer = answer_query(q, emp, dash_sections, all_sheets)
-                st.markdown("### 📝 النتيجة")
-                st.info(answer)
-
-
-    # === 📋 DATA ===
-    elif page == "📋 بيانات الموظفين":
-        st.markdown("<div class='app-header'><h1>📋 البيانات</h1></div>", unsafe_allow_html=True)
-
-        # Sheet selector
-        sheet_name = st.selectbox("اختر الورقة:", list(all_sheets.keys()))
-        display_df = all_sheets[sheet_name]
-
-        st.markdown(f"**{len(display_df)}** سجل | **{len(display_df.columns)}** عمود")
-        sr = st.text_input("🔍 بحث:", placeholder="اكتب للبحث...")
-        if sr:
-            m = display_df.apply(lambda r: r.astype(str).str.contains(sr, case=False).any(), axis=1)
-            display_df = display_df[m]
-            st.markdown(f"**النتائج:** {len(display_df)}")
-        st.dataframe(display_df, use_container_width=True, hide_index=True, height=600)
-
-
-    # === 📥 EXPORT ===
-    elif page == "📥 تصدير":
-        st.markdown("<div class='app-header'><h1>📥 تصدير</h1></div>", unsafe_allow_html=True)
-        rp = {}
-        for name, sdf in all_sheets.items():
-            if st.checkbox(f"📊 {name}", value=(name == list(all_sheets.keys())[0])):
-                rp[name] = sdf
-
-        if st.checkbox("📈 ملخص"):
-            rows = [['الموظفين', str(n)]]
-            if has_dept: rows.append(['الأقسام', str(emp['القسم'].nunique())])
-            if has_location: rows.append(['المواقع', str(emp['الموقع'].nunique())])
-            if has_tenure: rows.append(['متوسط الخدمة', f"{emp['سنوات الخدمة'].mean():.1f}"])
-            if has_salary: rows.append(['متوسط الراتب', f"{emp['الراتب الأساسي'].mean():,.0f}"])
-            rp['ملخص'] = pd.DataFrame(rows, columns=['المؤشر','القيمة'])
-
-        if rp:
+        elif page == "📥 تصدير":
+            hdr("📥 تصدير البيانات")
+            if n==0: st.info("📁 ارفع ملف"); return
             o = io.BytesIO()
             with pd.ExcelWriter(o, engine='xlsxwriter') as w:
-                for nm, d in rp.items():
-                    safe_name = nm[:31]
-                    d.to_excel(w, sheet_name=safe_name, index=False)
-                    w.sheets[safe_name].right_to_left()
-            st.download_button("📥 تحميل", data=o.getvalue(),
-                file_name=f"HR_{datetime.now().strftime('%Y%m%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                type="primary", use_container_width=True)
-        else:
-            st.warning("اختر تقرير")
+                for nm, d in all_sheets.items():
+                    d.to_excel(w, sheet_name=nm[:31], index=False)
+            st.download_button("📥 تحميل", data=o.getvalue(), file_name=f"HR_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary", use_container_width=True)
+
+
+    # =========================================
+    #        📚 TRAINING & DEVELOPMENT PAGES
+    # =========================================
+    elif section == "📚 التدريب والتطوير":
+
+        # Initialize training state
+        if 'budget_data' not in st.session_state:
+            st.session_state.budget_data = DEFAULT_BUDGET.copy()
+        if 'programs' not in st.session_state:
+            st.session_state.programs = DEFAULT_PROGRAMS.copy()
+
+        # ======= 📚 TRAINING BUDGET =======
+        if page == "📚 ميزانية التدريب":
+            hdr("📚 ميزانية التدريب", "خطة توزيع ميزانية التدريب السنوية")
+
+            # Budget Controls
+            st.markdown("### ⚙️ إعدادات الميزانية")
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                total_budget = st.number_input("💰 إجمالي الميزانية (ريال)", min_value=10000, max_value=5000000, value=70000, step=5000)
+            with c2:
+                fiscal_year = st.selectbox("📅 السنة المالية", [2025, 2026, 2027], index=1)
+            with c3:
+                company_name = st.text_input("🏢 اسم الشركة", value="رسال الود لتقنية المعلومات")
+
+            # Auto-calculate budgets proportionally
+            budget_df = pd.DataFrame(st.session_state.budget_data)
+            budget_df['budget'] = (budget_df['pct'] / 100 * total_budget).astype(int)
+
+            st.markdown("---")
+
+            # KPI Cards
+            st.markdown("### 📊 المؤشرات الرئيسية")
+            k1, k2, k3, k4 = st.columns(4)
+            with k1: kpi("إجمالي الميزانية", f"{total_budget:,} ريال")
+            with k2: kpi("عدد الأقسام", str(len(budget_df)))
+            with k3:
+                revenue_pct = budget_df[budget_df['cat']=='محرك إيرادات']['budget'].sum() / total_budget * 100
+                kpi("نسبة محركات الإيرادات", f"{revenue_pct:.0f}%")
+            with k4:
+                total_programs = sum(len(v) for v in st.session_state.programs.values())
+                kpi("البرامج التدريبية", str(total_programs))
+
+            st.markdown("---")
+
+            # Department Allocation Table
+            st.markdown("### 📋 توزيع الميزانية حسب القسم")
+            edit_df = budget_df[['dept','budget','pct','priority','fit','cat']].copy()
+            edit_df.columns = ['القسم','الميزانية (ريال)','النسبة %','الأولوية','التوافق الاستراتيجي','التصنيف']
+            st.dataframe(edit_df, use_container_width=True, hide_index=True)
+
+            # Charts
+            c1, c2 = st.columns(2)
+            with c1:
+                fig = px.pie(budget_df, values='budget', names='dept', title='توزيع الميزانية حسب القسم', hole=.35,
+                    color_discrete_sequence=px.colors.qualitative.Set2)
+                fig.update_layout(font=dict(family="Noto Sans Arabic"), height=420)
+                st.plotly_chart(fig, use_container_width=True)
+
+            with c2:
+                cat_df = budget_df.groupby('cat')['budget'].sum().reset_index()
+                cat_df.columns = ['التصنيف','الميزانية']
+                colors = {'محرك إيرادات':'#0F4C5C','ممكّن نمو':'#E36414','بنية تحتية':'#64748B'}
+                fig = px.pie(cat_df, values='الميزانية', names='التصنيف', title='التوزيع الاستراتيجي',
+                    color='التصنيف', color_discrete_map=colors, hole=.35)
+                fig.update_layout(font=dict(family="Noto Sans Arabic"), height=420)
+                st.plotly_chart(fig, use_container_width=True)
+
+            # Quarterly Distribution
+            st.markdown("### 📅 الخطة ربع السنوية")
+            q_data = []
+            for _, row in budget_df.iterrows():
+                q_row = {"القسم": row['dept']}
+                for q, pct in Q_SPLIT.items():
+                    q_row[q] = int(row['budget'] * pct)
+                q_row['الإجمالي'] = row['budget']
+                q_data.append(q_row)
+
+            q_df = pd.DataFrame(q_data)
+            totals = {"القسم": "الإجمالي"}
+            for c in ['Q1','Q2','Q3','Q4','الإجمالي']:
+                totals[c] = q_df[c].sum()
+            q_df = pd.concat([q_df, pd.DataFrame([totals])], ignore_index=True)
+            st.dataframe(q_df, use_container_width=True, hide_index=True)
+
+            # Quarterly chart
+            q_totals = {q: int(total_budget * pct) for q, pct in Q_SPLIT.items()}
+            fig = go.Figure()
+            fig.add_trace(go.Bar(x=list(q_totals.keys()), y=list(q_totals.values()),
+                marker_color=[CL['primary'], CL['accent'], CL['success'], '#64748B'],
+                text=[f"{v:,}" for v in q_totals.values()], textposition='outside'))
+            fig.update_layout(title=f'توزيع الميزانية ربع السنوي - {fiscal_year}', font=dict(family="Noto Sans Arabic"), height=350, yaxis_tickformat=',')
+            st.plotly_chart(fig, use_container_width=True)
+
+            # Detailed Programs
+            st.markdown("### 📋 البرامج التدريبية التفصيلية")
+            for dept, programs in st.session_state.programs.items():
+                with st.expander(f"📌 {dept} ({sum(p['budget'] for p in programs):,} ريال)"):
+                    prog_df = pd.DataFrame(programs)
+                    prog_df.columns = ['البرنامج','الميزانية','المصدر','التوقيت','الأثر المتوقع']
+                    st.dataframe(prog_df, use_container_width=True, hide_index=True)
+
+
+        # ======= 💹 TRAINING ROI =======
+        elif page == "💹 عائد التدريب ROI":
+            hdr("💹 عائد التدريب ROI", "نموذج Phillips ذو 5 مستويات لحساب العائد على الاستثمار في التدريب")
+
+            st.markdown("### ⚙️ بيانات الحساب")
+            c1, c2 = st.columns(2)
+            with c1:
+                roi_budget = st.number_input("💰 ميزانية التدريب (ريال)", value=70000, step=5000)
+                current_rev = st.number_input("📈 الإيرادات السنوية الحالية (ريال)", value=5000000, step=100000)
+                rev_increase = st.slider("📊 الزيادة المتوقعة في الإيرادات %", 1, 50, 15)
+            with c2:
+                hc = st.number_input("👥 عدد الموظفين", value=83, step=1)
+                avg_sal = st.number_input("💵 متوسط الراتب الشهري (ريال)", value=8000, step=500)
+                retention_imp = st.slider("🔄 تحسن الاحتفاظ %", 1, 30, 10)
+                prod_gain = st.slider("⚡ مكاسب الإنتاجية %", 1, 30, 10)
+
+            if st.button("📊 حساب ROI", type="primary", use_container_width=True):
+                roi = calc_roi(roi_budget, rev_increase, current_rev, retention_imp, avg_sal*12, hc, prod_gain)
+
+                st.markdown("---")
+                st.markdown("### 📊 نتائج تحليل ROI (نموذج Phillips)")
+
+                # Level indicators
+                st.markdown("#### المستويات الخمسة")
+                l1, l2, l3, l4, l5 = st.columns(5)
+                with l1: kpi("المستوى 1: رضا المتدربين", f"{roi['satisfaction']}%")
+                with l2: kpi("المستوى 2: التعلم", f"{roi['learning']}%")
+                with l3: kpi("المستوى 3: التطبيق", f"{roi['application']}%")
+                with l4: kpi("المستوى 4: الأثر", f"{roi['total_benefits']:,.0f}")
+                with l5: kpi("المستوى 5: ROI", f"{roi['roi_pct']:.0f}%")
+
+                st.markdown("---")
+
+                # Detailed breakdown
+                st.markdown("#### 💰 تفصيل العوائد المالية")
+                c1, c2 = st.columns(2)
+                with c1:
+                    benefits_data = pd.DataFrame([
+                        {"المصدر": "زيادة الإيرادات", "القيمة (ريال)": roi['revenue_gain']},
+                        {"المصدر": "وفورات الاحتفاظ", "القيمة (ريال)": roi['retention_savings']},
+                        {"المصدر": "مكاسب الإنتاجية", "القيمة (ريال)": roi['productivity_value']},
+                        {"المصدر": "إجمالي العوائد", "القيمة (ريال)": roi['total_benefits']},
+                        {"المصدر": "تكلفة التدريب", "القيمة (ريال)": roi_budget},
+                        {"المصدر": "صافي العائد", "القيمة (ريال)": roi['total_benefits'] - roi_budget},
+                    ])
+                    st.dataframe(benefits_data, use_container_width=True, hide_index=True)
+
+                with c2:
+                    fig = go.Figure()
+                    fig.add_trace(go.Bar(name='العوائد', x=['زيادة الإيرادات','وفورات الاحتفاظ','الإنتاجية'],
+                        y=[roi['revenue_gain'], roi['retention_savings'], roi['productivity_value']],
+                        marker_color=[CL['primary'], CL['accent'], CL['success']]))
+                    fig.add_hline(y=roi_budget, line_dash="dash", line_color="red", annotation_text=f"تكلفة التدريب: {roi_budget:,}")
+                    fig.update_layout(title='العوائد مقابل التكلفة', font=dict(family="Noto Sans Arabic"), height=380, yaxis_tickformat=',')
+                    st.plotly_chart(fig, use_container_width=True)
+
+                # Summary metrics
+                st.markdown("#### 📈 مؤشرات الأداء")
+                m1, m2, m3 = st.columns(3)
+                with m1: st.metric("📊 ROI", f"{roi['roi_pct']:.0f}%", help="(العوائد - التكلفة) / التكلفة × 100")
+                with m2: st.metric("💰 BCR نسبة المنفعة للتكلفة", f"{roi['bcr']:.1f}x", help="كل 1 ريال مستثمر يعود بـ X ريال")
+                with m3: st.metric("⏱️ فترة الاسترداد", f"{roi['payback_months']:.1f} شهر")
+
+                # Insights
+                st.markdown("#### 🤖 تحليل ذكي")
+                if roi['roi_pct'] > 200:
+                    ibox(f"عائد ممتاز! كل 1 ريال مستثمر في التدريب يعود بـ {roi['bcr']:.1f} ريال. الاستثمار يسترد في {roi['payback_months']:.0f} شهر فقط.", "success")
+                elif roi['roi_pct'] > 100:
+                    ibox(f"عائد جيد جداً ({roi['roi_pct']:.0f}%). التدريب يحقق أكثر من ضعف تكلفته.", "success")
+                elif roi['roi_pct'] > 0:
+                    ibox(f"عائد إيجابي ({roi['roi_pct']:.0f}%). التدريب يحقق ربحاً لكن يُنصح بزيادة التركيز على البرامج ذات الأثر المباشر.", "warning")
+                else:
+                    ibox(f"العائد سلبي ({roi['roi_pct']:.0f}%). يُنصح بمراجعة البرامج التدريبية والتركيز على ذات الأثر المباشر.", "danger")
+
+
+        # ======= 📋 TRAINING NEEDS =======
+        elif page == "📋 الاحتياجات التدريبية":
+            hdr("📋 تحليل الاحتياجات التدريبية", "TNA مع مواءمة جهات التدريب")
+
+            st.markdown("### 🎯 تحديد الاحتياجات")
+            st.markdown("اختر الأقسام والمهارات المطلوبة:")
+
+            selected_depts = st.multiselect("📌 الأقسام", list(TRAINING_CATEGORIES.keys()), default=list(TRAINING_CATEGORIES.keys())[:3])
+
+            needs_results = []
+            for dept in selected_depts:
+                with st.expander(f"📌 {dept}", expanded=True):
+                    skills = TRAINING_CATEGORIES[dept]
+                    selected_skills = st.multiselect(f"المهارات المطلوبة - {dept}", skills, default=skills[:3], key=f"sk_{dept}")
+
+                    for skill in selected_skills:
+                        c1, c2, c3 = st.columns(3)
+                        with c1:
+                            level = st.select_slider(f"المستوى الحالي: {skill}", ["مبتدئ","أساسي","متوسط","متقدم","خبير"], value="أساسي", key=f"lv_{dept}_{skill}")
+                        with c2:
+                            target = st.select_slider(f"المستوى المستهدف: {skill}", ["مبتدئ","أساسي","متوسط","متقدم","خبير"], value="متقدم", key=f"tg_{dept}_{skill}")
+                        with c3:
+                            priority = st.selectbox(f"الأولوية: {skill}", ["حرج","عالي","متوسط","منخفض"], key=f"pr_{dept}_{skill}")
+
+                        needs_results.append({
+                            "القسم": dept, "المهارة": skill,
+                            "المستوى الحالي": level, "المستوى المستهدف": target,
+                            "الفجوة": ["مبتدئ","أساسي","متوسط","متقدم","خبير"].index(target) - ["مبتدئ","أساسي","متوسط","متقدم","خبير"].index(level),
+                            "الأولوية": priority
+                        })
+
+            if needs_results:
+                st.markdown("---")
+                st.markdown("### 📊 ملخص تحليل الفجوات")
+                needs_df = pd.DataFrame(needs_results)
+                st.dataframe(needs_df, use_container_width=True, hide_index=True)
+
+                # Gap visualization
+                if len(needs_df) > 0:
+                    fig = px.bar(needs_df, x='المهارة', y='الفجوة', color='الأولوية',
+                        color_discrete_map={"حرج":"#EF4444","عالي":"#F97316","متوسط":"#3B82F6","منخفض":"#6B7280"},
+                        title='خريطة الفجوات التدريبية')
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                # Provider matching
+                st.markdown("### 🏫 جهات التدريب المقترحة")
+                for dept in selected_depts:
+                    dept_needs = [n for n in needs_results if n['القسم']==dept and n['الفجوة']>0]
+                    if dept_needs:
+                        st.markdown(f"**{dept}:**")
+                        for market, providers in PROVIDERS.items():
+                            matched = [p for p in providers if any(
+                                any(sk in p['speciality'] or p['speciality'] in sk for sk in [n['المهارة'] for n in dept_needs])
+                                for _ in [1]
+                            ) or any(w in p['speciality'] for w in ['متعدد','إدارة','قيادة'])]
+                            if matched:
+                                for p in matched[:2]:
+                                    ibox(f"**{p['name']}** ({market}) - {p['speciality']} | النوع: {p['type']}" + (f" | {p['url']}" if p['url'] else ""))
+
+
+        # ======= 🏫 PROVIDERS =======
+        elif page == "🏫 جهات التدريب":
+            hdr("🏫 دليل جهات التدريب", "السوق السعودي والخليجي والمصري")
+
+            market = st.selectbox("🌍 اختر السوق:", list(PROVIDERS.keys()))
+            providers = PROVIDERS[market]
+
+            for p in providers:
+                c1, c2, c3 = st.columns([3,2,1])
+                with c1: st.markdown(f"**{p['name']}**")
+                with c2: st.markdown(f"📌 {p['speciality']}")
+                with c3: st.markdown(f"🏷️ {p['type']}")
+                if p['url']:
+                    st.markdown(f"🔗 [{p['url']}](https://{p['url']})")
+                st.markdown("---")
+
+            # Statistics
+            st.markdown("### 📊 إحصائيات")
+            all_p = []
+            for m, ps in PROVIDERS.items():
+                for p in ps:
+                    all_p.append({"السوق": m, "الجهة": p['name'], "النوع": p['type']})
+            ap_df = pd.DataFrame(all_p)
+            c1, c2 = st.columns(2)
+            with c1:
+                fig = px.bar(ap_df['السوق'].value_counts().reset_index(), x='السوق', y='count', title='عدد الجهات حسب السوق', color='السوق', color_discrete_sequence=CL['dept'])
+                fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350)
+                st.plotly_chart(fig, use_container_width=True)
+            with c2:
+                fig = px.pie(ap_df, names='النوع', title='التوزيع حسب النوع', hole=.3, color_discrete_sequence=CL['dept'])
+                fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350)
+                st.plotly_chart(fig, use_container_width=True)
+
+
+        # ======= 📥 EXPORT TRAINING =======
+        elif page == "📥 تصدير التدريب":
+            hdr("📥 تصدير تقارير التدريب")
+
+            export_format = st.selectbox("📄 صيغة التصدير:", ["Excel (.xlsx)", "CSV (.csv)", "HTML (.html)"])
+
+            reports = {}
+            if st.checkbox("📚 ملخص الميزانية", value=True):
+                reports['ملخص الميزانية'] = pd.DataFrame(st.session_state.budget_data)
+            if st.checkbox("📋 البرامج التفصيلية", value=True):
+                all_progs = []
+                for dept, progs in st.session_state.programs.items():
+                    for p in progs:
+                        all_progs.append({"القسم": dept, **p})
+                if all_progs:
+                    reports['البرامج التفصيلية'] = pd.DataFrame(all_progs)
+            if st.checkbox("📅 الخطة ربع السنوية"):
+                budget_df = pd.DataFrame(st.session_state.budget_data)
+                budget_df['budget'] = (budget_df['pct'] / 100 * 70000).astype(int)
+                q_data = []
+                for _, row in budget_df.iterrows():
+                    q_row = {"القسم": row['dept']}
+                    for q, pct in Q_SPLIT.items(): q_row[q] = int(row['budget'] * pct)
+                    q_row['الإجمالي'] = row['budget']
+                    q_data.append(q_row)
+                reports['ربع سنوي'] = pd.DataFrame(q_data)
+            if st.checkbox("🏫 جهات التدريب"):
+                all_p = []
+                for m, ps in PROVIDERS.items():
+                    for p in ps: all_p.append({"السوق":m,"الجهة":p['name'],"التخصص":p['speciality'],"النوع":p['type'],"الموقع":p.get('url','')})
+                reports['جهات التدريب'] = pd.DataFrame(all_p)
+
+            if reports:
+                if "Excel" in export_format:
+                    o = io.BytesIO()
+                    with pd.ExcelWriter(o, engine='xlsxwriter') as w:
+                        for nm, d in reports.items():
+                            d.to_excel(w, sheet_name=nm[:31], index=False)
+                            w.sheets[nm[:31]].right_to_left()
+                    st.download_button("📥 تحميل Excel", data=o.getvalue(),
+                        file_name=f"Training_Report_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        type="primary", use_container_width=True)
+                elif "CSV" in export_format:
+                    combined = pd.concat(reports.values(), ignore_index=True)
+                    st.download_button("📥 تحميل CSV", data=combined.to_csv(index=False).encode('utf-8-sig'),
+                        file_name=f"Training_Report_{datetime.now().strftime('%Y%m%d')}.csv",
+                        mime="text/csv", type="primary", use_container_width=True)
+                elif "HTML" in export_format:
+                    html = "<html dir='rtl'><head><meta charset='utf-8'><style>body{font-family:sans-serif}table{border-collapse:collapse;width:100%;margin:20px 0}th,td{border:1px solid #ddd;padding:8px;text-align:right}th{background:#0F4C5C;color:white}</style></head><body>"
+                    html += f"<h1>تقرير التدريب - {datetime.now().strftime('%Y-%m-%d')}</h1>"
+                    for nm, d in reports.items():
+                        html += f"<h2>{nm}</h2>{d.to_html(index=False)}"
+                    html += "</body></html>"
+                    st.download_button("📥 تحميل HTML", data=html.encode('utf-8'),
+                        file_name=f"Training_Report_{datetime.now().strftime('%Y%m%d')}.html",
+                        mime="text/html", type="primary", use_container_width=True)
+
+            else:
+                st.warning("اختر تقرير واحد على الأقل")
 
 
 if __name__ == "__main__":
