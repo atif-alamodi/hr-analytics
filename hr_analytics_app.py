@@ -217,7 +217,7 @@ def main():
         elif section == "👥 Headcount":
             page = st.radio("📌", ["👥 Headcount Planning","📊 تحليل الأداء"], label_visibility="collapsed")
         elif section == "⚖️ حاسبة المستحقات":
-            page = "⚖️ حاسبة المستحقات"
+            page = st.radio("📌", ["⚖️ الحاسبة الشاملة","📊 مكافأة نهاية الخدمة","💰 الأجور المتأخرة","🏖️ أجر الإجازة","⏰ أجر العمل الإضافي","🚫 التعويض عن الإنهاء غير المشروع","📅 أيام الإجازة المستحقة","📉 حسم الغياب والتأخر","📊 متوسط أجر آخر سنة"], label_visibility="collapsed")
         else:
             page = st.radio("📌", ["📚 ميزانية التدريب","💹 ROI التدريب","📋 الاحتياجات التدريبية","🏫 جهات التدريب","📥 تصدير التدريب"], label_visibility="collapsed")
 
@@ -725,72 +725,478 @@ def main():
 
 
     # =========================================
-    #         ⚖️ END-OF-SERVICE CALCULATOR
+    #         ⚖️ LABOR CALCULATOR (MOJ-MATCHING)
     # =========================================
     elif section == "⚖️ حاسبة المستحقات":
-        hdr("⚖️ حاسبة مستحقات نهاية الخدمة","وفق نظام العمل السعودي - المادة 84 و 85")
 
-        st.markdown("""
-        <div class="ibox ok">
-        ✅ <b>المادة 84:</b> إذا انتهت علاقة العمل (إنهاء من صاحب العمل أو انتهاء العقد): أجر نصف شهر عن كل سنة من الخمس الأولى، وأجر شهر كامل عن كل سنة بعدها.
-        </div>
-        <div class="ibox warn">
-        ⚠️ <b>المادة 85:</b> إذا كانت الاستقالة: أقل من سنتين = لا شيء. من 2 إلى 5 سنوات = ثلث المكافأة. من 5 إلى 10 = ثلثان. أكثر من 10 = كاملة.
-        </div>
-        """, unsafe_allow_html=True)
+        # ---- Shared Inputs (top of every sub-page) ----
+        def labor_inputs():
+            st.markdown("### 📋 بيانات الموظف الأساسية")
+            ci1, ci2, ci3 = st.columns(3)
+            with ci1:
+                worker_type = st.radio("👤 العامل:", ["سعودي","غير سعودي"], horizontal=True, key="wt")
+            with ci2:
+                plaintiff = st.text_input("اسم المدعي:", key="plnt")
+            with ci3:
+                defendant = st.text_input("اسم المدعى عليه:", key="dfnd")
 
-        st.markdown("---")
+            sc1, sc2, sc3, sc4 = st.columns(4)
+            with sc1:
+                basic_sal = st.number_input("💵 الأجر الأساسي (ريال)", min_value=0, max_value=500000, value=5000, step=100, key="bsal")
+            with sc2:
+                allowances = st.number_input("💰 البدلات (ريال)", min_value=0, max_value=500000, value=3000, step=100, key="alw")
+            with sc3:
+                total_sal = basic_sal + allowances
+                st.metric("📊 الإجمالي", f"{total_sal:,}")
+            with sc4:
+                sal_after_gosi = st.number_input("💳 الأجر بعد حسم التأمينات", min_value=0, max_value=500000, value=int(total_sal * 0.9025), step=100, key="sagosi")
 
-        c1, c2 = st.columns(2)
-        with c1:
-            monthly_sal = st.number_input("💰 الراتب الشهري الفعلي (شامل البدلات)", min_value=1000, max_value=200000, value=8000, step=500)
-            start = st.date_input("📅 تاريخ بداية العمل", value=date(2020, 1, 1))
-        with c2:
-            is_resign = st.radio("📋 سبب انتهاء العلاقة:", ["إنهاء من صاحب العمل / انتهاء العقد (مادة 84)","استقالة الموظف (مادة 85)"])
-            end = st.date_input("📅 تاريخ نهاية العمل", value=date.today())
+            return {"worker_type": worker_type, "basic": basic_sal, "allowances": allowances,
+                    "total": total_sal, "after_gosi": sal_after_gosi,
+                    "plaintiff": plaintiff, "defendant": defendant}
 
-        # Vacation balance
-        vac_balance = st.number_input("🏖️ رصيد الإجازات المستحقة (أيام)", min_value=0, max_value=365, value=0, step=1)
-        unpaid_days = st.number_input("📋 أيام إجازة بدون راتب", min_value=0, max_value=365, value=0, step=1)
+        # ========== ⚖️ الحاسبة الشاملة ==========
+        if page == "⚖️ الحاسبة الشاملة":
+            hdr("⚖️ الحاسبة العمالية الشاملة","مطابقة لحاسبة وزارة العدل - نظام العمل السعودي")
 
-        if st.button("📊 حساب المستحقات", type="primary", use_container_width=True):
-            is_res = "استقالة" in is_resign
-            result = calc_eos(monthly_sal, start, end, is_res)
+            st.markdown("""
+            <div class="ibox">💡 هذه الحاسبة مطابقة لحاسبة وزارة العدل وتحتوي على 8 أقسام كاملة. اختر القسم المطلوب من القائمة الجانبية.</div>
+            """, unsafe_allow_html=True)
 
-            st.markdown("---")
-            st.markdown("### 📊 النتائج")
-
-            k1,k2,k3,k4 = st.columns(4)
-            with k1: kpi("مدة الخدمة", f"{result['years']} سنة {result['months']} شهر {result['days']} يوم")
-            with k2: kpi("المكافأة كاملة (مادة 84)", f"{result['eos_art84']:,.2f} ريال")
-            with k3: kpi(f"المستحق ({result['eos_pct']}%)", f"{result['eos_final']:,.2f} ريال")
-            with k4:
-                vac_amount = vac_balance * result['daily_salary']
-                kpi("بدل الإجازات", f"{vac_amount:,.2f} ريال")
-
-            st.markdown("---")
-
-            # Detailed breakdown
-            st.markdown("### 📋 تفصيل المستحقات")
-            details = [
-                {"البند": "مكافأة نهاية الخدمة", "المبلغ (ريال)": result['eos_final']},
-                {"البند": f"بدل إجازات ({vac_balance} يوم)", "المبلغ (ريال)": vac_amount},
+            sections_info = [
+                ("📊 مكافأة نهاية الخدمة", "حسب المادة 84 (إنهاء/انتهاء عقد) أو المادة 85 (استقالة) مع خصم أيام الإجازة بدون أجر"),
+                ("💰 الأجور المتأخرة", "حساب الأجور غير المدفوعة لفترة محددة"),
+                ("🏖️ أجر الإجازة", "حساب المقابل المالي لرصيد الإجازات المستحقة"),
+                ("⏰ أجر العمل الإضافي", "حساب أجر الساعات والأيام الإضافية بمعدل 150% من الأجر"),
+                ("🚫 التعويض عن الإنهاء غير المشروع", "تعويض إنهاء العقد لغير سبب مشروع (محدد/غير محدد المدة)"),
+                ("📅 أيام الإجازة المستحقة", "معرفة عدد أيام الإجازة المستحقة خلال فترة الخدمة"),
+                ("📉 حسم الغياب والتأخر", "حساب مبلغ الحسم بسبب الغياب والتأخر"),
+                ("📊 متوسط أجر آخر سنة", "حساب متوسط الأجر الشهري لآخر 12 شهر"),
             ]
 
-            total_eos = result['eos_final'] + vac_amount
-            details.append({"البند": "إجمالي المستحقات", "المبلغ (ريال)": total_eos})
+            for title, desc in sections_info:
+                st.markdown(f"""<div class="ibox"><b>{title}:</b> {desc}</div>""", unsafe_allow_html=True)
 
-            st.dataframe(pd.DataFrame(details), use_container_width=True, hide_index=True)
+            ibox("إصدار استرشادي تقريبي ولا يغني عن الاستشارة القانونية المتخصصة.", "warning")
 
-            # Info box
-            st.markdown("### 📝 الملاحظات")
-            ibox(result['note'], "success" if result['eos_pct']==100 else "warning")
+        # ========== 📊 مكافأة نهاية الخدمة ==========
+        elif page == "📊 مكافأة نهاية الخدمة":
+            hdr("📊 مكافأة نهاية الخدمة","المادة 84 و 85 من نظام العمل السعودي")
+            inp = labor_inputs()
+            st.markdown("---")
 
-            if is_res and result['total_years'] < 2:
-                ibox("بموجب المادة 85: إذا لم تتجاوز خدمة الموظف سنتين فلا يستحق مكافأة نهاية خدمة عند الاستقالة.", "danger")
+            st.markdown("### 🧮 بيانات الحساب")
 
-            ibox(f"الأجر اليومي: {result['daily_salary']:,.2f} ريال | استحقاق الإجازة السنوية: {result['vac_days_per_year']} يوم")
-            ibox("هذه الحاسبة تقديرية ولا تغني عن الاستشارة القانونية. للحالات المعقدة راجع وزارة الموارد البشرية أو محامي مختص.", "warning")
+            st.markdown("""
+            <div class="ibox ok">✅ <b>المادة 84:</b> إنهاء من صاحب العمل أو انتهاء العقد = نصف شهر عن كل سنة من الخمس الأولى + شهر كامل عن كل سنة بعدها.</div>
+            <div class="ibox warn">⚠️ <b>المادة 85 (استقالة):</b> أقل من سنتين = لا شيء | من 2 إلى 5 سنوات = ثلث المكافأة | من 5 إلى 10 = ثلثان | أكثر من 10 = كاملة.</div>
+            """, unsafe_allow_html=True)
+
+            c1, c2 = st.columns(2)
+            with c1:
+                eos_method = st.radio("📋 طريقة احتساب المكافأة:", ["حسب المادة (84)","حسب المادة (85)"], key="eos_m")
+            with c2:
+                unpaid_leave = st.number_input("📋 إجمالي أيام الإجازات بدون أجر:", min_value=0, max_value=9999, value=0, step=1, key="unp")
+
+            c1, c2 = st.columns(2)
+            with c1:
+                eos_start = st.date_input("📅 بداية العمل:", value=date(2018, 1, 1), key="eos_s")
+            with c2:
+                eos_end = st.date_input("📅 نهاية العمل:", value=date.today(), key="eos_e")
+
+            if st.button("📊 حساب المكافأة", type="primary", use_container_width=True, key="eos_btn"):
+                total_days = (eos_end - eos_start).days - unpaid_leave
+                if total_days < 0: total_days = 0
+                total_years = total_days / 365.25
+                delta = relativedelta(eos_end, eos_start)
+
+                monthly = inp['total']
+                daily = monthly / 30
+
+                # Article 84 base calculation
+                if total_years <= 5:
+                    eos_84 = (monthly / 2) * total_years
+                else:
+                    eos_84 = (monthly / 2) * 5 + monthly * (total_years - 5)
+
+                # Article 85 adjustment
+                is_85 = "85" in eos_method
+                if is_85:
+                    if total_years < 2:
+                        eos_final = 0; pct = 0; note = "لا يستحق مكافأة (أقل من سنتين)"
+                    elif total_years < 5:
+                        eos_final = eos_84 / 3; pct = 33.3; note = "ثلث المكافأة (من 2 إلى أقل من 5 سنوات)"
+                    elif total_years < 10:
+                        eos_final = eos_84 * 2 / 3; pct = 66.7; note = "ثلثا المكافأة (من 5 إلى أقل من 10 سنوات)"
+                    else:
+                        eos_final = eos_84; pct = 100; note = "المكافأة كاملة (10 سنوات فأكثر)"
+                else:
+                    eos_final = eos_84; pct = 100; note = "المكافأة كاملة (المادة 84)"
+
+                st.markdown("---")
+                st.markdown("### 📊 النتائج")
+
+                k1,k2,k3 = st.columns(3)
+                with k1: kpi("مدة الخدمة", f"{delta.years} سنة {delta.months} شهر {delta.days} يوم")
+                with k2: kpi("إجمالي الأيام (بعد خصم الإجازات بدون أجر)", f"{total_days:,} يوم")
+                with k3: kpi("سنوات الخدمة الفعلية", f"{total_years:.2f} سنة")
+
+                k4,k5,k6 = st.columns(3)
+                with k4: kpi("المكافأة حسب المادة 84 (كاملة)", f"{eos_84:,.2f} ريال")
+                with k5: kpi(f"المستحق الفعلي ({pct}%)", f"{eos_final:,.2f} ريال")
+                with k6: kpi("الأجر اليومي", f"{daily:,.2f} ريال")
+
+                st.markdown("### 📋 تفصيل الحساب")
+                calc_rows = []
+                if total_years <= 5:
+                    calc_rows.append({"البند": f"السنوات ({total_years:.2f} سنة) × نصف شهر", "المبلغ": f"{eos_84:,.2f}"})
+                else:
+                    first5 = (monthly / 2) * 5
+                    rest = monthly * (total_years - 5)
+                    calc_rows.append({"البند": f"أول 5 سنوات × نصف شهر ({monthly:,.0f}/2 × 5)", "المبلغ": f"{first5:,.2f}"})
+                    calc_rows.append({"البند": f"ما بعد 5 سنوات × شهر كامل ({monthly:,.0f} × {total_years-5:.2f})", "المبلغ": f"{rest:,.2f}"})
+                calc_rows.append({"البند": "إجمالي المكافأة (مادة 84)", "المبلغ": f"{eos_84:,.2f}"})
+                if is_85:
+                    calc_rows.append({"البند": f"النسبة المستحقة (مادة 85): {pct}%", "المبلغ": f"{eos_final:,.2f}"})
+                st.dataframe(pd.DataFrame(calc_rows), use_container_width=True, hide_index=True)
+
+                ibox(note, "success" if pct == 100 else ("danger" if pct == 0 else "warning"))
+                if unpaid_leave > 0:
+                    ibox(f"تم خصم {unpaid_leave} يوم إجازة بدون أجر من مدة الخدمة الفعلية.")
+                ibox("إصدار استرشادي تقريبي. للحالات المعقدة راجع وزارة الموارد البشرية أو محامي مختص.", "warning")
+
+        # ========== 💰 الأجور المتأخرة ==========
+        elif page == "💰 الأجور المتأخرة":
+            hdr("💰 الأجور المتأخرة","حساب الأجور غير المدفوعة")
+            inp = labor_inputs()
+            st.markdown("---")
+
+            st.markdown("### 🧮 بيانات الحساب")
+            input_method = st.radio("طريقة الإدخال:", ["بإدخال التاريخ من - إلى","بإدخال عدد الأشهر والأيام"], horizontal=True, key="dw_method")
+
+            if input_method == "بإدخال التاريخ من - إلى":
+                c1, c2 = st.columns(2)
+                with c1: dw_from = st.date_input("من التاريخ:", value=date(2024, 1, 1), key="dw_f")
+                with c2: dw_to = st.date_input("إلى التاريخ:", value=date.today(), key="dw_t")
+                dw_days = (dw_to - dw_from).days
+                dw_months = dw_days / 30
+            else:
+                c1, c2 = st.columns(2)
+                with c1: dw_m = st.number_input("عدد الأشهر:", min_value=0, max_value=120, value=3, key="dw_m")
+                with c2: dw_d = st.number_input("عدد الأيام:", min_value=0, max_value=30, value=0, key="dw_d")
+                dw_days = dw_m * 30 + dw_d
+                dw_months = dw_days / 30
+
+            if st.button("📊 حساب الأجور المتأخرة", type="primary", use_container_width=True, key="dw_btn"):
+                daily = inp['total'] / 30
+                delayed = daily * dw_days
+
+                st.markdown("---")
+                st.markdown("### 📊 النتائج")
+
+                k1,k2,k3 = st.columns(3)
+                with k1: kpi("عدد الأيام", f"{dw_days} يوم")
+                with k2: kpi("عدد الأشهر", f"{dw_months:.1f} شهر")
+                with k3: kpi("إجمالي الأجور المتأخرة", f"{delayed:,.2f} ريال")
+
+                details = [
+                    {"البند": "الأجر الشهري الإجمالي", "القيمة": f"{inp['total']:,}"},
+                    {"البند": "الأجر اليومي", "القيمة": f"{daily:,.2f}"},
+                    {"البند": "عدد الأيام المتأخرة", "القيمة": f"{dw_days}"},
+                    {"البند": "إجمالي الأجور المتأخرة", "القيمة": f"{delayed:,.2f} ريال"},
+                ]
+                st.dataframe(pd.DataFrame(details), use_container_width=True, hide_index=True)
+
+        # ========== 🏖️ أجر الإجازة ==========
+        elif page == "🏖️ أجر الإجازة":
+            hdr("🏖️ أجر الإجازة","حساب المقابل المالي لرصيد الإجازات")
+            inp = labor_inputs()
+            st.markdown("---")
+
+            st.markdown("### 🧮 بيانات الحساب")
+            vac_days = st.number_input("🏖️ عدد أيام الإجازة المستحقة:", min_value=0, max_value=365, value=21, step=1, key="vac_d")
+
+            if st.button("📊 حساب أجر الإجازة", type="primary", use_container_width=True, key="vac_btn"):
+                daily = inp['total'] / 30
+                vac_amount = daily * vac_days
+
+                st.markdown("---")
+                st.markdown("### 📊 النتائج")
+
+                k1,k2,k3 = st.columns(3)
+                with k1: kpi("عدد الأيام", f"{vac_days} يوم")
+                with k2: kpi("الأجر اليومي", f"{daily:,.2f} ريال")
+                with k3: kpi("إجمالي أجر الإجازة", f"{vac_amount:,.2f} ريال")
+
+                details = [
+                    {"البند": "الأجر الشهري الإجمالي", "القيمة": f"{inp['total']:,}"},
+                    {"البند": "الأجر اليومي (الإجمالي ÷ 30)", "القيمة": f"{daily:,.2f}"},
+                    {"البند": "عدد أيام الإجازة", "القيمة": f"{vac_days}"},
+                    {"البند": "إجمالي أجر الإجازة", "القيمة": f"{vac_amount:,.2f} ريال"},
+                ]
+                st.dataframe(pd.DataFrame(details), use_container_width=True, hide_index=True)
+
+        # ========== ⏰ أجر العمل الإضافي ==========
+        elif page == "⏰ أجر العمل الإضافي":
+            hdr("⏰ أجر العمل الإضافي","حساب أجر الساعات الإضافية بمعدل 150%")
+            inp = labor_inputs()
+            st.markdown("---")
+
+            st.markdown("### 🧮 بيانات الحساب")
+            ibox("أجر ساعة العمل الإضافية = أجر الساعة العادية + 50% من الأجر الأساسي (المادة 107 من نظام العمل).")
+
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                work_hours = st.selectbox("⏰ ساعات اليوم الفعلية:", list(range(2,13)), index=6, key="ot_h")
+            with c2:
+                ot_days = st.number_input("📅 عدد الأيام الإضافية:", min_value=0, max_value=365, value=0, step=1, key="ot_d")
+            with c3:
+                ot_hours = st.number_input("🕐 عدد الساعات الإضافية:", min_value=0, max_value=9999, value=0, step=1, key="ot_hrs")
+
+            if st.button("📊 حساب أجر العمل الإضافي", type="primary", use_container_width=True, key="ot_btn"):
+                # Hourly rate based on basic salary
+                hourly_rate = inp['basic'] / 30 / work_hours
+                ot_rate = hourly_rate * 1.5  # 150% of basic hourly rate
+
+                # Convert extra days to hours
+                total_ot_hours = (ot_days * work_hours) + ot_hours
+                ot_total = total_ot_hours * ot_rate
+
+                st.markdown("---")
+                st.markdown("### 📊 النتائج")
+
+                k1,k2,k3,k4 = st.columns(4)
+                with k1: kpi("سعر الساعة العادية (أساسي)", f"{hourly_rate:,.2f} ريال")
+                with k2: kpi("سعر ساعة الإضافي (150%)", f"{ot_rate:,.2f} ريال")
+                with k3: kpi("إجمالي الساعات الإضافية", f"{total_ot_hours}")
+                with k4: kpi("إجمالي أجر العمل الإضافي", f"{ot_total:,.2f} ريال")
+
+                details = [
+                    {"البند": "الأجر الأساسي الشهري", "القيمة": f"{inp['basic']:,}"},
+                    {"البند": "ساعات العمل اليومية", "القيمة": f"{work_hours}"},
+                    {"البند": "سعر الساعة العادية (أساسي ÷ 30 ÷ ساعات)", "القيمة": f"{hourly_rate:,.2f}"},
+                    {"البند": "سعر ساعة الإضافي (× 1.5)", "القيمة": f"{ot_rate:,.2f}"},
+                    {"البند": f"أيام إضافية ({ot_days}) = {ot_days * work_hours} ساعة", "القيمة": f"{ot_days * work_hours}"},
+                    {"البند": f"ساعات إضافية مباشرة", "القيمة": f"{ot_hours}"},
+                    {"البند": "إجمالي الساعات الإضافية", "القيمة": f"{total_ot_hours}"},
+                    {"البند": "إجمالي أجر العمل الإضافي", "القيمة": f"{ot_total:,.2f} ريال"},
+                ]
+                st.dataframe(pd.DataFrame(details), use_container_width=True, hide_index=True)
+
+        # ========== 🚫 التعويض عن الإنهاء غير المشروع ==========
+        elif page == "🚫 التعويض عن الإنهاء غير المشروع":
+            hdr("🚫 التعويض عن الإنهاء لغير سبب مشروع","المادة 77 من نظام العمل")
+            inp = labor_inputs()
+            st.markdown("---")
+
+            st.markdown("### 🧮 بيانات الحساب")
+
+            contract_type = st.radio("📋 نوع العقد:", ["عقد محدد المدة","عقد غير محدد المدة"], key="ct")
+
+            if contract_type == "عقد محدد المدة":
+                st.markdown("**المدة المتبقية من العقد:**")
+                c1, c2 = st.columns(2)
+                with c1: ct_from = st.date_input("من تاريخ:", value=date.today(), key="ct_f")
+                with c2: ct_to = st.date_input("إلى تاريخ:", value=date(2026, 12, 31), key="ct_t")
+
+                if st.button("📊 حساب التعويض", type="primary", use_container_width=True, key="ct_btn"):
+                    remaining_days = (ct_to - ct_from).days
+                    remaining_months = remaining_days / 30
+                    daily = inp['total'] / 30
+                    # Article 77: remaining period salary, minimum 2 months
+                    compensation = daily * remaining_days
+                    min_comp = inp['total'] * 2
+                    if compensation < min_comp:
+                        compensation = min_comp
+                        comp_note = f"تم تطبيق الحد الأدنى (أجر شهرين = {min_comp:,.2f} ريال)"
+                    else:
+                        comp_note = "التعويض = أجر المدة المتبقية من العقد"
+
+                    st.markdown("---")
+                    st.markdown("### 📊 النتائج")
+
+                    k1,k2,k3 = st.columns(3)
+                    with k1: kpi("المدة المتبقية", f"{remaining_days} يوم ({remaining_months:.1f} شهر)")
+                    with k2: kpi("الحد الأدنى (شهرين)", f"{min_comp:,.2f} ريال")
+                    with k3: kpi("التعويض المستحق", f"{compensation:,.2f} ريال")
+
+                    ibox(comp_note, "success")
+                    ibox("المادة 77: إذا أُنهي العقد محدد المدة لغير سبب مشروع، يستحق العامل أجر المدة المتبقية بحد أدنى أجر شهرين.")
+
+            else:  # عقد غير محدد المدة
+                c1, c2 = st.columns(2)
+                with c1: uct_start = st.date_input("بداية العمل:", value=date(2018, 1, 1), key="uct_s")
+                with c2: uct_end = st.date_input("تاريخ الإنهاء:", value=date.today(), key="uct_e")
+
+                if st.button("📊 حساب التعويض", type="primary", use_container_width=True, key="uct_btn"):
+                    service_days = (uct_end - uct_start).days
+                    service_years = service_days / 365.25
+                    daily = inp['total'] / 30
+                    # Article 77: 15 days wage per year, minimum 2 months
+                    compensation = (daily * 15) * service_years
+                    min_comp = inp['total'] * 2
+                    if compensation < min_comp:
+                        compensation = min_comp
+                        comp_note = f"تم تطبيق الحد الأدنى (أجر شهرين = {min_comp:,.2f} ريال)"
+                    else:
+                        comp_note = "التعويض = 15 يوم أجر عن كل سنة خدمة"
+
+                    st.markdown("---")
+                    st.markdown("### 📊 النتائج")
+
+                    k1,k2,k3 = st.columns(3)
+                    with k1: kpi("مدة الخدمة", f"{service_years:.2f} سنة")
+                    with k2: kpi("الحد الأدنى (شهرين)", f"{min_comp:,.2f} ريال")
+                    with k3: kpi("التعويض المستحق", f"{compensation:,.2f} ريال")
+
+                    ibox(comp_note, "success")
+                    ibox("المادة 77: إذا أُنهي العقد غير محدد المدة لغير سبب مشروع، يستحق العامل 15 يوم أجر عن كل سنة خدمة بحد أدنى أجر شهرين.")
+
+        # ========== 📅 أيام الإجازة المستحقة ==========
+        elif page == "📅 أيام الإجازة المستحقة":
+            hdr("📅 معرفة أيام الإجازة المستحقة","حساب رصيد الإجازات خلال فترة الخدمة")
+
+            st.markdown("### 🧮 بيانات الحساب")
+            ibox("المادة 109: يستحق العامل إجازة سنوية لا تقل عن 21 يوماً في الخمس سنوات الأولى، وتزداد إلى 30 يوماً بعد ذلك.")
+
+            c1, c2 = st.columns(2)
+            with c1:
+                vd_first5 = st.number_input("📅 عدد أيام الإجازة في أول 5 سنوات:", min_value=21, max_value=60, value=21, step=1, key="vd5",
+                    help="الحد الأدنى 21 يوم حسب نظام العمل")
+            with c2:
+                vd_after5 = st.number_input("📅 عدد أيام الإجازة بعد 5 سنوات:", min_value=30, max_value=60, value=30, step=1, key="vda5",
+                    help="الحد الأدنى 30 يوم حسب نظام العمل")
+
+            c1, c2 = st.columns(2)
+            with c1: vd_from = st.date_input("📅 من تاريخ:", value=date(2018, 1, 1), key="vd_f")
+            with c2: vd_to = st.date_input("📅 إلى تاريخ:", value=date.today(), key="vd_t")
+
+            if st.button("📊 حساب أيام الإجازة", type="primary", use_container_width=True, key="vd_btn"):
+                delta = relativedelta(vd_to, vd_from)
+                total_days_service = (vd_to - vd_from).days
+                total_years = total_days_service / 365.25
+
+                # Calculate vacation days
+                if total_years <= 5:
+                    vac_total = (total_years * vd_first5)
+                else:
+                    vac_first5 = 5 * vd_first5
+                    vac_after5 = (total_years - 5) * vd_after5
+                    vac_total = vac_first5 + vac_after5
+
+                st.markdown("---")
+                st.markdown("### 📊 النتائج")
+
+                k1,k2,k3 = st.columns(3)
+                with k1: kpi("مدة الخدمة", f"{delta.years} سنة {delta.months} شهر {delta.days} يوم")
+                with k2: kpi("إجمالي سنوات الخدمة", f"{total_years:.2f}")
+                with k3: kpi("إجمالي أيام الإجازة المستحقة", f"{vac_total:.1f} يوم")
+
+                if total_years > 5:
+                    details = [
+                        {"الفترة": f"أول 5 سنوات ({vd_first5} يوم/سنة)", "الأيام": f"{5 * vd_first5:.0f}"},
+                        {"الفترة": f"ما بعد 5 سنوات ({vd_after5} يوم/سنة × {total_years-5:.2f})", "الأيام": f"{(total_years-5)*vd_after5:.1f}"},
+                        {"الفترة": "الإجمالي", "الأيام": f"{vac_total:.1f}"},
+                    ]
+                else:
+                    details = [
+                        {"الفترة": f"{total_years:.2f} سنة ({vd_first5} يوم/سنة)", "الأيام": f"{vac_total:.1f}"},
+                    ]
+                st.dataframe(pd.DataFrame(details), use_container_width=True, hide_index=True)
+
+        # ========== 📉 حسم الغياب والتأخر ==========
+        elif page == "📉 حسم الغياب والتأخر":
+            hdr("📉 حسم الغياب والتأخر","حساب مبلغ الحسم بسبب الغياب والتأخر")
+            inp = labor_inputs()
+            st.markdown("---")
+
+            st.markdown("### 🧮 بيانات الحساب")
+
+            c1, c2 = st.columns(2)
+            with c1:
+                abs_work_hours = st.selectbox("⏰ ساعات العمل اليومية:", list(range(2,13)), index=6, key="abs_wh")
+                abs_days = st.number_input("📅 عدد أيام الغياب:", min_value=0, max_value=365, value=0, step=1, key="abs_d")
+            with c2:
+                abs_hours = st.number_input("🕐 عدد ساعات التأخر:", min_value=0, max_value=999, value=0, step=1, key="abs_h")
+                abs_minutes = st.number_input("🕐 عدد دقائق التأخر:", min_value=0, max_value=59, value=0, step=1, key="abs_min")
+
+            if st.button("📊 حساب مبلغ الحسم", type="primary", use_container_width=True, key="abs_btn"):
+                daily = inp['total'] / 30
+                hourly = daily / abs_work_hours
+                minute_rate = hourly / 60
+
+                # Absence deduction
+                absence_deduction = abs_days * daily
+                # Tardiness deduction
+                tardiness_hours_deduction = abs_hours * hourly
+                tardiness_minutes_deduction = abs_minutes * minute_rate
+                total_deduction = absence_deduction + tardiness_hours_deduction + tardiness_minutes_deduction
+
+                st.markdown("---")
+                st.markdown("### 📊 النتائج")
+
+                k1,k2,k3,k4 = st.columns(4)
+                with k1: kpi("حسم الغياب", f"{absence_deduction:,.2f} ريال")
+                with k2: kpi("حسم ساعات التأخر", f"{tardiness_hours_deduction:,.2f} ريال")
+                with k3: kpi("حسم دقائق التأخر", f"{tardiness_minutes_deduction:,.2f} ريال")
+                with k4: kpi("إجمالي الحسم", f"{total_deduction:,.2f} ريال")
+
+                details = [
+                    {"البند": "الأجر الشهري", "القيمة": f"{inp['total']:,}"},
+                    {"البند": "الأجر اليومي (÷ 30)", "القيمة": f"{daily:,.2f}"},
+                    {"البند": f"أجر الساعة (÷ {abs_work_hours})", "القيمة": f"{hourly:,.2f}"},
+                    {"البند": "أجر الدقيقة (÷ 60)", "القيمة": f"{minute_rate:,.4f}"},
+                    {"البند": f"حسم الغياب ({abs_days} يوم × {daily:,.2f})", "القيمة": f"{absence_deduction:,.2f}"},
+                    {"البند": f"حسم التأخر ({abs_hours} ساعة × {hourly:,.2f})", "القيمة": f"{tardiness_hours_deduction:,.2f}"},
+                    {"البند": f"حسم التأخر ({abs_minutes} دقيقة × {minute_rate:,.4f})", "القيمة": f"{tardiness_minutes_deduction:,.2f}"},
+                    {"البند": "إجمالي الحسم", "القيمة": f"{total_deduction:,.2f} ريال"},
+                ]
+                st.dataframe(pd.DataFrame(details), use_container_width=True, hide_index=True)
+
+        # ========== 📊 متوسط أجر آخر سنة ==========
+        elif page == "📊 متوسط أجر آخر سنة":
+            hdr("📊 متوسط الأجر لآخر سنة","حساب متوسط الأجر الشهري لآخر 12 شهر")
+
+            st.markdown("### 🧮 أدخل ما تقاضاه العامل في كل شهر من آخر سنة")
+            ibox("هذا المتوسط يُستخدم لحساب مكافأة نهاية الخدمة عندما يكون الأجر متغيراً (عمولات، مكافآت، بدلات متغيرة).")
+
+            months_ar = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"]
+            month_salaries = []
+
+            for i in range(0, 12, 4):
+                cols = st.columns(4)
+                for j in range(4):
+                    if i+j < 12:
+                        with cols[j]:
+                            val = st.number_input(f"💵 {months_ar[i+j]}:", min_value=0, max_value=500000, value=0, step=100, key=f"ms_{i+j}")
+                            month_salaries.append(val)
+
+            if st.button("📊 حساب المتوسط", type="primary", use_container_width=True, key="avg_btn"):
+                non_zero = [s for s in month_salaries if s > 0]
+                if non_zero:
+                    total = sum(month_salaries)
+                    avg = sum(non_zero) / len(non_zero)
+                    avg_all = total / 12
+
+                    st.markdown("---")
+                    st.markdown("### 📊 النتائج")
+
+                    k1,k2,k3 = st.columns(3)
+                    with k1: kpi("إجمالي ما تقاضاه العامل", f"{total:,.2f} ريال")
+                    with k2: kpi("المتوسط (12 شهر)", f"{avg_all:,.2f} ريال")
+                    with k3: kpi(f"المتوسط ({len(non_zero)} أشهر عمل فعلية)", f"{avg:,.2f} ريال")
+
+                    # Monthly breakdown table
+                    details = []
+                    for i, m in enumerate(months_ar):
+                        details.append({"الشهر": m, "المبلغ (ريال)": f"{month_salaries[i]:,}"})
+                    details.append({"الشهر": "الإجمالي", "المبلغ (ريال)": f"{total:,}"})
+                    details.append({"الشهر": "المتوسط الشهري", "المبلغ (ريال)": f"{avg_all:,.2f}"})
+                    st.dataframe(pd.DataFrame(details), use_container_width=True, hide_index=True)
+
+                    ibox("يُنصح باستخدام هذا المتوسط كـ 'أجر' عند حساب مكافأة نهاية الخدمة في حال كان الراتب يتضمن عمولات أو بدلات متغيرة.", "success")
+                else:
+                    st.warning("أدخل أجر شهر واحد على الأقل")
 
 
     # =========================================
