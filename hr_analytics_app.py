@@ -224,8 +224,18 @@ def main():
 
         st.markdown("---")
         st.markdown("##### 📁 ملف البيانات")
-        file = st.file_uploader("ارفع Excel", type=["xlsx","xls","csv"], label_visibility="collapsed")
-        if file: st.success("✅ تم التحميل")
+        file = st.file_uploader("ارفع Excel", type=["xlsx","xls","csv"], label_visibility="collapsed", key="main_uploader")
+        if file:
+            # Store file bytes in session_state immediately
+            st.session_state['uploaded_file_name'] = file.name
+            st.session_state['uploaded_file_bytes'] = file.getvalue()
+            st.success(f"✅ {file.name}")
+        elif 'uploaded_file_name' in st.session_state:
+            st.info(f"📂 {st.session_state['uploaded_file_name']}")
+            if st.button("🗑️ إزالة الملف", use_container_width=True):
+                for k in ['uploaded_file_name','uploaded_file_bytes','_parsed_cache_key','_parsed_emp','_parsed_sal','_parsed_sheets']:
+                    st.session_state.pop(k, None)
+                st.rerun()
 
 
     # ===== LOAD DATA =====
@@ -233,34 +243,55 @@ def main():
     sal_df = pd.DataFrame()
     all_sheets = {}
 
+    # Use session_state data if file not currently in uploader
+    file_bytes = None
+    file_name = None
     if file:
-        try:
-            if file.name.endswith('.csv'):
-                emp = norm_cols(pd.read_csv(file))
-            else:
-                xl = pd.ExcelFile(file)
-                for s in xl.sheet_names:
-                    try:
-                        df_s = smart_read(xl, s)
-                        # Check if it's a large salary dataset
-                        if len(df_s) > 500 and any(c.lower() in ['salary month','gross salary','شهر الراتب'] for c in df_s.columns):
-                            sal_df = norm_cols(df_s)
-                        df_s = norm_cols(df_s)
-                        all_sheets[s] = df_s
-                        if len(emp)==0 and len(df_s)>5:
-                            name_cols = [c for c in df_s.columns if any(x in str(c).lower() for x in ['name','اسم','emp','موظف'])]
-                            if name_cols: emp = df_s
-                    except: pass
-                if len(emp)==0 and all_sheets: emp = list(all_sheets.values())[0]
+        file_bytes = file.getvalue()
+        file_name = file.name
+    elif 'uploaded_file_bytes' in st.session_state:
+        file_bytes = st.session_state['uploaded_file_bytes']
+        file_name = st.session_state.get('uploaded_file_name', 'data.xlsx')
 
-                # Try loading specific sheets
-                if 'Salary Scale' in xl.sheet_names:
-                    try: all_sheets['Salary Scale'] = pd.read_excel(xl, 'Salary Scale', header=0)
-                    except: pass
-                if 'Positions' in xl.sheet_names:
-                    try: all_sheets['Positions'] = pd.read_excel(xl, 'Positions', header=0)
-                    except: pass
-        except: pass
+    if file_bytes:
+        # Check if we already parsed this file (same name + size)
+        cache_key = f"{file_name}_{len(file_bytes)}"
+        if st.session_state.get('_parsed_cache_key') == cache_key and '_parsed_emp' in st.session_state:
+            emp = st.session_state['_parsed_emp']
+            sal_df = st.session_state.get('_parsed_sal', pd.DataFrame())
+            all_sheets = st.session_state.get('_parsed_sheets', {})
+        else:
+            try:
+                if file_name.endswith('.csv'):
+                    emp = norm_cols(pd.read_csv(io.BytesIO(file_bytes)))
+                else:
+                    xl = pd.ExcelFile(io.BytesIO(file_bytes))
+                    for s in xl.sheet_names:
+                        try:
+                            df_s = smart_read(xl, s)
+                            if len(df_s) > 500 and any(c.lower() in ['salary month','gross salary','شهر الراتب'] for c in df_s.columns):
+                                sal_df = norm_cols(df_s)
+                            df_s = norm_cols(df_s)
+                            all_sheets[s] = df_s
+                            if len(emp)==0 and len(df_s)>5:
+                                name_cols = [c for c in df_s.columns if any(x in str(c).lower() for x in ['name','اسم','emp','موظف'])]
+                                if name_cols: emp = df_s
+                        except: pass
+                    if len(emp)==0 and all_sheets: emp = list(all_sheets.values())[0]
+
+                    if 'Salary Scale' in xl.sheet_names:
+                        try: all_sheets['Salary Scale'] = pd.read_excel(xl, 'Salary Scale', header=0)
+                        except: pass
+                    if 'Positions' in xl.sheet_names:
+                        try: all_sheets['Positions'] = pd.read_excel(xl, 'Positions', header=0)
+                        except: pass
+            except: pass
+
+            # Cache parsed results
+            st.session_state['_parsed_cache_key'] = cache_key
+            st.session_state['_parsed_emp'] = emp
+            st.session_state['_parsed_sal'] = sal_df
+            st.session_state['_parsed_sheets'] = all_sheets
 
     if '#' in emp.columns and len(emp)>0:
         emp = emp[pd.to_numeric(emp['#'], errors='coerce').notna()].reset_index(drop=True)
