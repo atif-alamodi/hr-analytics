@@ -9,7 +9,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import io, math, json, sqlite3, os, smtplib, smtplib
+import io, math, json, sqlite3, os, smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import openpyxl
@@ -290,6 +290,10 @@ def generate_employee_pdf(result):
 # Initialize database on startup
 init_db()
 
+# Load SMTP config from database if not in session
+if 'smtp_config' not in st.session_state:
+    st.session_state.smtp_config = load_smtp_config()
+
 # ===== STYLES =====
 st.markdown("""
 <style>
@@ -506,55 +510,177 @@ ALL_SECTIONS = ["📊 التحليلات العامة","💰 تحليل الرو
 
 # Email sending function
 def send_test_email(to_email, emp_name, tests, deadline, assigned_by, app_url=""):
-    """Send email notification about assigned tests"""
+    """Send email notification about assigned tests - supports Gmail, Outlook, Yahoo, custom SMTP"""
     try:
         smtp_cfg = st.session_state.get('smtp_config', {})
-        if not smtp_cfg.get('server') or not smtp_cfg.get('email'):
-            return False, "لم يتم تكوين إعدادات البريد الإلكتروني"
+        if not smtp_cfg.get('server') or not smtp_cfg.get('email') or not smtp_cfg.get('password'):
+            return False, "لم يتم تكوين إعدادات البريد الإلكتروني. اذهب إلى إدارة المستخدمين > إعدادات SMTP"
+
+        sender_email = smtp_cfg['email']
+        sender_name = smtp_cfg.get('sender_name', 'منصة HR - رسال الود')
 
         tests_list = "\n".join([f"  - {t}" for t in tests])
         msg = MIMEMultipart('alternative')
-        msg['From'] = smtp_cfg['email']
+        msg['From'] = f"{sender_name} <{sender_email}>"
         msg['To'] = to_email
         msg['Subject'] = f"تعيين اختبارات شخصية جديدة - {emp_name}"
+        msg['X-Priority'] = '2'
 
-        html_body = f"""
-        <html dir="rtl"><body style="font-family:Arial,sans-serif;direction:rtl;text-align:right;">
-        <div style="max-width:600px;margin:0 auto;border:1px solid #ddd;border-radius:12px;overflow:hidden;">
-            <div style="background:linear-gradient(135deg,#0F4C5C,#1A1A2E);color:white;padding:20px;text-align:center;">
-                <h2 style="margin:0;color:white;">منصة تحليلات الموارد البشرية</h2>
-                <p style="margin:5px 0 0;opacity:0.8;">رسال الود لتقنية المعلومات</p>
-            </div>
-            <div style="padding:25px;">
-                <h3 style="color:#0F4C5C;">مرحباً {emp_name},</h3>
-                <p>تم تعيين اختبارات شخصية جديدة لك من قبل <strong>{assigned_by}</strong>.</p>
-                <div style="background:#f8f9fa;border-right:4px solid #E36414;padding:15px;margin:15px 0;border-radius:8px;">
-                    <p style="margin:0 0 10px;font-weight:bold;color:#E36414;">الاختبارات المطلوبة:</p>
-                    {"".join([f'<p style="margin:5px 0;padding-right:15px;">✅ {t}</p>' for t in tests])}
-                </div>
-                <p><strong>الموعد النهائي:</strong> <span style="color:#E74C3C;">{deadline}</span></p>
-                <p>يرجى تسجيل الدخول إلى المنصة وإكمال الاختبارات المطلوبة قبل الموعد النهائي.</p>
-                {f'<a href="{app_url}" style="display:inline-block;background:#E36414;color:white;padding:12px 30px;border-radius:8px;text-decoration:none;margin:10px 0;">الدخول إلى المنصة</a>' if app_url else ''}
-                <hr style="border:none;border-top:1px solid #eee;margin:20px 0;">
-                <p style="font-size:12px;color:#888;">هذه رسالة تلقائية من منصة تحليلات الموارد البشرية. الاختبارات إجبارية ولا يمكن تأجيلها بدون موافقة المدير.</p>
-            </div>
+        # Professional HTML email template
+        app_link = app_url or smtp_cfg.get('app_url', '')
+        btn_html = f'<div style="text-align:center;margin:20px 0;"><a href="{app_link}" style="display:inline-block;background:linear-gradient(135deg,#E36414,#E9C46A);color:white;padding:14px 40px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;">الدخول إلى المنصة وبدء الاختبارات</a></div>' if app_link else ''
+
+        html_body = f"""<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head><meta charset="UTF-8"></head>
+<body style="font-family:'Segoe UI',Arial,sans-serif;direction:rtl;text-align:right;margin:0;padding:0;background:#f4f4f4;">
+<div style="max-width:600px;margin:20px auto;background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+    <div style="background:linear-gradient(135deg,#0F4C5C,#1A1A2E);color:white;padding:24px;text-align:center;">
+        <div style="background:rgba(255,255,255,0.15);width:60px;height:60px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;margin-bottom:10px;">HR</div>
+        <h2 style="margin:8px 0 0;color:white;font-size:20px;">منصة تحليلات الموارد البشرية</h2>
+        <p style="margin:4px 0 0;opacity:0.7;font-size:13px;">رسال الود لتقنية المعلومات</p>
+    </div>
+    <div style="padding:28px 24px;">
+        <h3 style="color:#0F4C5C;margin:0 0 15px;font-size:18px;">مرحباً {emp_name},</h3>
+        <p style="color:#333;line-height:1.7;font-size:14px;">تم تعيين اختبارات شخصية جديدة لك من قبل <strong style="color:#E36414;">{assigned_by}</strong>.</p>
+
+        <div style="background:linear-gradient(135deg,#fff8f3,#fff);border-right:4px solid #E36414;padding:18px;margin:20px 0;border-radius:8px;">
+            <p style="margin:0 0 12px;font-weight:bold;color:#E36414;font-size:15px;">📋 الاختبارات المطلوبة:</p>
+            {"".join([f'<div style="margin:8px 0;padding:8px 15px;background:white;border-radius:6px;border:1px solid #f0f0f0;"><span style="color:#27AE60;margin-left:8px;">✅</span> <strong>{t}</strong></div>' for t in tests])}
         </div>
-        </body></html>"""
 
-        text_body = f"""مرحباً {emp_name},\n\nتم تعيين اختبارات شخصية جديدة لك:\n{tests_list}\n\nالموعد النهائي: {deadline}\nمعيّن بواسطة: {assigned_by}\n\nيرجى تسجيل الدخول وإكمال الاختبارات."""
+        <div style="background:#FFF3CD;border-radius:8px;padding:14px 18px;margin:15px 0;">
+            <p style="margin:0;font-size:14px;">⏰ <strong>الموعد النهائي:</strong> <span style="color:#E74C3C;font-weight:bold;font-size:15px;">{deadline}</span></p>
+        </div>
+
+        <p style="color:#555;line-height:1.7;font-size:14px;">يرجى تسجيل الدخول إلى المنصة وإكمال الاختبارات المطلوبة قبل الموعد النهائي.</p>
+
+        {btn_html}
+
+        <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
+        <p style="font-size:11px;color:#999;line-height:1.6;">هذه رسالة تلقائية من منصة تحليلات الموارد البشرية. الاختبارات إجبارية ولا يمكن تأجيلها بدون موافقة المدير المباشر.</p>
+        <p style="font-size:11px;color:#bbb;">تاريخ الإرسال: {datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
+    </div>
+</div>
+</body></html>"""
+
+        text_body = f"""مرحباً {emp_name},
+
+تم تعيين اختبارات شخصية جديدة لك:
+{tests_list}
+
+الموعد النهائي: {deadline}
+معيّن بواسطة: {assigned_by}
+
+يرجى تسجيل الدخول إلى المنصة وإكمال الاختبارات المطلوبة.
+{f'رابط المنصة: {app_link}' if app_link else ''}
+
+هذه رسالة تلقائية من منصة تحليلات الموارد البشرية."""
 
         msg.attach(MIMEText(text_body, 'plain', 'utf-8'))
         msg.attach(MIMEText(html_body, 'html', 'utf-8'))
 
         port = int(smtp_cfg.get('port', 587))
-        server = smtplib.SMTP(smtp_cfg['server'], port)
-        server.starttls()
-        server.login(smtp_cfg['email'], smtp_cfg['password'])
+        use_ssl = smtp_cfg.get('use_ssl', port == 465)
+
+        if use_ssl:
+            server = smtplib.SMTP_SSL(smtp_cfg['server'], port, timeout=30)
+        else:
+            server = smtplib.SMTP(smtp_cfg['server'], port, timeout=30)
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+
+        server.login(sender_email, smtp_cfg['password'])
         server.send_message(msg)
         server.quit()
-        return True, "تم الإرسال بنجاح"
+
+        # Log successful send
+        log_email_send(to_email, emp_name, tests, "success")
+        return True, f"تم الإرسال بنجاح إلى {to_email}"
+    except smtplib.SMTPAuthenticationError:
+        return False, "خطأ في المصادقة: تأكد من البريد وكلمة مرور التطبيق (App Password). لـ Gmail: اذهب إلى myaccount.google.com/apppasswords"
+    except smtplib.SMTPRecipientsRefused:
+        return False, f"البريد المستلم غير صالح: {to_email}"
+    except smtplib.SMTPConnectError:
+        return False, f"لا يمكن الاتصال بالخادم {smtp_cfg.get('server','')}:{port}. تأكد من الخادم والمنفذ"
+    except TimeoutError:
+        return False, "انتهت مهلة الاتصال. تأكد من إعدادات الشبكة والخادم"
     except Exception as e:
-        return False, str(e)
+        return False, f"خطأ: {str(e)}"
+
+def log_email_send(to_email, emp_name, tests, status):
+    """Log email sending to database"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute('''CREATE TABLE IF NOT EXISTS email_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            to_email TEXT, emp_name TEXT, tests TEXT,
+            status TEXT, sent_at TEXT, sent_by TEXT
+        )''')
+        c.execute("INSERT INTO email_log (to_email, emp_name, tests, status, sent_at, sent_by) VALUES (?,?,?,?,?,?)",
+            (to_email, emp_name, ", ".join(tests), status,
+             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+             st.session_state.get('user_name','')))
+        conn.commit()
+        conn.close()
+    except: pass
+
+def save_smtp_config(cfg):
+    """Save SMTP config to database for persistence"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute('''CREATE TABLE IF NOT EXISTS app_config (
+            key TEXT PRIMARY KEY, value TEXT
+        )''')
+        c.execute("INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?)",
+            ("smtp_config", json.dumps(cfg, ensure_ascii=False)))
+        conn.commit()
+        conn.close()
+    except: pass
+
+def load_smtp_config():
+    """Load SMTP config from database"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("SELECT value FROM app_config WHERE key = 'smtp_config'")
+        row = c.fetchone()
+        conn.close()
+        if row:
+            return json.loads(row[0])
+    except: pass
+    return {}
+
+def get_email_log():
+    """Get email sending log"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("SELECT * FROM email_log ORDER BY sent_at DESC LIMIT 50")
+        rows = c.fetchall()
+        cols = [d[0] for d in c.description]
+        conn.close()
+        return [dict(zip(cols, row)) for row in rows]
+    except: return []
+
+# SMTP Provider presets
+SMTP_PROVIDERS = {
+    "Gmail": {"server": "smtp.gmail.com", "port": 587, "use_ssl": False,
+        "help": "استخدم App Password من: myaccount.google.com/apppasswords (تأكد من تفعيل المصادقة الثنائية أولاً)"},
+    "Outlook/Hotmail": {"server": "smtp-mail.outlook.com", "port": 587, "use_ssl": False,
+        "help": "استخدم كلمة مرور حسابك أو App Password"},
+    "Yahoo": {"server": "smtp.mail.yahoo.com", "port": 465, "use_ssl": True,
+        "help": "استخدم App Password من إعدادات أمان Yahoo"},
+    "Office 365": {"server": "smtp.office365.com", "port": 587, "use_ssl": False,
+        "help": "استخدم بيانات حساب Office 365"},
+    "Zoho": {"server": "smtp.zoho.com", "port": 465, "use_ssl": True,
+        "help": "استخدم بيانات حساب Zoho Mail"},
+    "خادم مخصص": {"server": "", "port": 587, "use_ssl": False,
+        "help": "أدخل إعدادات SMTP الخاصة بخادمك"},
+}
 
 def init_users():
     if 'users_db' not in st.session_state:
@@ -629,19 +755,80 @@ def user_management_page():
     st.dataframe(pd.DataFrame(user_rows), use_container_width=True, hide_index=True)
 
     # SMTP Configuration
-    with st.expander("⚙️ إعدادات البريد الإلكتروني (SMTP)"):
-        st.caption("مطلوب لإرسال إشعارات تعيين الاختبارات للموظفين")
-        smtp_cfg = st.session_state.get('smtp_config', {})
+    st.markdown("### 📧 إعدادات البريد الإلكتروني (SMTP)")
+    st.caption("مطلوب لإرسال إشعارات تعيين الاختبارات من التطبيق مباشرة إلى بريد الموظف")
+
+    # Load saved config
+    if 'smtp_config' not in st.session_state:
+        st.session_state.smtp_config = load_smtp_config()
+    smtp_cfg = st.session_state.get('smtp_config', {})
+
+    with st.expander("⚙️ تكوين SMTP", expanded=not smtp_cfg.get('email')):
+        # Provider selection
+        provider = st.selectbox("اختر مزود البريد:", list(SMTP_PROVIDERS.keys()),
+            index=0, key="smtp_provider")
+        prov = SMTP_PROVIDERS[provider]
+        st.info(f"💡 {prov['help']}")
+
         sm1, sm2 = st.columns(2)
         with sm1:
-            smtp_server = st.text_input("خادم SMTP:", value=smtp_cfg.get('server','smtp.gmail.com'), key="smtp_srv")
-            smtp_port = st.number_input("المنفذ:", value=int(smtp_cfg.get('port',587)), key="smtp_port")
+            smtp_server = st.text_input("خادم SMTP:", value=smtp_cfg.get('server', prov['server']), key="smtp_srv")
+            smtp_port = st.number_input("المنفذ:", value=int(smtp_cfg.get('port', prov['port'])),
+                min_value=1, max_value=65535, key="smtp_port")
+            use_ssl = st.checkbox("استخدام SSL (بدلاً من TLS)", value=smtp_cfg.get('use_ssl', prov.get('use_ssl', False)), key="smtp_ssl")
         with sm2:
-            smtp_email = st.text_input("البريد المرسل:", value=smtp_cfg.get('email',''), key="smtp_email")
-            smtp_pass = st.text_input("كلمة مرور التطبيق:", type="password", value=smtp_cfg.get('password',''), key="smtp_pass")
-        if st.button("💾 حفظ إعدادات SMTP", key="smtp_save"):
-            st.session_state.smtp_config = {'server': smtp_server, 'port': smtp_port, 'email': smtp_email, 'password': smtp_pass}
-            st.success("✅ تم حفظ إعدادات البريد")
+            smtp_email = st.text_input("البريد المرسل:", value=smtp_cfg.get('email',''), key="smtp_email",
+                placeholder="your-email@gmail.com")
+            smtp_pass = st.text_input("كلمة مرور التطبيق (App Password):", type="password",
+                value=smtp_cfg.get('password',''), key="smtp_pass")
+            sender_name = st.text_input("اسم المرسل:", value=smtp_cfg.get('sender_name','منصة HR - رسال الود'), key="smtp_sender")
+
+        app_url = st.text_input("رابط التطبيق (اختياري - يظهر في الإيميل):",
+            value=smtp_cfg.get('app_url',''), key="smtp_url",
+            placeholder="https://your-app.streamlit.app")
+
+        sv1, sv2, sv3 = st.columns(3)
+        with sv1:
+            if st.button("💾 حفظ الإعدادات", type="primary", key="smtp_save", use_container_width=True):
+                new_cfg = {'server': smtp_server, 'port': smtp_port, 'email': smtp_email,
+                    'password': smtp_pass, 'sender_name': sender_name, 'app_url': app_url,
+                    'use_ssl': use_ssl, 'provider': provider}
+                st.session_state.smtp_config = new_cfg
+                save_smtp_config(new_cfg)
+                st.success("✅ تم حفظ إعدادات البريد في قاعدة البيانات")
+
+        with sv2:
+            if st.button("🧪 إرسال بريد تجريبي", key="smtp_test", use_container_width=True):
+                if smtp_email and smtp_pass:
+                    test_cfg = {'server': smtp_server, 'port': smtp_port, 'email': smtp_email,
+                        'password': smtp_pass, 'sender_name': sender_name, 'app_url': app_url, 'use_ssl': use_ssl}
+                    st.session_state.smtp_config = test_cfg
+                    ok, result_msg = send_test_email(smtp_email, "اختبار النظام",
+                        ["بريد تجريبي للتأكد من عمل الإعدادات"], str(date.today()),
+                        st.session_state.get('user_name','المدير'))
+                    if ok:
+                        st.success(f"✅ {result_msg}")
+                    else:
+                        st.error(f"❌ {result_msg}")
+                else:
+                    st.error("أدخل البريد وكلمة المرور أولاً")
+
+        with sv3:
+            if smtp_cfg.get('email'):
+                st.success(f"✅ مُكوّن: {smtp_cfg['email']}")
+            else:
+                st.warning("⚠️ غير مُكوّن")
+
+    # Email sending log
+    with st.expander("📋 سجل الإرسال"):
+        email_logs = get_email_log()
+        if email_logs:
+            log_df = pd.DataFrame(email_logs)
+            if 'id' in log_df.columns:
+                log_df = log_df.drop(columns=['id'])
+            st.dataframe(log_df, use_container_width=True, hide_index=True)
+        else:
+            st.caption("لا توجد رسائل مرسلة بعد")
 
     # Add new user
     st.markdown("### ➕ إضافة مستخدم جديد")
