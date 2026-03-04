@@ -730,336 +730,292 @@ def main():
     elif section == "⚖️ حاسبة المستحقات":
         hdr("⚖️ الحاسبة العمالية الشاملة","مطابقة لحاسبة وزارة العدل - نظام العمل السعودي")
 
-        ibox("ملاحظة: التاريخ الميلادي يستخدم للعقود الميلادية. إصدار استرشادي تقريبي.")
+        # ===== بيانات الموظف =====
+        st.markdown("### 👤 بيانات الموظف")
+        e1, e2, e3 = st.columns([2,1,1])
+        with e1: emp_name = st.text_input("اسم الموظف:", key="empn")
+        with e2: emp_id = st.text_input("رقم الموظف:", key="empid")
+        with e3: worker_type = st.radio("الجنسية:", ["سعودي","غير سعودي"], horizontal=True, key="wt")
 
-        # ===== SHARED EMPLOYEE DATA (always visible) =====
-        st.markdown("---")
-        st.markdown("### 👤 بيانات العامل الأساسية")
-
-        w1, w2 = st.columns(2)
-        with w1:
-            worker_type = st.radio("العامل:", ["سعودي","غير سعودي"], horizontal=True, key="wt")
-        with w2:
-            cal_type = st.radio("نوع التاريخ:", ["ميلادي","هجري (تقريبي)"], horizontal=True, key="caltype")
-
+        st.markdown("### 💵 تفاصيل الأجر")
         s1, s2, s3, s4 = st.columns(4)
-        with s1:
-            basic_sal = st.number_input("💵 الأجر الأساسي:", min_value=0, max_value=500000, value=5000, step=100, key="bsal")
-        with s2:
-            allowances = st.number_input("💰 البدلات:", min_value=0, max_value=500000, value=3000, step=100, key="alw")
-        with s3:
-            total_sal = basic_sal + allowances
-            st.metric("📊 الإجمالي", f"{total_sal:,}")
-        with s4:
-            sal_after_gosi = st.number_input("💳 بعد حسم التأمينات:", min_value=0, max_value=500000, value=int(total_sal * 0.9025), step=100, key="sagosi")
+        with s1: basic_sal = st.number_input("الأجر الأساسي:", 0, 500000, 5000, 100, key="bsal")
+        with s2: housing = st.number_input("بدل السكن:", 0, 500000, 1250, 100, key="hous")
+        with s3: transport = st.number_input("بدل المواصلات:", 0, 100000, 500, 100, key="trns")
+        with s4: other_allow = st.number_input("بدلات أخرى:", 0, 500000, 0, 100, key="otha")
 
-        n1, n2 = st.columns(2)
-        with n1:
-            plaintiff = st.text_input("اسم المدعي:", key="plnt")
-        with n2:
-            defendant = st.text_input("اسم المدعى عليه:", key="dfnd")
+        # GOSI calculation - Saudi only
+        is_saudi = worker_type == "سعودي"
+        if is_saudi:
+            gosi_pct = st.slider("🏛️ نسبة خصم التأمينات الاجتماعية (%):", 0.0, 25.0, 9.75, 0.25, key="gosi_pct",
+                help="النسبة الافتراضية: 9.75% (حصة الموظف)")
+            gosi_base = basic_sal + housing
+            gosi_deduction = gosi_base * (gosi_pct / 100)
+            net_after_gosi = gosi_base - gosi_deduction
+            total_sal = net_after_gosi + transport + other_allow
 
-        daily_sal = total_sal / 30
-        hourly_basic = basic_sal / 30 / 8
+            g1,g2,g3,g4 = st.columns(4)
+            with g1: kpi("وعاء التأمينات (أساسي+سكن)", f"{gosi_base:,.2f}")
+            with g2: kpi(f"خصم التأمينات ({gosi_pct}%)", f"{gosi_deduction:,.2f}")
+            with g3: kpi("بعد خصم التأمينات", f"{net_after_gosi:,.2f}")
+            with g4: kpi("💰 الأجر النهائي (صافي)", f"{total_sal:,.2f}")
 
-        # ===== SECTION CHECKBOXES =====
-        st.markdown("---")
-        st.markdown("### 📋 اختر البنود المطلوب حسابها")
+            ibox(f"طريقة الحساب: (الأساسي {basic_sal:,} + السكن {housing:,}) - التأمينات {gosi_pct}% = {net_after_gosi:,.2f} + المواصلات {transport:,} + أخرى {other_allow:,} = **{total_sal:,.2f} ريال**")
+            gross_sal = basic_sal + housing + transport + other_allow
+        else:
+            gosi_pct = 0; gosi_deduction = 0
+            gross_sal = basic_sal + housing + transport + other_allow
+            total_sal = gross_sal
+            g1,g2 = st.columns(2)
+            with g1: kpi("إجمالي الأجر", f"{total_sal:,.2f}")
+            with g2: kpi("💰 الأجر النهائي", f"{total_sal:,.2f}")
+            ibox("غير سعودي: لا يوجد خصم تأمينات اجتماعية.", "success")
 
-        chk_delayed = st.checkbox("💰 الأجور المتأخرة", key="chk1")
-        chk_eos = st.checkbox("📊 مكافأة نهاية الخدمة", value=True, key="chk2")
-        chk_vac = st.checkbox("🏖️ أجر الإجازة", key="chk3")
-        chk_ot = st.checkbox("⏰ أجر العمل الإضافي", key="chk4")
-        chk_unfair = st.checkbox("🚫 التعويض عن الإنهاء لغير سبب مشروع", key="chk5")
-        chk_vac_days = st.checkbox("📅 معرفة عدد أيام الإجازة في فترة الخدمة", key="chk6")
-        chk_absence = st.checkbox("📉 معرفة مبلغ الحسم بسبب الغياب والتأخر", key="chk7")
-        chk_avg = st.checkbox("📊 معرفة متوسط الأجر لآخر سنة", key="chk8")
-
-        # Collect all results
+        daily_sal = gross_sal / 30
         results_summary = []
 
-        # ======= 💰 الأجور المتأخرة =======
-        if chk_delayed:
-            st.markdown("---")
-            st.markdown("### 💰 الأجور المتأخرة")
-
-            dw_method = st.radio("طريقة الإدخال:", ["بإدخال التاريخ من إلى","بإدخال عدد الأشهر والأيام"], horizontal=True, key="dw_m")
-            if dw_method == "بإدخال التاريخ من إلى":
-                dc1, dc2 = st.columns(2)
-                with dc1: dw_from = st.date_input("من التاريخ:", value=date(2024,1,1), key="dwf")
-                with dc2: dw_to = st.date_input("إلى التاريخ:", value=date.today(), key="dwt")
-                dw_total_days = (dw_to - dw_from).days
-            else:
-                dc1, dc2 = st.columns(2)
-                with dc1: dw_months = st.number_input("عدد الأشهر:", 0, 120, 3, key="dwmo")
-                with dc2: dw_extra_days = st.number_input("عدد الأيام:", 0, 30, 0, key="dwdy")
-                dw_total_days = dw_months * 30 + dw_extra_days
-
-            delayed_amount = daily_sal * dw_total_days
-            st.info(f"📊 إجمالي الأجور المتأخرة: **{delayed_amount:,.2f} ريال** ({dw_total_days} يوم × {daily_sal:,.2f} ريال/يوم)")
+        # ========== 1. الأجور المتأخرة ==========
+        st.markdown("---")
+        st.markdown("### 💰 1. الأجور المتأخرة")
+        dw_method = st.radio("طريقة الإدخال:", ["بإدخال التاريخ من إلى","بإدخال عدد الأشهر والأيام"], horizontal=True, key="dwm")
+        if dw_method == "بإدخال التاريخ من إلى":
+            d1, d2 = st.columns(2)
+            with d1: dw_from = st.date_input("من:", value=date.today(), key="dwf")
+            with d2: dw_to = st.date_input("إلى:", value=date.today(), key="dwt")
+            dw_total_days = (dw_to - dw_from).days
+        else:
+            d1, d2 = st.columns(2)
+            with d1: dw_months = st.number_input("عدد الأشهر:", 0, 120, 0, key="dwmo")
+            with d2: dw_extra_days = st.number_input("عدد الأيام:", 0, 30, 0, key="dwdy")
+            dw_total_days = dw_months * 30 + dw_extra_days
+        delayed_amount = daily_sal * dw_total_days
+        if dw_total_days > 0:
+            st.success(f"الأجور المتأخرة: **{delayed_amount:,.2f} ريال** ({dw_total_days} يوم x {daily_sal:,.2f})")
             results_summary.append(("الأجور المتأخرة", delayed_amount))
 
+        # ========== 2. مكافأة نهاية الخدمة ==========
+        st.markdown("---")
+        st.markdown("### 📊 2. مكافأة نهاية الخدمة")
+        ec1, ec2 = st.columns(2)
+        with ec1: eos_method = st.radio("طريقة الاحتساب:", ["حسب المادة (84)","حسب المادة (85) - استقالة"], key="eosm")
+        with ec2: unpaid_leave = st.number_input("إجمالي أيام الإجازات بدون أجر:", 0, 9999, 0, key="unp")
+        ec3, ec4 = st.columns(2)
+        with ec3: eos_start = st.date_input("بداية العمل:", value=date(2018,1,1), key="eoss")
+        with ec4: eos_end = st.date_input("نهاية العمل:", value=date.today(), key="eose")
 
-        # ======= 📊 مكافأة نهاية الخدمة =======
-        if chk_eos:
-            st.markdown("---")
-            st.markdown("### 📊 مكافأة نهاية الخدمة")
+        eos_service_days = max((eos_end - eos_start).days - unpaid_leave, 0)
+        eos_years = eos_service_days / 365.25
+        eos_delta = relativedelta(eos_end, eos_start)
+        eos_monthly = gross_sal
+        if eos_years <= 5:
+            eos_84 = (eos_monthly / 2) * eos_years
+        else:
+            eos_84 = (eos_monthly / 2) * 5 + eos_monthly * (eos_years - 5)
+        is_85 = "85" in eos_method
+        if is_85:
+            if eos_years < 2: eos_final=0; eos_pct=0; eos_note="لا يستحق (أقل من سنتين)"
+            elif eos_years < 5: eos_final=eos_84/3; eos_pct=33.3; eos_note="ثلث المكافأة (2-5 سنوات)"
+            elif eos_years < 10: eos_final=eos_84*2/3; eos_pct=66.7; eos_note="ثلثا المكافأة (5-10 سنوات)"
+            else: eos_final=eos_84; eos_pct=100; eos_note="كاملة (10+ سنوات)"
+        else:
+            eos_final=eos_84; eos_pct=100; eos_note="المكافأة كاملة (المادة 84)"
 
-            st.markdown("""
-            <div class="ibox ok">✅ <b>المادة 84:</b> نصف شهر عن كل سنة من الخمس الأولى + شهر كامل عن كل سنة بعدها.</div>
-            <div class="ibox warn">⚠️ <b>المادة 85 (استقالة):</b> أقل من سنتين = 0 | 2-5 سنوات = ثلث | 5-10 = ثلثان | 10+ = كاملة.</div>
-            """, unsafe_allow_html=True)
+        ek1,ek2,ek3,ek4 = st.columns(4)
+        with ek1: kpi("مدة الخدمة", f"{eos_delta.years} سنة {eos_delta.months} شهر")
+        with ek2: kpi("المكافأة كاملة (84)", f"{eos_84:,.2f}")
+        with ek3: kpi(f"المستحق ({eos_pct}%)", f"{eos_final:,.2f}")
+        with ek4: kpi("الأجر اليومي", f"{daily_sal:,.2f}")
 
-            ec1, ec2 = st.columns(2)
-            with ec1:
-                eos_method = st.radio("طريقة احتساب المكافأة:", ["حسب المادة (84)","حسب المادة (85)"], key="eosm")
-            with ec2:
-                unpaid_leave = st.number_input("إجمالي أيام الإجازات بدون أجر:", 0, 9999, 0, key="unp")
+        calc_rows = []
+        if eos_years <= 5:
+            calc_rows.append({"البند": f"{eos_years:.2f} سنة x نصف شهر", "المبلغ": f"{eos_84:,.2f}"})
+        else:
+            f5 = (eos_monthly/2)*5; r5 = eos_monthly*(eos_years-5)
+            calc_rows.append({"البند": "أول 5 سنوات x نصف شهر", "المبلغ": f"{f5:,.2f}"})
+            calc_rows.append({"البند": f"ما بعد 5 سنوات ({eos_years-5:.2f}) x شهر كامل", "المبلغ": f"{r5:,.2f}"})
+        if is_85: calc_rows.append({"البند": f"المستحق (مادة 85): {eos_pct}%", "المبلغ": f"{eos_final:,.2f}"})
+        st.dataframe(pd.DataFrame(calc_rows), use_container_width=True, hide_index=True)
+        ibox(eos_note, "success" if eos_pct==100 else ("danger" if eos_pct==0 else "warning"))
+        if unpaid_leave > 0: ibox(f"تم خصم {unpaid_leave} يوم إجازة بدون أجر.")
+        ibox(f"المكافأة تُحسب على أساس الأجر الإجمالي قبل خصم التأمينات: {eos_monthly:,.2f} ريال")
+        results_summary.append(("مكافأة نهاية الخدمة", eos_final))
 
-            ec3, ec4 = st.columns(2)
-            with ec3: eos_start = st.date_input("بداية العمل:", value=date(2018,1,1), key="eoss")
-            with ec4: eos_end = st.date_input("نهاية العمل:", value=date.today(), key="eose")
-
-            eos_service_days = (eos_end - eos_start).days - unpaid_leave
-            if eos_service_days < 0: eos_service_days = 0
-            eos_years = eos_service_days / 365.25
-            eos_delta = relativedelta(eos_end, eos_start)
-
-            # Article 84 base
-            if eos_years <= 5:
-                eos_84 = (total_sal / 2) * eos_years
-            else:
-                eos_84 = (total_sal / 2) * 5 + total_sal * (eos_years - 5)
-
-            # Article 85 adjustment
-            is_85 = "85" in eos_method
-            if is_85:
-                if eos_years < 2:
-                    eos_final = 0; eos_pct = 0; eos_note = "لا يستحق مكافأة (أقل من سنتين)"
-                elif eos_years < 5:
-                    eos_final = eos_84 / 3; eos_pct = 33.3; eos_note = "ثلث المكافأة (2 إلى 5 سنوات)"
-                elif eos_years < 10:
-                    eos_final = eos_84 * 2 / 3; eos_pct = 66.7; eos_note = "ثلثا المكافأة (5 إلى 10 سنوات)"
-                else:
-                    eos_final = eos_84; eos_pct = 100; eos_note = "المكافأة كاملة (10+ سنوات)"
-            else:
-                eos_final = eos_84; eos_pct = 100; eos_note = "المكافأة كاملة (المادة 84)"
-
-            st.info(f"📊 مدة الخدمة: **{eos_delta.years} سنة {eos_delta.months} شهر {eos_delta.days} يوم** | الأيام الفعلية: {eos_service_days:,} يوم | السنوات: {eos_years:.2f}")
-
-            # Detail breakdown
-            calc_rows = []
-            if eos_years <= 5:
-                calc_rows.append({"البند": f"{eos_years:.2f} سنة × نصف شهر ({total_sal:,}/2)", "المبلغ": f"{eos_84:,.2f}"})
-            else:
-                first5 = (total_sal / 2) * 5
-                rest = total_sal * (eos_years - 5)
-                calc_rows.append({"البند": f"أول 5 سنوات × نصف شهر ({total_sal:,}/2 × 5)", "المبلغ": f"{first5:,.2f}"})
-                calc_rows.append({"البند": f"ما بعد 5 سنوات × شهر كامل ({total_sal:,} × {eos_years-5:.2f})", "المبلغ": f"{rest:,.2f}"})
-            calc_rows.append({"البند": "إجمالي المكافأة (مادة 84)", "المبلغ": f"{eos_84:,.2f}"})
-            if is_85:
-                calc_rows.append({"البند": f"المستحق (مادة 85): {eos_pct}%", "المبلغ": f"{eos_final:,.2f}"})
-            st.dataframe(pd.DataFrame(calc_rows), use_container_width=True, hide_index=True)
-
-            ibox(eos_note, "success" if eos_pct==100 else ("danger" if eos_pct==0 else "warning"))
-            if unpaid_leave > 0:
-                ibox(f"تم خصم {unpaid_leave} يوم إجازة بدون أجر من مدة الخدمة.")
-
-            results_summary.append(("مكافأة نهاية الخدمة", eos_final))
-
-
-        # ======= 🏖️ أجر الإجازة =======
-        if chk_vac:
-            st.markdown("---")
-            st.markdown("### 🏖️ أجر الإجازة")
-
-            vac_days_input = st.number_input("عدد أيام الإجازة المستحقة:", 0, 365, 21, key="vacd")
-            vac_amount = daily_sal * vac_days_input
-
-            st.info(f"📊 أجر الإجازة: **{vac_amount:,.2f} ريال** ({vac_days_input} يوم × {daily_sal:,.2f} ريال/يوم)")
+        # ========== 3. أجر الإجازة ==========
+        st.markdown("---")
+        st.markdown("### 🏖️ 3. أجر الإجازة")
+        vac_days_input = st.number_input("عدد أيام الإجازة المستحقة:", 0, 365, 0, key="vacd")
+        vac_amount = daily_sal * vac_days_input
+        if vac_days_input > 0:
+            st.success(f"أجر الإجازة: **{vac_amount:,.2f} ريال** ({vac_days_input} يوم x {daily_sal:,.2f})")
             results_summary.append(("أجر الإجازة", vac_amount))
 
-
-        # ======= ⏰ أجر العمل الإضافي =======
-        if chk_ot:
-            st.markdown("---")
-            st.markdown("### ⏰ أجر العمل الإضافي")
-
-            ibox("المادة 107: أجر ساعة الإضافي = أجر الساعة + 50% من الأجر الأساسي للساعة.")
-
-            oc1, oc2, oc3 = st.columns(3)
-            with oc1:
-                ot_work_hours = st.selectbox("ساعات اليوم الفعلية:", list(range(2,13)), index=6, key="oth")
-            with oc2:
-                ot_days = st.number_input("عدد الأيام الإضافية:", 0, 365, 0, key="otd")
-            with oc3:
-                ot_hours = st.number_input("عدد الساعات الإضافية:", 0, 9999, 0, key="othr")
-
-            ot_hourly = basic_sal / 30 / ot_work_hours
-            ot_rate = ot_hourly * 1.5
-            ot_total_hours = (ot_days * ot_work_hours) + ot_hours
-            ot_amount = ot_total_hours * ot_rate
-
-            st.info(f"📊 سعر الساعة: {ot_hourly:,.2f} | سعر ساعة الإضافي (150%): {ot_rate:,.2f} | إجمالي الساعات: {ot_total_hours} | **الإجمالي: {ot_amount:,.2f} ريال**")
+        # ========== 4. أجر العمل الإضافي ==========
+        st.markdown("---")
+        st.markdown("### ⏰ 4. أجر العمل الإضافي")
+        ibox("المادة 107: أجر ساعة الإضافي = أجر الساعة + 50% (150%).")
+        oc1, oc2, oc3 = st.columns(3)
+        with oc1: ot_work_hours = st.selectbox("ساعات اليوم الفعلية:", list(range(2,13)), index=6, key="oth")
+        with oc2: ot_days = st.number_input("عدد الأيام الإضافية:", 0, 365, 0, key="otd")
+        with oc3: ot_hours = st.number_input("عدد الساعات الإضافية:", 0, 9999, 0, key="othr")
+        ot_hourly = basic_sal / 30 / ot_work_hours
+        ot_rate = ot_hourly * 1.5
+        ot_total_hours = (ot_days * ot_work_hours) + ot_hours
+        ot_amount = ot_total_hours * ot_rate
+        if ot_total_hours > 0:
+            st.success(f"ساعة الإضافي: {ot_rate:,.2f} | الساعات: {ot_total_hours} | **الإجمالي: {ot_amount:,.2f} ريال**")
             results_summary.append(("أجر العمل الإضافي", ot_amount))
 
+        # ========== 5. التعويض عن الإنهاء غير المشروع ==========
+        st.markdown("---")
+        st.markdown("### 🚫 5. التعويض عن الإنهاء لغير سبب مشروع (المادة 77)")
+        contract_type = st.radio("نوع العقد:", ["عقد محدد المدة","عقد غير محدد المدة"], key="ctype")
+        if contract_type == "عقد محدد المدة":
+            st.markdown("**المدة المتبقية من العقد:**")
+            uc1, uc2 = st.columns(2)
+            with uc1: ct_from = st.date_input("من:", value=date.today(), key="ctf")
+            with uc2: ct_to = st.date_input("إلى:", value=date.today(), key="ctt")
+            remaining_days = (ct_to - ct_from).days
+            comp = daily_sal * remaining_days
+            min_comp = gross_sal * 2
+            unfair_amount = max(comp, min_comp)
+            if remaining_days > 0:
+                note77 = "(الحد الأدنى: شهرين)" if comp < min_comp else "(أجر المدة المتبقية)"
+                st.success(f"المتبقي: {remaining_days} يوم | **التعويض: {unfair_amount:,.2f} ريال** {note77}")
+                results_summary.append(("تعويض إنهاء غير مشروع", unfair_amount))
+        else:
+            uc1, uc2 = st.columns(2)
+            with uc1: uct_start = st.date_input("بداية العمل:", value=date(2018,1,1), key="ucts")
+            with uc2: uct_end = st.date_input("تاريخ الإنهاء:", value=date.today(), key="ucte")
+            svc_yrs = (uct_end - uct_start).days / 365.25
+            comp = (daily_sal * 15) * svc_yrs
+            min_comp = gross_sal * 2
+            unfair_amount = max(comp, min_comp)
+            if svc_yrs > 0:
+                note77 = "(الحد الأدنى: شهرين)" if comp < min_comp else "(15 يوم/سنة)"
+                st.success(f"الخدمة: {svc_yrs:.2f} سنة | **التعويض: {unfair_amount:,.2f} ريال** {note77}")
+                results_summary.append(("تعويض إنهاء غير مشروع", unfair_amount))
 
-        # ======= 🚫 التعويض عن الإنهاء غير المشروع =======
-        if chk_unfair:
-            st.markdown("---")
-            st.markdown("### 🚫 التعويض عن الإنهاء لغير سبب مشروع")
+        # ========== 6. أيام الإجازة المستحقة ==========
+        st.markdown("---")
+        st.markdown("### 📅 6. أيام الإجازة المستحقة في فترة الخدمة")
+        ibox("المادة 109: الحد الأدنى 21 يوم في أول 5 سنوات، 30 يوم بعدها.")
+        vc1, vc2 = st.columns(2)
+        with vc1: vd_first5 = st.number_input("أيام الإجازة في أول 5 سنوات:", min_value=21, max_value=60, value=21, key="vd5")
+        with vc2: vd_after5 = st.number_input("أيام الإجازة بعد 5 سنوات:", min_value=30, max_value=60, value=30, key="vda5")
+        vc3, vc4 = st.columns(2)
+        with vc3: vd_from = st.date_input("من تاريخ:", value=date(2018,1,1), key="vdf")
+        with vc4: vd_to = st.date_input("إلى تاريخ:", value=date.today(), key="vdt")
+        vd_yrs = (vd_to - vd_from).days / 365.25
+        vd_delta = relativedelta(vd_to, vd_from)
+        vd_total = (vd_yrs * vd_first5) if vd_yrs <= 5 else (5 * vd_first5) + ((vd_yrs - 5) * vd_after5)
+        if vd_yrs > 0:
+            st.success(f"الخدمة: {vd_delta.years} سنة {vd_delta.months} شهر | **الإجازة المستحقة: {vd_total:.1f} يوم**")
 
-            ibox("المادة 77: عقد محدد = أجر المدة المتبقية (حد أدنى شهرين). عقد غير محدد = 15 يوم عن كل سنة (حد أدنى شهرين).")
-
-            contract_type = st.radio("نوع العقد:", ["عقد محدد المدة","عقد غير محدد المدة"], key="ctype")
-
-            if contract_type == "عقد محدد المدة":
-                st.markdown("**المدة المتبقية من العقد:**")
-                uc1, uc2 = st.columns(2)
-                with uc1: ct_from = st.date_input("من تاريخ:", value=date.today(), key="ctf")
-                with uc2: ct_to = st.date_input("إلى تاريخ:", value=date(2026,12,31), key="ctt")
-
-                remaining_days = (ct_to - ct_from).days
-                comp = daily_sal * remaining_days
-                min_comp = total_sal * 2
-                unfair_amount = max(comp, min_comp)
-
-                if comp < min_comp:
-                    st.info(f"📊 المدة المتبقية: {remaining_days} يوم | أجر المدة: {comp:,.2f} | الحد الأدنى (شهرين): {min_comp:,.2f} | **التعويض: {unfair_amount:,.2f} ريال** (تم تطبيق الحد الأدنى)")
-                else:
-                    st.info(f"📊 المدة المتبقية: {remaining_days} يوم | **التعويض: {unfair_amount:,.2f} ريال** (أجر المدة المتبقية)")
-            else:
-                uc1, uc2 = st.columns(2)
-                with uc1: uct_start = st.date_input("بداية العمل:", value=date(2018,1,1), key="ucts")
-                with uc2: uct_end = st.date_input("تاريخ الإنهاء:", value=date.today(), key="ucte")
-
-                service_yrs = (uct_end - uct_start).days / 365.25
-                comp = (daily_sal * 15) * service_yrs
-                min_comp = total_sal * 2
-                unfair_amount = max(comp, min_comp)
-
-                if comp < min_comp:
-                    st.info(f"📊 مدة الخدمة: {service_yrs:.2f} سنة | 15 يوم/سنة: {comp:,.2f} | الحد الأدنى (شهرين): {min_comp:,.2f} | **التعويض: {unfair_amount:,.2f} ريال** (تم تطبيق الحد الأدنى)")
-                else:
-                    st.info(f"📊 مدة الخدمة: {service_yrs:.2f} سنة | **التعويض: {unfair_amount:,.2f} ريال** (15 يوم × {service_yrs:.2f} سنة)")
-
-            results_summary.append(("تعويض الإنهاء غير المشروع", unfair_amount))
-
-
-        # ======= 📅 أيام الإجازة المستحقة =======
-        if chk_vac_days:
-            st.markdown("---")
-            st.markdown("### 📅 معرفة عدد أيام الإجازة في فترة الخدمة")
-
-            ibox("المادة 109: الحد الأدنى 21 يوم في أول 5 سنوات، و 30 يوم بعد ذلك.")
-
-            vc1, vc2 = st.columns(2)
-            with vc1:
-                vd_first5 = st.number_input("عدد أيام الإجازة في أول 5 سنوات:", min_value=21, max_value=60, value=21, key="vd5")
-            with vc2:
-                vd_after5 = st.number_input("عدد أيام الإجازة بعد 5 سنوات:", min_value=30, max_value=60, value=30, key="vda5")
-
-            vc3, vc4 = st.columns(2)
-            with vc3: vd_from = st.date_input("من تاريخ:", value=date(2018,1,1), key="vdf")
-            with vc4: vd_to = st.date_input("إلى تاريخ:", value=date.today(), key="vdt")
-
-            vd_total_yrs = (vd_to - vd_from).days / 365.25
-            vd_delta = relativedelta(vd_to, vd_from)
-            if vd_total_yrs <= 5:
-                vd_total_days = vd_total_yrs * vd_first5
-            else:
-                vd_total_days = (5 * vd_first5) + ((vd_total_yrs - 5) * vd_after5)
-
-            st.info(f"📊 مدة الخدمة: {vd_delta.years} سنة {vd_delta.months} شهر {vd_delta.days} يوم ({vd_total_yrs:.2f} سنة) | **إجمالي أيام الإجازة المستحقة: {vd_total_days:.1f} يوم**")
-
-            if vd_total_yrs > 5:
-                f5 = 5 * vd_first5
-                af5 = (vd_total_yrs - 5) * vd_after5
-                st.caption(f"أول 5 سنوات: {f5:.0f} يوم + ما بعدها: {af5:.1f} يوم = {vd_total_days:.1f} يوم")
-
-
-        # ======= 📉 حسم الغياب والتأخر =======
-        if chk_absence:
-            st.markdown("---")
-            st.markdown("### 📉 معرفة مبلغ الحسم بسبب الغياب والتأخر")
-
-            ac1, ac2 = st.columns(2)
-            with ac1:
-                abs_hours_day = st.selectbox("ساعات العمل اليومية:", list(range(2,13)), index=6, key="absh")
-                abs_days = st.number_input("عدد أيام الغياب:", 0, 365, 0, key="absd")
-            with ac2:
-                abs_hours = st.number_input("عدد ساعات التأخر:", 0, 999, 0, key="abshr")
-                abs_minutes = st.number_input("عدد دقائق التأخر:", 0, 59, 0, key="absmin")
-
-            abs_hourly = daily_sal / abs_hours_day
-            abs_minute_rate = abs_hourly / 60
-
-            abs_day_deduct = abs_days * daily_sal
-            abs_hr_deduct = abs_hours * abs_hourly
-            abs_min_deduct = abs_minutes * abs_minute_rate
-            abs_total = abs_day_deduct + abs_hr_deduct + abs_min_deduct
-
-            details = []
-            if abs_days > 0: details.append(f"غياب {abs_days} يوم = {abs_day_deduct:,.2f}")
-            if abs_hours > 0: details.append(f"تأخر {abs_hours} ساعة = {abs_hr_deduct:,.2f}")
-            if abs_minutes > 0: details.append(f"تأخر {abs_minutes} دقيقة = {abs_min_deduct:,.2f}")
-
-            st.info(f"📊 أجر الساعة: {abs_hourly:,.2f} | أجر الدقيقة: {abs_minute_rate:,.4f} | " + " | ".join(details) + f" | **إجمالي الحسم: {abs_total:,.2f} ريال**")
+        # ========== 7. حسم الغياب والتأخر ==========
+        st.markdown("---")
+        st.markdown("### 📉 7. حسم الغياب والتأخر")
+        ac1, ac2 = st.columns(2)
+        with ac1:
+            abs_hours_day = st.selectbox("ساعات العمل اليومية:", list(range(2,13)), index=6, key="absh")
+            abs_days = st.number_input("عدد أيام الغياب:", 0, 365, 0, key="absd")
+        with ac2:
+            abs_hours = st.number_input("عدد ساعات التأخر:", 0, 999, 0, key="abshr")
+            abs_minutes = st.number_input("عدد دقائق التأخر:", 0, 59, 0, key="absmin")
+        abs_hourly = daily_sal / abs_hours_day
+        abs_minute_rate = abs_hourly / 60
+        abs_day_ded = abs_days * daily_sal
+        abs_hr_ded = abs_hours * abs_hourly
+        abs_min_ded = abs_minutes * abs_minute_rate
+        abs_total = abs_day_ded + abs_hr_ded + abs_min_ded
+        if abs_total > 0:
+            parts = []
+            if abs_days > 0: parts.append(f"غياب {abs_days} يوم = {abs_day_ded:,.2f}")
+            if abs_hours > 0: parts.append(f"تأخر {abs_hours} ساعة = {abs_hr_ded:,.2f}")
+            if abs_minutes > 0: parts.append(f"تأخر {abs_minutes} دقيقة = {abs_min_ded:,.2f}")
+            st.warning(f"{' | '.join(parts)} | **إجمالي الحسم: {abs_total:,.2f} ريال**")
             results_summary.append(("حسم الغياب والتأخر (يُخصم)", abs_total))
 
+        # ========== 8. متوسط أجر آخر سنة ==========
+        st.markdown("---")
+        st.markdown("### 📊 8. متوسط الأجر لآخر سنة")
+        ibox("يُستخدم عندما يكون الأجر متغيراً (عمولات، مكافآت).")
+        months_ar = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"]
+        month_sals = []
+        for i in range(0, 12, 6):
+            cols = st.columns(6)
+            for j in range(6):
+                if i+j < 12:
+                    with cols[j]:
+                        val = st.number_input(f"{months_ar[i+j]}:", 0, 500000, 0, 100, key=f"ms{i+j}")
+                        month_sals.append(val)
+        non_zero = [s for s in month_sals if s > 0]
+        if non_zero:
+            avg_12 = sum(month_sals) / 12
+            avg_actual = sum(non_zero) / len(non_zero)
+            st.success(f"الإجمالي: {sum(month_sals):,.0f} | المتوسط (12 شهر): **{avg_12:,.2f}** | المتوسط ({len(non_zero)} أشهر فعلية): {avg_actual:,.2f}")
 
-        # ======= 📊 متوسط أجر آخر سنة =======
-        if chk_avg:
-            st.markdown("---")
-            st.markdown("### 📊 معرفة متوسط الأجر لآخر سنة")
+        # ========================================
+        #          الملخص النهائي + التصدير
+        # ========================================
+        st.markdown("---")
+        st.markdown("### 🟰 ملخص المستحقات النهائية")
+        if emp_name or emp_id:
+            st.markdown(f"**الموظف:** {emp_name or '-'} | **الرقم:** {emp_id or '-'} | **الجنسية:** {worker_type}")
 
-            ibox("يُستخدم لحساب المكافأة عندما يكون الأجر متغيراً (عمولات، مكافآت).")
-
-            months_ar = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"]
-            month_sals = []
-
-            for i in range(0, 12, 4):
-                cols = st.columns(4)
-                for j in range(4):
-                    if i+j < 12:
-                        with cols[j]:
-                            val = st.number_input(f"{months_ar[i+j]}:", 0, 500000, 0, step=100, key=f"ms{i+j}")
-                            month_sals.append(val)
-
-            non_zero = [s for s in month_sals if s > 0]
-            if non_zero:
-                avg_total = sum(month_sals)
-                avg_12 = avg_total / 12
-                avg_actual = sum(non_zero) / len(non_zero)
-                st.info(f"📊 الإجمالي: {avg_total:,.0f} ريال | المتوسط (12 شهر): **{avg_12:,.2f} ريال** | المتوسط ({len(non_zero)} أشهر فعلية): {avg_actual:,.2f} ريال")
-
-
-        # ======= 📊 ملخص إجمالي المستحقات =======
         if results_summary:
-            st.markdown("---")
-            st.markdown("### 📊 ملخص إجمالي المستحقات النهائية")
-
             grand_total = 0
             summary_rows = []
             for label, amount in results_summary:
-                is_deduction = "خصم" in label or "حسم" in label
-                summary_rows.append({"البند": label, "المبلغ (ريال)": f"{amount:,.2f}", "النوع": "خصم" if is_deduction else "استحقاق"})
-                if is_deduction:
-                    grand_total -= amount
-                else:
-                    grand_total += amount
-
-            summary_rows.append({"البند": "🟰 صافي المستحقات النهائية", "المبلغ (ريال)": f"{grand_total:,.2f}", "النوع": "الإجمالي"})
+                is_ded = "خصم" in label or "حسم" in label
+                summary_rows.append({"البند": label, "المبلغ (ريال)": f"{amount:,.2f}", "النوع": "🔴 خصم" if is_ded else "🟢 استحقاق"})
+                grand_total += (-amount if is_ded else amount)
+            summary_rows.append({"البند": "🟰 صافي المستحقات النهائية", "المبلغ (ريال)": f"{grand_total:,.2f}", "النوع": "💰 الإجمالي"})
             st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
 
             k1, k2 = st.columns(2)
             with k1: kpi("💰 صافي المستحقات النهائية", f"{grand_total:,.2f} ريال")
-            with k2:
-                if plaintiff or defendant:
-                    kpi("📋 الأطراف", f"{plaintiff or '-'} ضد {defendant or '-'}")
+            with k2: kpi("📋 عدد البنود", f"{len(results_summary)}")
 
-            ibox("هذه الحاسبة استرشادية تقريبية ولا تغني عن الاستشارة القانونية المتخصصة. للحالات المعقدة راجع المحكمة العمالية أو محامي مختص.", "warning")
+            # ===== EXPORT =====
+            st.markdown("### 📥 تصدير التقرير")
+            export_rows = [
+                {"البند": "اسم الموظف", "القيمة": emp_name or "-"},
+                {"البند": "رقم الموظف", "القيمة": emp_id or "-"},
+                {"البند": "الجنسية", "القيمة": worker_type},
+                {"البند": "الأجر الأساسي", "القيمة": f"{basic_sal:,}"},
+                {"البند": "بدل السكن", "القيمة": f"{housing:,}"},
+                {"البند": "بدل المواصلات", "القيمة": f"{transport:,}"},
+                {"البند": "بدلات أخرى", "القيمة": f"{other_allow:,}"},
+                {"البند": "إجمالي الأجر", "القيمة": f"{gross_sal:,}"},
+                {"البند": f"خصم التأمينات ({gosi_pct}%)", "القيمة": f"{gosi_deduction:,.2f}"},
+                {"البند": "صافي الأجر", "القيمة": f"{total_sal:,.2f}"},
+                {"البند": "---", "القيمة": "---"}]
+            for label, amount in results_summary:
+                is_ded = "خصم" in label or "حسم" in label
+                export_rows.append({"البند": label, "القيمة": f"{'-' if is_ded else ''}{amount:,.2f}"})
+            export_rows.append({"البند": "---", "القيمة": "---"})
+            export_rows.append({"البند": "صافي المستحقات النهائية", "القيمة": f"{grand_total:,.2f}"})
+            export_df = pd.DataFrame(export_rows)
 
+            ox = io.BytesIO()
+            with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
+                export_df.to_excel(w, sheet_name='المستحقات', index=False)
+                ws = w.sheets['المستحقات']
+                ws.right_to_left()
+                ws.set_column('A:A', 35)
+                ws.set_column('B:B', 25)
+            fname = f"مستحقات_{emp_name or 'موظف'}_{datetime.now().strftime('%Y%m%d')}"
+            xc1, xc2 = st.columns(2)
+            with xc1:
+                st.download_button("📥 تحميل Excel", data=ox.getvalue(), file_name=f"{fname}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary", use_container_width=True)
+            with xc2:
+                csv_data = export_df.to_csv(index=False).encode('utf-8-sig')
+                st.download_button("📥 تحميل CSV", data=csv_data, file_name=f"{fname}.csv", mime="text/csv", use_container_width=True)
+        else:
+            st.info("عبّئ البيانات أعلاه وستظهر المستحقات هنا تلقائياً")
+
+        ibox("إصدار استرشادي تقريبي ولا يغني عن الاستشارة القانونية المتخصصة.", "warning")
 
     # =========================================
     #         📚 TRAINING & DEVELOPMENT
