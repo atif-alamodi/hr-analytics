@@ -290,10 +290,6 @@ def generate_employee_pdf(result):
 # Initialize database on startup
 init_db()
 
-# Load SMTP config from database if not in session
-if 'smtp_config' not in st.session_state:
-    st.session_state.smtp_config = load_smtp_config()
-
 # ===== STYLES =====
 st.markdown("""
 <style>
@@ -513,6 +509,10 @@ def send_test_email(to_email, emp_name, tests, deadline, assigned_by, app_url=""
     """Send email notification about assigned tests - supports Gmail, Outlook, Yahoo, custom SMTP"""
     try:
         smtp_cfg = st.session_state.get('smtp_config', {})
+        if not smtp_cfg.get('email'):
+            smtp_cfg = load_smtp_config()
+            if smtp_cfg:
+                st.session_state.smtp_config = smtp_cfg
         if not smtp_cfg.get('server') or not smtp_cfg.get('email') or not smtp_cfg.get('password'):
             return False, "لم يتم تكوين إعدادات البريد الإلكتروني. اذهب إلى إدارة المستخدمين > إعدادات SMTP"
 
