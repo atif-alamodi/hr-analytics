@@ -201,14 +201,263 @@ def calc_roi(budget, rev_inc_pct, current_rev, ret_pct, avg_sal, hc, prod_pct):
             "payback":budget/max(total/12,1)}
 
 
+# ===== ACCESS CONTROL SYSTEM =====
+import hashlib
+
+def hash_pw(pw):
+    return hashlib.sha256(pw.encode()).hexdigest()
+
+# Default users (can be managed in-app)
+DEFAULT_USERS = {
+    "admin": {"password": hash_pw("admin123"), "role": "مدير", "name": "مدير النظام", "sections": "all"},
+    "analyst": {"password": hash_pw("analyst123"), "role": "محلل", "name": "محلل البيانات",
+        "sections": "📊 التحليلات العامة,💰 تحليل الرواتب,👥 Headcount,🔍 التحليل العام,📤 التقارير والتصدير"},
+    "viewer": {"password": hash_pw("viewer123"), "role": "عارض", "name": "عارض",
+        "sections": "📊 التحليلات العامة,📤 التقارير والتصدير"},
+}
+
+ROLE_DESCRIPTIONS = {
+    "مدير": "وصول كامل لجميع الأقسام + إدارة المستخدمين",
+    "محلل": "وصول للتحليلات والتقارير بدون إدارة المستخدمين",
+    "عارض": "عرض التقارير فقط بدون تعديل",
+}
+
+ALL_SECTIONS = ["📊 التحليلات العامة","💰 تحليل الرواتب","👥 Headcount","⚖️ حاسبة المستحقات",
+    "📚 التدريب والتطوير","🎯 التوظيف","🔍 التحليل العام","📝 الاستبيانات","🧠 اختبارات الشخصية","📤 التقارير والتصدير"]
+
+def init_users():
+    if 'users_db' not in st.session_state:
+        st.session_state.users_db = DEFAULT_USERS.copy()
+
+def login_page():
+    st.markdown("<div style='text-align:center;padding:40px 0;'><div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:80px;height:80px;border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:32px;font-weight:800;color:white;'>HR</div><h1 style='color:#0F4C5C;'>منصة تحليلات الموارد البشرية</h1><p style='color:#64748B;'>رسال الود لتقنية المعلومات</p></div>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        st.markdown("### 🔐 تسجيل الدخول")
+        username = st.text_input("اسم المستخدم:", key="login_user")
+        password = st.text_input("كلمة المرور:", type="password", key="login_pass")
+        lc1, lc2 = st.columns(2)
+        with lc1:
+            if st.button("🔓 دخول", type="primary", use_container_width=True):
+                init_users()
+                users = st.session_state.users_db
+                if username in users and users[username]["password"] == hash_pw(password):
+                    st.session_state.logged_in = True
+                    st.session_state.current_user = username
+                    st.session_state.user_role = users[username]["role"]
+                    st.session_state.user_name = users[username]["name"]
+                    st.session_state.user_sections = users[username]["sections"]
+                    st.rerun()
+                else:
+                    st.error("❌ اسم المستخدم أو كلمة المرور غير صحيحة")
+        with lc2:
+            if st.button("👤 دخول بدون حساب", use_container_width=True):
+                st.session_state.logged_in = True
+                st.session_state.current_user = "guest"
+                st.session_state.user_role = "عارض"
+                st.session_state.user_name = "زائر"
+                st.session_state.user_sections = "all"
+                st.rerun()
+
+        st.markdown("---")
+        with st.expander("📋 الحسابات الافتراضية"):
+            st.markdown("| المستخدم | كلمة المرور | الدور |")
+            st.markdown("|---|---|---|")
+            st.markdown("| admin | admin123 | مدير |")
+            st.markdown("| analyst | analyst123 | محلل |")
+            st.markdown("| viewer | viewer123 | عارض |")
+
+def check_section_access(section_name):
+    if not st.session_state.get('logged_in'): return False
+    user_sections = st.session_state.get('user_sections', 'all')
+    if user_sections == "all": return True
+    return section_name in user_sections
+
+def user_management_page():
+    hdr("👥 إدارة المستخدمين والصلاحيات", "إضافة وتعديل المستخدمين وصلاحياتهم")
+    init_users()
+
+    if st.session_state.get('user_role') != "مدير":
+        st.warning("⚠️ هذه الصفحة متاحة للمدير فقط")
+        return
+
+    # Current users
+    st.markdown("### 📋 المستخدمين الحاليين")
+    users = st.session_state.users_db
+    user_rows = []
+    for uname, udata in users.items():
+        user_rows.append({"المستخدم": uname, "الاسم": udata["name"], "الدور": udata["role"],
+            "الأقسام": "جميع الأقسام" if udata["sections"]=="all" else udata["sections"]})
+    st.dataframe(pd.DataFrame(user_rows), use_container_width=True, hide_index=True)
+
+    # Add new user
+    st.markdown("### ➕ إضافة مستخدم جديد")
+    uc1, uc2 = st.columns(2)
+    with uc1:
+        new_user = st.text_input("اسم المستخدم:", key="nu_user")
+        new_pass = st.text_input("كلمة المرور:", type="password", key="nu_pass")
+        new_name = st.text_input("الاسم الكامل:", key="nu_name")
+    with uc2:
+        new_role = st.selectbox("الدور:", list(ROLE_DESCRIPTIONS.keys()), key="nu_role")
+        st.info(f"📋 {ROLE_DESCRIPTIONS[new_role]}")
+        if new_role == "مدير":
+            new_sections = "all"
+        else:
+            new_sections_list = st.multiselect("الأقسام المتاحة:", ALL_SECTIONS, default=ALL_SECTIONS[:3], key="nu_sec")
+            new_sections = ",".join(new_sections_list) if new_sections_list else "all"
+
+    if st.button("➕ إضافة المستخدم", type="primary", key="nu_btn"):
+        if new_user and new_pass and new_name:
+            st.session_state.users_db[new_user] = {
+                "password": hash_pw(new_pass), "role": new_role,
+                "name": new_name, "sections": new_sections}
+            st.success(f"✅ تم إضافة {new_name} بدور {new_role}")
+            st.rerun()
+        else:
+            st.error("يرجى تعبئة جميع الحقول")
+
+    # Delete user
+    st.markdown("### 🗑️ حذف مستخدم")
+    del_user = st.selectbox("اختر المستخدم:", [u for u in users.keys() if u != st.session_state.current_user], key="del_u")
+    if st.button("🗑️ حذف", key="del_btn"):
+        if del_user in st.session_state.users_db:
+            del st.session_state.users_db[del_user]
+            st.success(f"✅ تم حذف {del_user}")
+            st.rerun()
+
+# ===== SURVEY TEMPLATES =====
+SURVEY_TEMPLATES = {
+    "رضا الموظفين": {
+        "description": "استبيان شامل لقياس مستوى رضا الموظفين عن بيئة العمل",
+        "questions": [
+            {"q": "أشعر بالرضا عن عملي بشكل عام", "cat": "الرضا العام"},
+            {"q": "أحصل على تقدير كافٍ لإنجازاتي", "cat": "التقدير"},
+            {"q": "لدي فرص كافية للتطور المهني", "cat": "التطور"},
+            {"q": "العلاقة مع مديري المباشر جيدة", "cat": "الإدارة"},
+            {"q": "بيئة العمل مريحة ومحفزة", "cat": "بيئة العمل"},
+            {"q": "الراتب والمزايا عادلة مقارنة بالسوق", "cat": "التعويضات"},
+            {"q": "أشعر بالانتماء للشركة", "cat": "الانتماء"},
+            {"q": "التواصل الداخلي في الشركة فعّال", "cat": "التواصل"},
+            {"q": "لدي توازن جيد بين العمل والحياة الشخصية", "cat": "التوازن"},
+            {"q": "أوصي بالعمل في هذه الشركة للآخرين", "cat": "التوصية"},
+        ]
+    },
+    "بيئة العمل": {
+        "description": "تقييم بيئة العمل المادية والتنظيمية",
+        "questions": [
+            {"q": "المكتب والمرافق مجهزة بشكل جيد", "cat": "المرافق"},
+            {"q": "الأدوات والتقنيات المتاحة كافية لأداء العمل", "cat": "الأدوات"},
+            {"q": "إجراءات السلامة المهنية مطبقة", "cat": "السلامة"},
+            {"q": "ساعات العمل مناسبة", "cat": "ساعات العمل"},
+            {"q": "الإضاءة والتهوية مناسبة", "cat": "البيئة المادية"},
+            {"q": "مساحة العمل كافية ومريحة", "cat": "المساحة"},
+            {"q": "الضوضاء في بيئة العمل مقبولة", "cat": "البيئة المادية"},
+            {"q": "خدمات الطعام والمشروبات متاحة", "cat": "الخدمات"},
+        ]
+    },
+    "المشاركة والالتزام": {
+        "description": "قياس مستوى مشاركة الموظفين والتزامهم التنظيمي",
+        "questions": [
+            {"q": "أبذل جهداً إضافياً عندما يتطلب العمل ذلك", "cat": "الالتزام"},
+            {"q": "أشعر بالحماس تجاه عملي اليومي", "cat": "الحماس"},
+            {"q": "أفهم أهداف الشركة وأساهم في تحقيقها", "cat": "التوافق"},
+            {"q": "أشارك بفعالية في اجتماعات الفريق", "cat": "المشاركة"},
+            {"q": "أقدم أفكاراً ومقترحات لتحسين العمل", "cat": "المبادرة"},
+            {"q": "أشعر أن عملي له قيمة وتأثير", "cat": "القيمة"},
+            {"q": "أتعاون بشكل جيد مع زملائي", "cat": "التعاون"},
+            {"q": "أفتخر بالعمل في هذه الشركة", "cat": "الفخر"},
+        ]
+    }
+}
+
+# ===== BIG FIVE QUESTIONS =====
+BIG5_QUESTIONS = [
+    {"q": "أستمتع بالتفاعل مع مجموعات كبيرة من الناس", "trait": "الانبساطية", "d": 1},
+    {"q": "أبادر ببدء المحادثات مع الغرباء", "trait": "الانبساطية", "d": 1},
+    {"q": "أفضل العمل بمفردي على العمل الجماعي", "trait": "الانبساطية", "d": -1},
+    {"q": "أشعر بالطاقة في الأماكن الاجتماعية", "trait": "الانبساطية", "d": 1},
+    {"q": "أهتم بمشاعر الآخرين وأتعاطف معهم", "trait": "القبول", "d": 1},
+    {"q": "أثق في نوايا الآخرين بسهولة", "trait": "القبول", "d": 1},
+    {"q": "أسعى لمساعدة الآخرين حتى لو لم يطلبوا", "trait": "القبول", "d": 1},
+    {"q": "أتجنب الصراعات والمواجهات", "trait": "القبول", "d": 1},
+    {"q": "أنظم مهامي وأخطط مسبقاً بعناية", "trait": "الإتقان", "d": 1},
+    {"q": "ألتزم بالمواعيد النهائية دائماً", "trait": "الإتقان", "d": 1},
+    {"q": "أهتم بالتفاصيل الدقيقة في عملي", "trait": "الإتقان", "d": 1},
+    {"q": "أتبع القواعد والإجراءات المحددة", "trait": "الإتقان", "d": 1},
+    {"q": "أشعر بالقلق أو التوتر بسهولة", "trait": "العصابية", "d": 1},
+    {"q": "تتقلب مشاعري بشكل كبير", "trait": "العصابية", "d": 1},
+    {"q": "أجد صعوبة في التعامل مع الضغوط", "trait": "العصابية", "d": 1},
+    {"q": "أميل للتفكير السلبي في المواقف الصعبة", "trait": "العصابية", "d": 1},
+    {"q": "أحب تجربة أشياء جديدة وغير مألوفة", "trait": "الانفتاح", "d": 1},
+    {"q": "أستمتع بالأفكار المجردة والفلسفية", "trait": "الانفتاح", "d": 1},
+    {"q": "أقدّر الفن والجمال والإبداع", "trait": "الانفتاح", "d": 1},
+    {"q": "أفضل الروتين والأساليب المجربة", "trait": "الانفتاح", "d": -1},
+]
+
+BIG5_TRAITS = {
+    "الانبساطية": {"en": "Extraversion", "color": "#E36414", "desc": "مستوى الطاقة الاجتماعية والحماس"},
+    "القبول": {"en": "Agreeableness", "color": "#2D6A4F", "desc": "التعاون والثقة والتعاطف مع الآخرين"},
+    "الإتقان": {"en": "Conscientiousness", "color": "#0F4C5C", "desc": "التنظيم والانضباط والمسؤولية"},
+    "العصابية": {"en": "Neuroticism", "color": "#9A031E", "desc": "الاستقرار العاطفي ومقاومة الضغوط"},
+    "الانفتاح": {"en": "Openness", "color": "#7209B7", "desc": "حب الاستكشاف والإبداع والتجديد"},
+}
+
+# ===== DISC QUESTIONS =====
+DISC_QUESTIONS = [
+    {"q": "أحب اتخاذ القرارات بسرعة وحسم", "style": "D"},
+    {"q": "أسعى لتحقيق النتائج بأي طريقة", "style": "D"},
+    {"q": "أتحدى الوضع الراهن وأسعى للتغيير", "style": "D"},
+    {"q": "أستمتع بالمنافسة والفوز", "style": "D"},
+    {"q": "أحب قيادة الآخرين وتوجيههم", "style": "D"},
+    {"q": "أستمتع بإقناع الآخرين بأفكاري", "style": "I"},
+    {"q": "أحب العمل ضمن فريق والتعاون", "style": "I"},
+    {"q": "أنا متفائل وأرى الجانب الإيجابي", "style": "I"},
+    {"q": "أحب بيئة العمل المرحة والاجتماعية", "style": "I"},
+    {"q": "أجيد التواصل والتحدث أمام الآخرين", "style": "I"},
+    {"q": "أفضل الاستقرار والأمان في العمل", "style": "S"},
+    {"q": "أصبر على المهام الروتينية والمتكررة", "style": "S"},
+    {"q": "أدعم زملائي وأساعدهم دائماً", "style": "S"},
+    {"q": "أفضل التغيير التدريجي على التغيير المفاجئ", "style": "S"},
+    {"q": "أستمع أكثر مما أتحدث", "style": "S"},
+    {"q": "أهتم بالدقة والجودة في كل شيء", "style": "C"},
+    {"q": "أفضل اتباع القواعد والإجراءات المحددة", "style": "C"},
+    {"q": "أحلل البيانات والمعلومات قبل اتخاذ القرار", "style": "C"},
+    {"q": "أسعى للكمال في عملي", "style": "C"},
+    {"q": "أفضل العمل المنظم والمهيكل", "style": "C"},
+]
+
+DISC_STYLES = {
+    "D": {"name": "القيادة (Dominance)", "color": "#E74C3C", "desc": "حاسم، تنافسي، يركز على النتائج", "strengths": "اتخاذ القرارات، حل المشكلات، القيادة", "challenges": "الصبر، التعاطف، التفويض"},
+    "I": {"name": "التأثير (Influence)", "color": "#F39C12", "desc": "متحمس، اجتماعي، ملهم", "strengths": "التواصل، التحفيز، بناء العلاقات", "challenges": "التنظيم، المتابعة، التركيز"},
+    "S": {"name": "الثبات (Steadiness)", "color": "#27AE60", "desc": "صبور، داعم، مستقر", "strengths": "الاستماع، العمل الجماعي، الاستقرار", "challenges": "التكيف مع التغيير، المبادرة، الحسم"},
+    "C": {"name": "الالتزام (Conscientiousness)", "color": "#2980B9", "desc": "دقيق، تحليلي، منظم", "strengths": "الجودة، التحليل، الدقة", "challenges": "المرونة، السرعة، التواصل العاطفي"},
+}
+
+
 # ===== MAIN APP =====
 def main():
+    # Auth check
+    if 'logged_in' not in st.session_state:
+        st.session_state.logged_in = False
+
+    if not st.session_state.logged_in:
+        login_page()
+        return
+
+    init_users()
+
     # Sidebar
     with st.sidebar:
-        st.markdown("<div style='text-align:center;padding:16px 0;'><div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:56px;height:56px;border-radius:12px;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:22px;font-weight:800;color:white;'>HR</div><h2 style='margin:0;font-size:16px;'>تحليلات الموارد البشرية</h2><p style='opacity:.6;font-size:11px;'>رسال الود لتقنية المعلومات v5</p></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align:center;padding:16px 0;'><div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:56px;height:56px;border-radius:12px;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:22px;font-weight:800;color:white;'>HR</div><h2 style='margin:0;font-size:16px;'>تحليلات الموارد البشرية</h2><p style='opacity:.6;font-size:11px;'>رسال الود لتقنية المعلومات v5</p><p style='opacity:.8;font-size:11px;'>👤 {st.session_state.user_name} ({st.session_state.user_role})</p></div>", unsafe_allow_html=True)
         st.markdown("---")
 
-        section = st.radio("📂", ["📊 التحليلات العامة","💰 تحليل الرواتب","👥 Headcount","⚖️ حاسبة المستحقات","📚 التدريب والتطوير","🎯 التوظيف","🔍 التحليل العام","📤 التقارير والتصدير"], label_visibility="collapsed")
+        # Filter sections by access
+        available_sections = [s for s in ALL_SECTIONS if check_section_access(s)]
+        if st.session_state.user_role == "مدير":
+            available_sections.append("👥 إدارة المستخدمين")
+
+
+        section = st.radio("📂", available_sections, label_visibility="collapsed")
         st.markdown("---")
 
         if section == "📊 التحليلات العامة":
@@ -223,10 +472,23 @@ def main():
             page = st.radio("📌", ["📋 تخطيط التوظيف","📊 متابعة التوظيف","📥 تصدير التوظيف"], label_visibility="collapsed")
         elif section == "🔍 التحليل العام":
             page = st.radio("📌", ["📊 تحليل تلقائي","🤖 أسئلة ذكية"], label_visibility="collapsed")
+        elif section == "📝 الاستبيانات":
+            page = st.radio("📌", ["📋 قوالب جاهزة","🔨 بناء استبيان","📊 تحليل النتائج","📥 تصدير الاستبيانات"], label_visibility="collapsed")
+        elif section == "🧠 اختبارات الشخصية":
+            page = st.radio("📌", ["🧠 Big Five","💎 DISC","📊 تقارير الشخصية","📥 تصدير الاختبارات"], label_visibility="collapsed")
         elif section == "📤 التقارير والتصدير":
             page = st.radio("📌", ["📄 تقرير PDF","📝 تقرير Word","📊 تقرير شامل"], label_visibility="collapsed")
+        elif section == "👥 إدارة المستخدمين":
+            page = "👥 إدارة المستخدمين"
         else:
             page = st.radio("📌", ["📚 ميزانية التدريب","💹 ROI التدريب","📋 الاحتياجات التدريبية","🏫 جهات التدريب","📥 تصدير التدريب"], label_visibility="collapsed")
+
+        # Logout button
+        st.markdown("---")
+        if st.button("🚪 تسجيل الخروج", use_container_width=True):
+            for key in ['logged_in','current_user','user_role','user_name','user_sections']:
+                st.session_state.pop(key, None)
+            st.rerun()
 
         st.markdown("---")
         st.markdown("##### 📁 ملف البيانات")
@@ -2109,6 +2371,410 @@ def main():
                     st.success("✅ تم إنشاء التقرير الشامل!")
             else:
                 ibox("ارفع ملف بيانات أولاً من القائمة الجانبية.", "warning")
+
+
+    # =========================================
+    #         📝 SURVEYS MODULE
+    # =========================================
+    elif section == "📝 الاستبيانات":
+
+        if 'surveys_data' not in st.session_state:
+            st.session_state.surveys_data = {}
+        if 'survey_responses' not in st.session_state:
+            st.session_state.survey_responses = []
+        if 'custom_surveys' not in st.session_state:
+            st.session_state.custom_surveys = {}
+
+        if page == "📋 قوالب جاهزة":
+            hdr("📋 قوالب الاستبيانات الجاهزة", "اختر قالب جاهز واملأ الاستبيان")
+
+            template = st.selectbox("📝 اختر القالب:", list(SURVEY_TEMPLATES.keys()), key="sv_tmpl")
+            tmpl = SURVEY_TEMPLATES[template]
+            ibox(tmpl["description"])
+
+            st.markdown("### 👤 بيانات المشارك")
+            sv1, sv2, sv3 = st.columns(3)
+            with sv1: sv_name = st.text_input("الاسم:", key="sv_name")
+            with sv2: sv_dept = st.text_input("القسم:", key="sv_dept")
+            with sv3: sv_date = st.date_input("التاريخ:", value=date.today(), key="sv_date")
+
+            st.markdown(f"### 📝 {template}")
+            st.info("قيّم كل عبارة من 1 (غير موافق تماماً) إلى 5 (موافق تماماً)")
+
+            answers = {}
+            for i, q_item in enumerate(tmpl["questions"]):
+                answers[i] = st.slider(f"{i+1}. {q_item['q']}", 1, 5, 3, key=f"sv_q{i}")
+
+            if st.button("✅ إرسال الاستبيان", type="primary", key="sv_submit"):
+                if sv_name:
+                    response = {
+                        "الاسم": sv_name, "القسم": sv_dept, "التاريخ": str(sv_date),
+                        "القالب": template, "الإجابات": answers,
+                        "المتوسط العام": round(sum(answers.values()) / len(answers), 2)
+                    }
+                    # Add category averages
+                    cats = {}
+                    for i, q_item in enumerate(tmpl["questions"]):
+                        cat = q_item["cat"]
+                        cats.setdefault(cat, []).append(answers[i])
+                    response["التفاصيل"] = {c: round(sum(v)/len(v), 2) for c, v in cats.items()}
+                    st.session_state.survey_responses.append(response)
+                    st.success(f"✅ تم حفظ استبيان {sv_name} - المتوسط: {response['المتوسط العام']}/5")
+                    st.rerun()
+                else:
+                    st.error("يرجى إدخال الاسم")
+
+        elif page == "🔨 بناء استبيان":
+            hdr("🔨 بناء استبيان مخصص", "أنشئ استبيانك الخاص")
+
+            st.markdown("### ⚙️ إعدادات الاستبيان")
+            cs_name = st.text_input("اسم الاستبيان:", key="cs_name")
+            cs_desc = st.text_input("الوصف:", key="cs_desc")
+
+            st.markdown("### ➕ إضافة أسئلة")
+            if 'custom_q_list' not in st.session_state:
+                st.session_state.custom_q_list = []
+
+            cq1, cq2 = st.columns([3,1])
+            with cq1: new_q = st.text_input("السؤال:", key="cs_newq")
+            with cq2: new_cat = st.text_input("التصنيف:", key="cs_newcat")
+
+            if st.button("➕ إضافة سؤال", key="cs_addq"):
+                if new_q:
+                    st.session_state.custom_q_list.append({"q": new_q, "cat": new_cat or "عام"})
+                    st.rerun()
+
+            if st.session_state.custom_q_list:
+                st.markdown("### 📋 الأسئلة المضافة")
+                for i, cq in enumerate(st.session_state.custom_q_list):
+                    st.write(f"{i+1}. {cq['q']} [{cq['cat']}]")
+
+                if st.button("💾 حفظ الاستبيان", type="primary", key="cs_save"):
+                    if cs_name:
+                        st.session_state.custom_surveys[cs_name] = {
+                            "description": cs_desc, "questions": st.session_state.custom_q_list.copy()
+                        }
+                        st.session_state.custom_q_list = []
+                        st.success(f"✅ تم حفظ الاستبيان: {cs_name}")
+                        st.rerun()
+
+                if st.button("🗑️ مسح الأسئلة", key="cs_clear"):
+                    st.session_state.custom_q_list = []
+                    st.rerun()
+
+            # Show saved custom surveys
+            if st.session_state.custom_surveys:
+                st.markdown("---")
+                st.markdown("### 📂 الاستبيانات المخصصة المحفوظة")
+                for name, survey in st.session_state.custom_surveys.items():
+                    with st.expander(f"📝 {name} ({len(survey['questions'])} سؤال)"):
+                        st.write(survey['description'])
+                        for i, q in enumerate(survey['questions']):
+                            st.write(f"{i+1}. {q['q']} [{q['cat']}]")
+
+        elif page == "📊 تحليل النتائج":
+            hdr("📊 تحليل نتائج الاستبيانات")
+
+            if st.session_state.survey_responses:
+                responses = st.session_state.survey_responses
+                st.success(f"📊 إجمالي الاستجابات: {len(responses)}")
+
+                # Summary table
+                summary_rows = []
+                for r in responses:
+                    row = {"الاسم": r["الاسم"], "القسم": r["القسم"], "القالب": r["القالب"], "المتوسط": r["المتوسط العام"]}
+                    summary_rows.append(row)
+                sdf = pd.DataFrame(summary_rows)
+                st.dataframe(sdf, use_container_width=True, hide_index=True)
+
+                # KPIs
+                k1,k2,k3,k4 = st.columns(4)
+                avg_all = sdf["المتوسط"].mean()
+                with k1: kpi("📊 المتوسط العام", f"{avg_all:.2f}/5")
+                with k2: kpi("✅ الاستجابات", f"{len(responses)}")
+                with k3: kpi("📈 أعلى تقييم", f"{sdf['المتوسط'].max():.2f}")
+                with k4: kpi("📉 أقل تقييم", f"{sdf['المتوسط'].min():.2f}")
+
+                # Charts
+                ch1, ch2 = st.columns(2)
+                with ch1:
+                    fig = px.bar(sdf, x="الاسم", y="المتوسط", color="القالب", title="التقييم حسب المشارك", text_auto=".2f")
+                    fig.add_hline(y=avg_all, line_dash="dash", annotation_text=f"المتوسط: {avg_all:.2f}")
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350)
+                    st.plotly_chart(fig, use_container_width=True)
+                with ch2:
+                    if sdf["القسم"].nunique() > 1:
+                        dept_avg = sdf.groupby("القسم")["المتوسط"].mean().reset_index()
+                        fig = px.bar(dept_avg, x="القسم", y="المتوسط", title="المتوسط حسب القسم", text_auto=".2f", color_discrete_sequence=[CL['s']])
+                        fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350)
+                        st.plotly_chart(fig, use_container_width=True)
+
+                # Category breakdown
+                st.markdown("### 📊 التحليل حسب التصنيف")
+                all_cats = {}
+                for r in responses:
+                    if "التفاصيل" in r:
+                        for cat, val in r["التفاصيل"].items():
+                            all_cats.setdefault(cat, []).append(val)
+                if all_cats:
+                    cat_avg = {c: sum(v)/len(v) for c, v in all_cats.items()}
+                    cat_df = pd.DataFrame({"التصنيف": cat_avg.keys(), "المتوسط": cat_avg.values()}).sort_values("المتوسط")
+                    fig = px.bar(cat_df, x="المتوسط", y="التصنيف", orientation='h', title="المتوسط حسب التصنيف", text_auto=".2f", color_discrete_sequence=[CL['a']])
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                if st.button("🗑️ مسح جميع الاستجابات", key="sv_clr"):
+                    st.session_state.survey_responses = []
+                    st.rerun()
+            else:
+                ibox("لا توجد استجابات بعد. اذهب لصفحة القوالب الجاهزة واملأ استبيان.", "warning")
+
+        elif page == "📥 تصدير الاستبيانات":
+            hdr("📥 تصدير بيانات الاستبيانات")
+            if st.session_state.survey_responses:
+                ox = io.BytesIO()
+                with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
+                    rows = []
+                    for r in st.session_state.survey_responses:
+                        row = {"الاسم": r["الاسم"], "القسم": r["القسم"], "التاريخ": r["التاريخ"], "القالب": r["القالب"], "المتوسط": r["المتوسط العام"]}
+                        if "التفاصيل" in r:
+                            row.update(r["التفاصيل"])
+                        rows.append(row)
+                    pd.DataFrame(rows).to_excel(w, sheet_name='الاستجابات', index=False)
+                    w.sheets['الاستجابات'].right_to_left()
+                st.download_button("📥 تحميل", data=ox.getvalue(), file_name=f"Surveys_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary", use_container_width=True)
+            else:
+                ibox("لا توجد بيانات للتصدير.", "warning")
+
+
+    # =========================================
+    #       🧠 PERSONALITY TESTS MODULE
+    # =========================================
+    elif section == "🧠 اختبارات الشخصية":
+
+        if 'personality_results' not in st.session_state:
+            st.session_state.personality_results = []
+
+        if page == "🧠 Big Five":
+            hdr("🧠 اختبار العوامل الخمسة الكبرى", "Big Five Personality Test - OCEAN Model")
+
+            st.markdown("### 👤 بيانات المشارك")
+            b1, b2 = st.columns(2)
+            with b1: bf_name = st.text_input("الاسم:", key="bf_name")
+            with b2: bf_dept = st.text_input("القسم:", key="bf_dept")
+
+            st.markdown("### 📝 قيّم كل عبارة (1 = غير موافق تماماً، 5 = موافق تماماً)")
+            bf_answers = {}
+            for i, q in enumerate(BIG5_QUESTIONS):
+                trait = q["trait"]
+                bf_answers[i] = st.slider(f"{i+1}. {q['q']} *({trait})*", 1, 5, 3, key=f"bf_{i}")
+
+            if st.button("✅ حساب النتائج", type="primary", key="bf_calc"):
+                if bf_name:
+                    # Calculate scores per trait
+                    trait_scores = {}
+                    trait_counts = {}
+                    for i, q in enumerate(BIG5_QUESTIONS):
+                        t = q["trait"]
+                        score = bf_answers[i] if q["d"] == 1 else (6 - bf_answers[i])
+                        trait_scores[t] = trait_scores.get(t, 0) + score
+                        trait_counts[t] = trait_counts.get(t, 0) + 1
+
+                    percentages = {}
+                    for t in trait_scores:
+                        max_score = trait_counts[t] * 5
+                        percentages[t] = round(trait_scores[t] / max_score * 100)
+
+                    result = {
+                        "type": "Big Five", "الاسم": bf_name, "القسم": bf_dept,
+                        "التاريخ": str(date.today()), "scores": percentages
+                    }
+                    st.session_state.personality_results.append(result)
+
+                    # Display results
+                    st.markdown("---")
+                    st.markdown(f"### 📊 نتائج {bf_name}")
+
+                    cols = st.columns(5)
+                    for i, (trait, pct) in enumerate(percentages.items()):
+                        info = BIG5_TRAITS[trait]
+                        with cols[i]:
+                            kpi(f"{trait}", f"{pct}%")
+                            st.caption(info["desc"])
+
+                    # Radar chart
+                    fig = go.Figure()
+                    traits_list = list(percentages.keys())
+                    values = list(percentages.values()) + [list(percentages.values())[0]]
+                    fig.add_trace(go.Scatterpolar(r=values, theta=traits_list + [traits_list[0]], fill='toself', name=bf_name,
+                        line_color=CL['p'], fillcolor='rgba(15,76,92,0.2)'))
+                    fig.update_layout(polar=dict(radialaxis=dict(range=[0,100])), title=f"ملف الشخصية - {bf_name}",
+                        font=dict(family="Noto Sans Arabic"), height=450, showlegend=False)
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.error("يرجى إدخال الاسم")
+
+        elif page == "💎 DISC":
+            hdr("💎 اختبار DISC", "تقييم أنماط السلوك المهني")
+
+            st.markdown("### 👤 بيانات المشارك")
+            d1, d2 = st.columns(2)
+            with d1: disc_name = st.text_input("الاسم:", key="disc_name")
+            with d2: disc_dept = st.text_input("القسم:", key="disc_dept")
+
+            st.markdown("### 📝 قيّم كل عبارة (1 = لا تنطبق، 5 = تنطبق تماماً)")
+            disc_answers = {}
+            for i, q in enumerate(DISC_QUESTIONS):
+                disc_answers[i] = st.slider(f"{i+1}. {q['q']}", 1, 5, 3, key=f"disc_{i}")
+
+            if st.button("✅ حساب النتائج", type="primary", key="disc_calc"):
+                if disc_name:
+                    style_scores = {"D": 0, "I": 0, "S": 0, "C": 0}
+                    style_counts = {"D": 0, "I": 0, "S": 0, "C": 0}
+                    for i, q in enumerate(DISC_QUESTIONS):
+                        s = q["style"]
+                        style_scores[s] += disc_answers[i]
+                        style_counts[s] += 1
+
+                    percentages = {}
+                    for s in style_scores:
+                        max_s = style_counts[s] * 5
+                        percentages[s] = round(style_scores[s] / max_s * 100)
+
+                    dominant = max(percentages, key=percentages.get)
+                    result = {
+                        "type": "DISC", "الاسم": disc_name, "القسم": disc_dept,
+                        "التاريخ": str(date.today()), "scores": percentages, "dominant": dominant
+                    }
+                    st.session_state.personality_results.append(result)
+
+                    # Display results
+                    st.markdown("---")
+                    st.markdown(f"### 📊 نتائج {disc_name}")
+
+                    cols = st.columns(4)
+                    for i, (style, pct) in enumerate(percentages.items()):
+                        info = DISC_STYLES[style]
+                        with cols[i]:
+                            kpi(f"{info['name']}", f"{pct}%")
+
+                    # Dominant style details
+                    dom_info = DISC_STYLES[dominant]
+                    st.markdown(f"### 🏆 النمط السائد: {dom_info['name']}")
+                    dc1, dc2, dc3 = st.columns(3)
+                    with dc1: ibox(f"**الوصف:** {dom_info['desc']}")
+                    with dc2: ibox(f"**نقاط القوة:** {dom_info['strengths']}", "success")
+                    with dc3: ibox(f"**التحديات:** {dom_info['challenges']}", "warning")
+
+                    # Bar chart
+                    disc_df = pd.DataFrame({"النمط": [DISC_STYLES[s]["name"] for s in percentages],
+                        "النسبة": list(percentages.values()),
+                        "اللون": [DISC_STYLES[s]["color"] for s in percentages]})
+                    fig = px.bar(disc_df, x="النمط", y="النسبة", title=f"ملف DISC - {disc_name}",
+                        text_auto=True, color="النمط", color_discrete_map={DISC_STYLES[s]["name"]: DISC_STYLES[s]["color"] for s in DISC_STYLES})
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400, showlegend=False)
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.error("يرجى إدخال الاسم")
+
+        elif page == "📊 تقارير الشخصية":
+            hdr("📊 تقارير اختبارات الشخصية", "عرض ومقارنة نتائج جميع الاختبارات")
+
+            results = st.session_state.personality_results
+            if results:
+                st.success(f"📊 إجمالي الاختبارات: {len(results)}")
+
+                # Filter by type
+                test_type = st.radio("نوع الاختبار:", ["الكل","Big Five","DISC"], horizontal=True, key="pt_filter")
+                filtered = results if test_type == "الكل" else [r for r in results if r["type"] == test_type]
+
+                if filtered:
+                    # Summary table
+                    rows = []
+                    for r in filtered:
+                        row = {"الاسم": r["الاسم"], "القسم": r["القسم"], "النوع": r["type"], "التاريخ": r["التاريخ"]}
+                        for k, v in r["scores"].items():
+                            row[k] = f"{v}%"
+                        if "dominant" in r: row["النمط السائد"] = r["dominant"]
+                        rows.append(row)
+                    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+                    # Compare Big Five results
+                    bf_results = [r for r in filtered if r["type"] == "Big Five"]
+                    if len(bf_results) >= 2:
+                        st.markdown("### 📊 مقارنة نتائج Big Five")
+                        fig = go.Figure()
+                        for r in bf_results:
+                            traits = list(r["scores"].keys())
+                            vals = list(r["scores"].values()) + [list(r["scores"].values())[0]]
+                            fig.add_trace(go.Scatterpolar(r=vals, theta=traits + [traits[0]], fill='toself', name=r["الاسم"]))
+                        fig.update_layout(polar=dict(radialaxis=dict(range=[0,100])), title="مقارنة ملفات الشخصية",
+                            font=dict(family="Noto Sans Arabic"), height=500)
+                        st.plotly_chart(fig, use_container_width=True)
+
+                    # Compare DISC results
+                    disc_results = [r for r in filtered if r["type"] == "DISC"]
+                    if len(disc_results) >= 2:
+                        st.markdown("### 📊 مقارنة نتائج DISC")
+                        comp_rows = []
+                        for r in disc_results:
+                            for style, pct in r["scores"].items():
+                                comp_rows.append({"الاسم": r["الاسم"], "النمط": DISC_STYLES[style]["name"], "النسبة": pct})
+                        comp_df = pd.DataFrame(comp_rows)
+                        fig = px.bar(comp_df, x="الاسم", y="النسبة", color="النمط", barmode="group",
+                            title="مقارنة DISC", color_discrete_map={DISC_STYLES[s]["name"]: DISC_STYLES[s]["color"] for s in DISC_STYLES})
+                        fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
+                        st.plotly_chart(fig, use_container_width=True)
+
+                    # Individual report
+                    st.markdown("### 📄 تقرير فردي")
+                    selected = st.selectbox("اختر الموظف:", [r["الاسم"] for r in filtered], key="pt_sel")
+                    sel_result = next((r for r in filtered if r["الاسم"] == selected), None)
+                    if sel_result:
+                        st.markdown(f"**{sel_result['الاسم']}** | {sel_result['القسم']} | {sel_result['type']} | {sel_result['التاريخ']}")
+                        if sel_result["type"] == "Big Five":
+                            for trait, pct in sel_result["scores"].items():
+                                info = BIG5_TRAITS[trait]
+                                level = "مرتفع" if pct >= 70 else ("متوسط" if pct >= 40 else "منخفض")
+                                st.progress(pct/100, text=f"{trait} ({info['en']}): {pct}% - {level}")
+                                st.caption(f"  {info['desc']}")
+                        elif sel_result["type"] == "DISC":
+                            for style, pct in sel_result["scores"].items():
+                                info = DISC_STYLES[style]
+                                st.progress(pct/100, text=f"{info['name']}: {pct}%")
+
+                if st.button("🗑️ مسح جميع النتائج", key="pt_clr"):
+                    st.session_state.personality_results = []
+                    st.rerun()
+            else:
+                ibox("لا توجد نتائج بعد. اذهب لاختبار Big Five أو DISC.", "warning")
+
+        elif page == "📥 تصدير الاختبارات":
+            hdr("📥 تصدير نتائج اختبارات الشخصية")
+            if st.session_state.personality_results:
+                ox = io.BytesIO()
+                with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
+                    rows = []
+                    for r in st.session_state.personality_results:
+                        row = {"الاسم": r["الاسم"], "القسم": r["القسم"], "النوع": r["type"], "التاريخ": r["التاريخ"]}
+                        for k, v in r["scores"].items(): row[k] = v
+                        if "dominant" in r: row["النمط السائد"] = r["dominant"]
+                        rows.append(row)
+                    pd.DataFrame(rows).to_excel(w, sheet_name='نتائج الاختبارات', index=False)
+                    w.sheets['نتائج الاختبارات'].right_to_left()
+                st.download_button("📥 تحميل", data=ox.getvalue(),
+                    file_name=f"Personality_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary", use_container_width=True)
+            else:
+                ibox("لا توجد بيانات للتصدير.", "warning")
+
+
+    # =========================================
+    #       👥 USER MANAGEMENT
+    # =========================================
+    elif section == "👥 إدارة المستخدمين":
+        user_management_page()
 
 
 if __name__ == "__main__":
