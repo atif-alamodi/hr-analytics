@@ -10,6 +10,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import io, math, json
+import openpyxl
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
 
@@ -739,10 +740,10 @@ def main():
 
         st.markdown("### 💵 تفاصيل الأجر")
         s1, s2, s3, s4 = st.columns(4)
-        with s1: basic_sal = st.number_input("الأجر الأساسي:", 0, 500000, 5000, 100, key="bsal")
-        with s2: housing = st.number_input("بدل السكن:", 0, 500000, 1250, 100, key="hous")
-        with s3: transport = st.number_input("بدل المواصلات:", 0, 100000, 500, 100, key="trns")
-        with s4: other_allow = st.number_input("بدلات أخرى:", 0, 500000, 0, 100, key="otha")
+        with s1: basic_sal = st.number_input("الأجر الأساسي:", min_value=0.0, max_value=500000.0, value=5000.0, step=0.01, format="%.2f", key="bsal")
+        with s2: housing = st.number_input("بدل السكن:", min_value=0.0, max_value=500000.0, value=1250.0, step=0.01, format="%.2f", key="hous")
+        with s3: transport = st.number_input("بدل المواصلات:", min_value=0.0, max_value=100000.0, value=500.0, step=0.01, format="%.2f", key="trns")
+        with s4: other_allow = st.number_input("بدلات أخرى:", min_value=0.0, max_value=500000.0, value=0.0, step=0.01, format="%.2f", key="otha")
 
         # GOSI calculation - Saudi only
         is_saudi = worker_type == "سعودي"
@@ -843,7 +844,7 @@ def main():
         # ========== 3. أجر الإجازة ==========
         st.markdown("---")
         st.markdown("### 🏖️ 3. أجر الإجازة")
-        vac_days_input = st.number_input("عدد أيام الإجازة المستحقة:", 0, 365, 0, key="vacd")
+        vac_days_input = st.number_input("عدد أيام الإجازة المستحقة:", min_value=0.0, max_value=365.0, value=0.0, step=0.01, format="%.2f", key="vacd")
         vac_amount = daily_sal * vac_days_input
         if vac_days_input > 0:
             st.success(f"أجر الإجازة: **{vac_amount:,.2f} ريال** ({vac_days_input} يوم x {daily_sal:,.2f})")
@@ -982,11 +983,11 @@ def main():
                 {"البند": "اسم الموظف", "القيمة": emp_name or "-"},
                 {"البند": "رقم الموظف", "القيمة": emp_id or "-"},
                 {"البند": "الجنسية", "القيمة": worker_type},
-                {"البند": "الأجر الأساسي", "القيمة": f"{basic_sal:,}"},
-                {"البند": "بدل السكن", "القيمة": f"{housing:,}"},
-                {"البند": "بدل المواصلات", "القيمة": f"{transport:,}"},
-                {"البند": "بدلات أخرى", "القيمة": f"{other_allow:,}"},
-                {"البند": "إجمالي الأجر", "القيمة": f"{gross_sal:,}"},
+                {"البند": "الأجر الأساسي", "القيمة": f"{basic_sal:,.2f}"},
+                {"البند": "بدل السكن", "القيمة": f"{housing:,.2f}"},
+                {"البند": "بدل المواصلات", "القيمة": f"{transport:,.2f}"},
+                {"البند": "بدلات أخرى", "القيمة": f"{other_allow:,.2f}"},
+                {"البند": "إجمالي الأجر", "القيمة": f"{gross_sal:,.2f}"},
                 {"البند": f"خصم التأمينات ({gosi_pct}%)", "القيمة": f"{gosi_deduction:,.2f}"},
                 {"البند": "صافي الأجر", "القيمة": f"{total_sal:,.2f}"},
                 {"البند": "---", "القيمة": "---"}]
@@ -995,22 +996,264 @@ def main():
                 export_rows.append({"البند": label, "القيمة": f"{'-' if is_ded else ''}{amount:,.2f}"})
             export_rows.append({"البند": "---", "القيمة": "---"})
             export_rows.append({"البند": "صافي المستحقات النهائية", "القيمة": f"{grand_total:,.2f}"})
-            export_df = pd.DataFrame(export_rows)
 
+            # ===== PROFESSIONAL EXCEL (matching MOJ template) =====
             ox = io.BytesIO()
-            with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
-                export_df.to_excel(w, sheet_name='المستحقات', index=False)
-                ws = w.sheets['المستحقات']
-                ws.right_to_left()
-                ws.set_column('A:A', 35)
-                ws.set_column('B:B', 25)
+            wb_exp = openpyxl.Workbook()
+            ws_exp = wb_exp.active
+            ws_exp.title = "المستحقات"
+            ws_exp.sheet_view.rightToLeft = True
+
+            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+            from openpyxl.utils import get_column_letter
+
+            # Colors
+            dark_blue = PatternFill("solid", fgColor="1F4E79")
+            med_blue = PatternFill("solid", fgColor="2E75B6")
+            hdr_blue = PatternFill("solid", fgColor="4472C4")
+            light1 = PatternFill("solid", fgColor="D6E4F0")
+            light2 = PatternFill("solid", fgColor="EBF1F8")
+
+            white_font = Font(bold=True, color="FFFFFF", size=16, name="Calibri")
+            white_font12 = Font(bold=True, color="FFFFFF", size=12, name="Calibri")
+            white_font13 = Font(bold=True, color="FFFFFF", size=13, name="Calibri")
+            white_font11 = Font(bold=True, color="FFFFFF", size=11, name="Calibri")
+            bold11 = Font(bold=True, size=11, name="Calibri")
+            normal11 = Font(size=11, name="Calibri")
+            blue_val = Font(size=11, color="0000FF", name="Calibri")
+            red_val = Font(size=11, color="FF0000", name="Calibri")
+            small10 = Font(size=10, name="Calibri")
+            gray10 = Font(size=10, color="808080", name="Calibri")
+
+            thin_border = Border(
+                left=Side(style='thin', color='B0B0B0'),
+                right=Side(style='thin', color='B0B0B0'),
+                top=Side(style='thin', color='B0B0B0'),
+                bottom=Side(style='thin', color='B0B0B0'))
+
+            center = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            left = Alignment(horizontal='left', vertical='center', wrap_text=True)
+            right_al = Alignment(horizontal='right', vertical='center', wrap_text=True)
+
+            # Column widths
+            ws_exp.column_dimensions['A'].width = 8
+            ws_exp.column_dimensions['B'].width = 35
+            ws_exp.column_dimensions['C'].width = 35
+            ws_exp.column_dimensions['D'].width = 20
+            ws_exp.column_dimensions['E'].width = 20
+            ws_exp.column_dimensions['F'].width = 18
+
+            r = 1  # current row
+
+            def write_merged(row, col1, col2, value, font, fill, align_style=center):
+                ws_exp.merge_cells(start_row=row, start_column=col1, end_row=row, end_column=col2)
+                c = ws_exp.cell(row=row, column=col1, value=value)
+                c.font = font; c.fill = fill; c.alignment = align_style; c.border = thin_border
+                for cc in range(col1+1, col2+1):
+                    ws_exp.cell(row=row, column=cc).fill = fill
+                    ws_exp.cell(row=row, column=cc).border = thin_border
+
+            def write_cell(row, col, value, font=normal11, fill=None, align_style=center):
+                c = ws_exp.cell(row=row, column=col, value=value)
+                c.font = font; c.alignment = align_style; c.border = thin_border
+                if fill: c.fill = fill
+
+            # === ROW 1: Title ===
+            write_merged(r, 1, 6, "بيان تسوية مستحقات نهاية الخدمة", white_font, dark_blue)
+            ws_exp.row_dimensions[r].height = 35
+            r += 1
+
+            # === ROW 2: Employee Info Header ===
+            write_merged(r, 1, 6, "بيانات الموظف", white_font12, med_blue)
+            r += 1
+
+            # === ROW 3: Name & ID ===
+            bg = light1
+            write_cell(r, 1, "اسم الموظف", bold11, bg, left)
+            ws_exp.merge_cells(start_row=r, start_column=2, end_row=r, end_column=3)
+            write_cell(r, 2, emp_name or "-", normal11, bg, center)
+            ws_exp.cell(r,3).fill=bg; ws_exp.cell(r,3).border=thin_border
+            write_cell(r, 4, "رقم الموظف", bold11, bg, left)
+            ws_exp.merge_cells(start_row=r, start_column=5, end_row=r, end_column=6)
+            write_cell(r, 5, emp_id or "-", normal11, bg, center)
+            ws_exp.cell(r,6).fill=bg; ws_exp.cell(r,6).border=thin_border
+            r += 1
+
+            # === ROW 4: Dates ===
+            bg = light2
+            eos_start_str = eos_start.strftime('%Y-%m-%d') if hasattr(eos_start, 'strftime') else str(eos_start)
+            eos_end_str = eos_end.strftime('%Y-%m-%d') if hasattr(eos_end, 'strftime') else str(eos_end)
+            write_cell(r, 1, "تاريخ الالتحاق", bold11, bg, left)
+            ws_exp.merge_cells(start_row=r, start_column=2, end_row=r, end_column=3)
+            write_cell(r, 2, eos_start_str, normal11, bg, center)
+            ws_exp.cell(r,3).fill=bg; ws_exp.cell(r,3).border=thin_border
+            write_cell(r, 4, "آخر يوم عمل", bold11, bg, left)
+            ws_exp.merge_cells(start_row=r, start_column=5, end_row=r, end_column=6)
+            write_cell(r, 5, eos_end_str, normal11, bg, center)
+            ws_exp.cell(r,6).fill=bg; ws_exp.cell(r,6).border=thin_border
+            r += 1
+
+            # === ROW 5: Service duration ===
+            bg = light1
+            write_cell(r, 1, "مدة الخدمة (سنوات)", bold11, bg, left)
+            ws_exp.merge_cells(start_row=r, start_column=2, end_row=r, end_column=3)
+            write_cell(r, 2, round(eos_years, 2), blue_val, bg, center)
+            ws_exp.cell(r,3).fill=bg; ws_exp.cell(r,3).border=thin_border
+            write_cell(r, 4, "مدة الخدمة (أيام)", bold11, bg, left)
+            ws_exp.merge_cells(start_row=r, start_column=5, end_row=r, end_column=6)
+            write_cell(r, 5, eos_service_days, blue_val, bg, center)
+            ws_exp.cell(r,6).fill=bg; ws_exp.cell(r,6).border=thin_border
+            r += 1
+
+            # === ROW 6: Leave balance & total salary ===
+            bg = light2
+            write_cell(r, 1, "رصيد الإجازات (أيام)", bold11, bg, left)
+            ws_exp.merge_cells(start_row=r, start_column=2, end_row=r, end_column=3)
+            write_cell(r, 2, vac_days_input, blue_val, bg, center)
+            ws_exp.cell(r,3).fill=bg; ws_exp.cell(r,3).border=thin_border
+            write_cell(r, 4, "إجمالي الراتب الشهري", bold11, bg, left)
+            ws_exp.merge_cells(start_row=r, start_column=5, end_row=r, end_column=6)
+            write_cell(r, 5, round(gross_sal, 2), blue_val, bg, center)
+            ws_exp.cell(r,6).fill=bg; ws_exp.cell(r,6).border=thin_border
+            r += 1
+
+            # === ROW 7: Salary Details Header ===
+            write_merged(r, 1, 6, "تفاصيل الراتب الشهري", white_font12, med_blue)
+            r += 1
+
+            # === ROW 8: Salary table header ===
+            sal_headers = ["#", "البند", "", "المبلغ (ريال)", "النسبة", ""]
+            for i, h in enumerate(sal_headers, 1):
+                write_cell(r, i, h, white_font11, hdr_blue, center)
+            ws_exp.merge_cells(start_row=r, start_column=2, end_row=r, end_column=3)
+            ws_exp.merge_cells(start_row=r, start_column=5, end_row=r, end_column=6)
+            r += 1
+
+            # === ROWS 9-12: Salary items ===
+            sal_items = [
+                ("الأجر الأساسي", basic_sal),
+                ("بدل السكن", housing),
+                ("بدل المواصلات", transport),
+                ("بدلات أخرى", other_allow),
+            ]
+            for idx, (item, amt) in enumerate(sal_items, 1):
+                bg = light1 if idx % 2 == 1 else light2
+                pct = (amt / gross_sal * 100) if gross_sal > 0 else 0
+                write_cell(r, 1, idx, normal11, bg, center)
+                ws_exp.merge_cells(start_row=r, start_column=2, end_row=r, end_column=3)
+                write_cell(r, 2, item, normal11, bg, left)
+                ws_exp.cell(r,3).fill=bg; ws_exp.cell(r,3).border=thin_border
+                write_cell(r, 4, round(amt, 2), blue_val, bg, center)
+                ws_exp.merge_cells(start_row=r, start_column=5, end_row=r, end_column=6)
+                write_cell(r, 5, f"{pct:.1f}%", normal11, bg, center)
+                ws_exp.cell(r,6).fill=bg; ws_exp.cell(r,6).border=thin_border
+                r += 1
+
+            # === ROW 13: Total Salary ===
+            ws_exp.merge_cells(start_row=r, start_column=2, end_row=r, end_column=3)
+            write_cell(r, 2, "إجمالي الراتب", white_font12, dark_blue, center)
+            ws_exp.cell(r,3).fill=dark_blue; ws_exp.cell(r,3).border=thin_border
+            write_cell(r, 4, round(gross_sal, 2), white_font12, dark_blue, center)
+            ws_exp.merge_cells(start_row=r, start_column=5, end_row=r, end_column=6)
+            write_cell(r, 5, "100%", white_font12, dark_blue, center)
+            ws_exp.cell(r,6).fill=dark_blue; ws_exp.cell(r,6).border=thin_border
+            write_cell(r, 1, "", normal11, dark_blue, center)
+            r += 1
+
+            # === ROW 14: Benefits Details Header ===
+            write_merged(r, 1, 6, "تفاصيل المستحقات", white_font12, med_blue)
+            r += 1
+
+            # === ROW 15: Benefits table header ===
+            ben_headers = ["#", "البند", "طريقة الحساب", "التفاصيل", "المبلغ (ريال)", "السند النظامي"]
+            for i, h in enumerate(ben_headers, 1):
+                write_cell(r, i, h, white_font11, hdr_blue, center)
+            r += 1
+
+            # === Benefits rows ===
+            ben_idx = 0
+            for label, amount in results_summary:
+                ben_idx += 1
+                bg = light1 if ben_idx % 2 == 1 else light2
+                is_ded = "خصم" in label or "حسم" in label
+
+                # Determine calculation method and legal basis
+                if "نهاية الخدمة" in label:
+                    calc_method = f"نصف الراتب × السنوات (أول 5 سنوات) + الراتب × بقية السنوات"
+                    details = f"{eos_years:.2f} سنة | مادة {'85' if is_85 else '84'} ({eos_pct}%)"
+                    legal = f"المادة {'85' if is_85 else '84'}"
+                elif "إجازة" in label:
+                    calc_method = f"الراتب ÷ 30 × عدد أيام الإجازة"
+                    details = f"{vac_days_input} يوم × {daily_sal:,.2f} ريال/يوم"
+                    legal = "المادة 109"
+                elif "متأخرة" in label:
+                    calc_method = "الراتب ÷ 30 × عدد أيام التأخر"
+                    details = f"{dw_total_days} يوم"
+                    legal = "المادة 88"
+                elif "إضافي" in label:
+                    calc_method = "ساعة الإضافي (150%) × عدد الساعات"
+                    details = f"{ot_total_hours} ساعة × {ot_rate:,.2f}"
+                    legal = "المادة 107"
+                elif "إنهاء" in label or "تعويض" in label:
+                    calc_method = "تعويض الإنهاء لغير سبب مشروع"
+                    details = f"نوع العقد: {contract_type}"
+                    legal = "المادة 77"
+                elif "حسم" in label or "غياب" in label:
+                    calc_method = "الأجر اليومي × أيام الغياب + ساعات/دقائق التأخر"
+                    details = "خصم من المستحقات"
+                    legal = "نظام العمل"
+                else:
+                    calc_method = "-"; details = "-"; legal = "-"
+
+                write_cell(r, 1, ben_idx, normal11, bg, center)
+                write_cell(r, 2, label, normal11, bg, left)
+                write_cell(r, 3, calc_method, small10, bg, center)
+                write_cell(r, 4, details, small10, bg, center)
+                val_font = red_val if is_ded else blue_val
+                write_cell(r, 5, round(-amount if is_ded else amount, 2), val_font, bg, center)
+                write_cell(r, 6, legal, small10, bg, center)
+                r += 1
+
+            # === Total Benefits Row ===
+            ws_exp.merge_cells(start_row=r, start_column=2, end_row=r, end_column=4)
+            write_cell(r, 1, "", normal11, dark_blue, center)
+            write_cell(r, 2, "إجمالي المستحقات النهائية", white_font13, dark_blue, center)
+            ws_exp.cell(r,3).fill=dark_blue; ws_exp.cell(r,3).border=thin_border
+            ws_exp.cell(r,4).fill=dark_blue; ws_exp.cell(r,4).border=thin_border
+            write_cell(r, 5, round(grand_total, 2), white_font13, dark_blue, center)
+            write_cell(r, 6, "ريال سعودي", white_font11, dark_blue, center)
+            r += 1
+
+            # === Legal Basis Section ===
+            write_merged(r, 1, 6, "السند النظامي", white_font12, med_blue)
+            r += 1
+
+            legal_notes = [
+                "● المادة 84: مكافأة نهاية الخدمة - نصف الراتب عن كل سنة من الخمس الأولى وراتب كامل عن كل سنة بعدها",
+                "● المادة 85: إذا كان إنهاء العلاقة بسبب استقالة العامل، يستحق ثلث المكافأة (2-5 سنوات)، ثلثيها (5-10)، كاملة (10+)",
+                "● المادة 77: تعويض الإنهاء غير المشروع - يستحق العامل تعويضاً إذا لم يتضمن العقد تعويضاً محدداً",
+                "● المادة 109: يستحق العامل تعويضاً نقدياً عن رصيد إجازاته المتراكمة عند انتهاء العلاقة",
+                "● المادة 88: يجب على صاحب العمل دفع أجر العامل وتصفية حقوقه خلال أسبوع من تاريخ انتهاء العلاقة",
+            ]
+            for i, note in enumerate(legal_notes):
+                bg = light1 if i % 2 == 0 else light2
+                write_merged(r, 1, 6, note, small10, bg, left)
+                r += 1
+
+            # === Settlement Date ===
+            write_cell(r, 1, "تاريخ إعداد التسوية:", gray10, None, left)
+            write_cell(r, 2, datetime.now().strftime('%Y-%m-%d'), gray10, None, center)
+
+            wb_exp.save(ox)
+
             fname = f"مستحقات_{emp_name or 'موظف'}_{datetime.now().strftime('%Y%m%d')}"
             xc1, xc2 = st.columns(2)
             with xc1:
                 st.download_button("📥 تحميل Excel", data=ox.getvalue(), file_name=f"{fname}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary", use_container_width=True)
             with xc2:
-                csv_data = export_df.to_csv(index=False).encode('utf-8-sig')
+                csv_df = pd.DataFrame(export_rows)
+                csv_data = csv_df.to_csv(index=False).encode('utf-8-sig')
                 st.download_button("📥 تحميل CSV", data=csv_data, file_name=f"{fname}.csv", mime="text/csv", use_container_width=True)
         else:
             st.info("عبّئ البيانات أعلاه وستظهر المستحقات هنا تلقائياً")
