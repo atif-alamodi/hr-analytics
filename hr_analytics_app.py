@@ -208,7 +208,7 @@ def main():
         st.markdown("<div style='text-align:center;padding:16px 0;'><div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:56px;height:56px;border-radius:12px;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:22px;font-weight:800;color:white;'>HR</div><h2 style='margin:0;font-size:16px;'>تحليلات الموارد البشرية</h2><p style='opacity:.6;font-size:11px;'>رسال الود لتقنية المعلومات v5</p></div>", unsafe_allow_html=True)
         st.markdown("---")
 
-        section = st.radio("📂", ["📊 التحليلات العامة","💰 تحليل الرواتب","👥 Headcount","⚖️ حاسبة المستحقات","📚 التدريب والتطوير"], label_visibility="collapsed")
+        section = st.radio("📂", ["📊 التحليلات العامة","💰 تحليل الرواتب","👥 Headcount","⚖️ حاسبة المستحقات","📚 التدريب والتطوير","🎯 التوظيف","🔍 التحليل العام","📤 التقارير والتصدير"], label_visibility="collapsed")
         st.markdown("---")
 
         if section == "📊 التحليلات العامة":
@@ -219,6 +219,12 @@ def main():
             page = st.radio("📌", ["👥 Headcount Planning","📊 تحليل الأداء"], label_visibility="collapsed")
         elif section == "⚖️ حاسبة المستحقات":
             page = "⚖️ حاسبة المستحقات"
+        elif section == "🎯 التوظيف":
+            page = st.radio("📌", ["📋 تخطيط التوظيف","📊 متابعة التوظيف","📥 تصدير التوظيف"], label_visibility="collapsed")
+        elif section == "🔍 التحليل العام":
+            page = st.radio("📌", ["📊 تحليل تلقائي","🤖 أسئلة ذكية"], label_visibility="collapsed")
+        elif section == "📤 التقارير والتصدير":
+            page = st.radio("📌", ["📄 تقرير PDF","📝 تقرير Word","📊 تقرير شامل"], label_visibility="collapsed")
         else:
             page = st.radio("📌", ["📚 ميزانية التدريب","💹 ROI التدريب","📋 الاحتياجات التدريبية","🏫 جهات التدريب","📥 تصدير التدريب"], label_visibility="collapsed")
 
@@ -1410,5 +1416,701 @@ def main():
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary", use_container_width=True)
 
 
+    # =========================================
+    #         🎯 RECRUITMENT MODULE
+    # =========================================
+    elif section == "🎯 التوظيف":
+
+        # Initialize recruitment data
+        if 'recruit_plans' not in st.session_state:
+            st.session_state.recruit_plans = []
+        if 'recruit_tracking' not in st.session_state:
+            st.session_state.recruit_tracking = []
+
+        if page == "📋 تخطيط التوظيف":
+            hdr("📋 تخطيط ميزانية التوظيف", "تخطيط تكاليف التوظيف الجديد وتقدير الميزانية السنوية")
+
+            st.markdown("### ➕ إضافة وظيفة جديدة للخطة")
+            rc1, rc2, rc3 = st.columns(3)
+            with rc1:
+                rp_title = st.text_input("المسمى الوظيفي:", key="rpt")
+                rp_dept = st.text_input("القسم:", key="rpd")
+                rp_count = st.number_input("عدد المطلوب:", 1, 50, 1, key="rpc")
+            with rc2:
+                rp_salary = st.number_input("الراتب الشهري المتوقع:", 0.0, 200000.0, 5000.0, 100.0, format="%.2f", key="rps")
+                rp_housing_pct = st.number_input("% بدل السكن:", 0.0, 100.0, 25.0, key="rph")
+                rp_transport = st.number_input("بدل المواصلات:", 0.0, 10000.0, 500.0, format="%.2f", key="rptr")
+            with rc3:
+                rp_agency_fee = st.number_input("رسوم الاستقدام/التوظيف:", 0.0, 100000.0, 0.0, format="%.2f", key="rpaf")
+                rp_visa = st.number_input("تكلفة التأشيرة/الإقامة:", 0.0, 50000.0, 0.0, format="%.2f", key="rpv")
+                rp_training = st.number_input("تكلفة التدريب الأولي:", 0.0, 50000.0, 0.0, format="%.2f", key="rptrn")
+                rp_nationality = st.selectbox("الجنسية:", ["سعودي","غير سعودي"], key="rpnat")
+
+            rp_housing = rp_salary * (rp_housing_pct / 100)
+            rp_monthly_total = rp_salary + rp_housing + rp_transport
+            rp_gosi = (rp_salary + rp_housing) * 0.1175 if rp_nationality == "سعودي" else (rp_salary + rp_housing) * 0.02
+            rp_annual_per = (rp_monthly_total + rp_gosi) * 12 + rp_agency_fee + rp_visa + rp_training
+            rp_annual_total = rp_annual_per * rp_count
+
+            st.info(f"💰 التكلفة الشهرية للفرد: **{rp_monthly_total + rp_gosi:,.2f}** | السنوية للفرد: **{rp_annual_per:,.2f}** | الإجمالي ({rp_count}): **{rp_annual_total:,.2f} ريال**")
+
+            if st.button("➕ إضافة للخطة", type="primary", key="rpbtn"):
+                st.session_state.recruit_plans.append({
+                    "المسمى": rp_title, "القسم": rp_dept, "العدد": rp_count,
+                    "الجنسية": rp_nationality, "الراتب": rp_salary,
+                    "السكن": rp_housing, "المواصلات": rp_transport,
+                    "التأمينات (صاحب العمل)": round(rp_gosi, 2),
+                    "الشهري/فرد": round(rp_monthly_total + rp_gosi, 2),
+                    "رسوم التوظيف": rp_agency_fee, "التأشيرة": rp_visa,
+                    "التدريب": rp_training, "السنوي/فرد": round(rp_annual_per, 2),
+                    "الإجمالي السنوي": round(rp_annual_total, 2)
+                })
+                st.success(f"✅ تمت إضافة {rp_title} ({rp_count})")
+                st.rerun()
+
+            # Display plan
+            if st.session_state.recruit_plans:
+                st.markdown("---")
+                st.markdown("### 📊 خطة التوظيف الحالية")
+                plan_df = pd.DataFrame(st.session_state.recruit_plans)
+                st.dataframe(plan_df, use_container_width=True, hide_index=True)
+
+                # Summary
+                total_headcount = plan_df["العدد"].sum()
+                total_annual = plan_df["الإجمالي السنوي"].sum()
+                total_monthly = plan_df.apply(lambda r: r["الشهري/فرد"] * r["العدد"], axis=1).sum()
+                total_onetime = plan_df.apply(lambda r: (r["رسوم التوظيف"] + r["التأشيرة"] + r["التدريب"]) * r["العدد"], axis=1).sum()
+
+                k1,k2,k3,k4 = st.columns(4)
+                with k1: kpi("👥 إجمالي المطلوب", f"{total_headcount}")
+                with k2: kpi("💰 التكلفة الشهرية", f"{total_monthly:,.0f}")
+                with k3: kpi("📅 التكلفة السنوية", f"{total_annual:,.0f}")
+                with k4: kpi("🔑 تكاليف لمرة واحدة", f"{total_onetime:,.0f}")
+
+                # Charts
+                ch1, ch2 = st.columns(2)
+                with ch1:
+                    fig = px.pie(plan_df, names="القسم", values="الإجمالي السنوي", title="توزيع الميزانية حسب القسم")
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350)
+                    st.plotly_chart(fig, use_container_width=True)
+                with ch2:
+                    fig = px.bar(plan_df, x="المسمى", y="الإجمالي السنوي", color="الجنسية", title="التكلفة حسب الوظيفة", text_auto=True)
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                if st.button("🗑️ مسح الخطة بالكامل", key="rpclr"):
+                    st.session_state.recruit_plans = []
+                    st.rerun()
+
+        elif page == "📊 متابعة التوظيف":
+            hdr("📊 متابعة عمليات التوظيف", "تتبع مراحل التوظيف والتكاليف والوقت المستغرق")
+
+            STAGES = ["طلب توظيف","إعلان","فرز السير الذاتية","مقابلة أولية","مقابلة نهائية","عرض وظيفي","قبول","مباشرة"]
+
+            st.markdown("### ➕ إضافة عملية توظيف")
+            tc1, tc2, tc3 = st.columns(3)
+            with tc1:
+                tr_title = st.text_input("المسمى الوظيفي:", key="trt")
+                tr_dept = st.text_input("القسم:", key="trd")
+            with tc2:
+                tr_stage = st.selectbox("المرحلة الحالية:", STAGES, key="trs")
+                tr_candidates = st.number_input("عدد المرشحين:", 0, 500, 0, key="trc")
+            with tc3:
+                tr_start = st.date_input("تاريخ البدء:", value=date.today(), key="trst")
+                tr_budget = st.number_input("الميزانية المخصصة:", 0.0, 500000.0, 0.0, format="%.2f", key="trb")
+                tr_spent = st.number_input("المصروف حتى الآن:", 0.0, 500000.0, 0.0, format="%.2f", key="trsp")
+
+            if st.button("➕ إضافة", type="primary", key="trbtn"):
+                days_elapsed = (date.today() - tr_start).days
+                st.session_state.recruit_tracking.append({
+                    "المسمى": tr_title, "القسم": tr_dept, "المرحلة": tr_stage,
+                    "المرشحين": tr_candidates, "تاريخ البدء": str(tr_start),
+                    "الأيام": days_elapsed, "الميزانية": tr_budget,
+                    "المصروف": tr_spent, "المتبقي": round(tr_budget - tr_spent, 2),
+                    "التقدم %": round((STAGES.index(tr_stage) + 1) / len(STAGES) * 100)
+                })
+                st.success(f"✅ تمت إضافة {tr_title}")
+                st.rerun()
+
+            if st.session_state.recruit_tracking:
+                st.markdown("---")
+                st.markdown("### 📋 العمليات الجارية")
+                track_df = pd.DataFrame(st.session_state.recruit_tracking)
+                st.dataframe(track_df, use_container_width=True, hide_index=True)
+
+                # KPIs
+                avg_days = track_df["الأيام"].mean()
+                total_budget = track_df["الميزانية"].sum()
+                total_spent = track_df["المصروف"].sum()
+                total_candidates = track_df["المرشحين"].sum()
+                open_positions = len(track_df[track_df["المرحلة"] != "مباشرة"])
+
+                k1,k2,k3,k4,k5 = st.columns(5)
+                with k1: kpi("📋 العمليات", f"{len(track_df)}")
+                with k2: kpi("⏱️ متوسط الأيام", f"{avg_days:.0f}")
+                with k3: kpi("👥 المرشحين", f"{total_candidates}")
+                with k4: kpi("💰 المصروف/الميزانية", f"{total_spent:,.0f}/{total_budget:,.0f}")
+                with k5: kpi("📂 مفتوحة", f"{open_positions}")
+
+                # Pipeline chart
+                stage_counts = track_df["المرحلة"].value_counts().reindex(STAGES, fill_value=0)
+                fig = go.Figure(go.Funnel(y=stage_counts.index, x=stage_counts.values, textinfo="value+percent initial"))
+                fig.update_layout(title="مسار التوظيف (Funnel)", font=dict(family="Noto Sans Arabic"), height=400)
+                st.plotly_chart(fig, use_container_width=True)
+
+                if st.button("🗑️ مسح المتابعة", key="trclr"):
+                    st.session_state.recruit_tracking = []
+                    st.rerun()
+
+        elif page == "📥 تصدير التوظيف":
+            hdr("📥 تصدير بيانات التوظيف")
+            ox = io.BytesIO()
+            with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
+                if st.session_state.recruit_plans:
+                    pd.DataFrame(st.session_state.recruit_plans).to_excel(w, sheet_name='خطة التوظيف', index=False)
+                    ws = w.sheets['خطة التوظيف']; ws.right_to_left()
+                if st.session_state.recruit_tracking:
+                    pd.DataFrame(st.session_state.recruit_tracking).to_excel(w, sheet_name='متابعة التوظيف', index=False)
+                    ws = w.sheets['متابعة التوظيف']; ws.right_to_left()
+                if not st.session_state.recruit_plans and not st.session_state.recruit_tracking:
+                    pd.DataFrame({"ملاحظة": ["لا توجد بيانات"]}).to_excel(w, sheet_name='فارغ', index=False)
+            st.download_button("📥 تحميل Excel", data=ox.getvalue(),
+                file_name=f"Recruitment_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary", use_container_width=True)
+
+
+    # =========================================
+    #         🔍 GENERAL ANALYSIS MODULE
+    # =========================================
+    elif section == "🔍 التحليل العام":
+
+        if page == "📊 تحليل تلقائي":
+            hdr("📊 التحليل التلقائي للبيانات", "ارفع أي ملف Excel وسيتم تحليله تلقائياً")
+
+            ga_file = st.file_uploader("📁 ارفع ملف Excel أو CSV:", type=["xlsx","xls","csv"], key="ga_uploader")
+            ga_df = pd.DataFrame()
+
+            if ga_file:
+                try:
+                    if ga_file.name.endswith('.csv'):
+                        ga_df = pd.read_csv(ga_file)
+                    else:
+                        ga_xl = pd.ExcelFile(ga_file)
+                        if len(ga_xl.sheet_names) > 1:
+                            ga_sheet = st.selectbox("اختر الشيت:", ga_xl.sheet_names, key="ga_sh")
+                        else:
+                            ga_sheet = ga_xl.sheet_names[0]
+                        ga_df = pd.read_excel(ga_xl, ga_sheet)
+                except Exception as e:
+                    st.error(f"خطأ في قراءة الملف: {e}")
+
+            elif len(emp) > 0:
+                ga_df = emp.copy()
+                st.info("📂 يتم تحليل بيانات الموظفين المرفوعة في القائمة الجانبية")
+
+            if len(ga_df) > 0:
+                st.markdown("---")
+                st.markdown("### 📊 نظرة عامة على البيانات")
+
+                gi1, gi2, gi3, gi4 = st.columns(4)
+                with gi1: kpi("📋 الصفوف", f"{len(ga_df):,}")
+                with gi2: kpi("📊 الأعمدة", f"{len(ga_df.columns)}")
+                with gi3: kpi("❌ القيم الفارغة", f"{ga_df.isnull().sum().sum():,}")
+                with gi4: kpi("🔢 الأعمدة الرقمية", f"{len(ga_df.select_dtypes('number').columns)}")
+
+                # Data types summary
+                st.markdown("### 📋 هيكل البيانات")
+                dtype_data = []
+                for col in ga_df.columns:
+                    dtype_data.append({
+                        "العمود": col,
+                        "النوع": str(ga_df[col].dtype),
+                        "القيم الفريدة": ga_df[col].nunique(),
+                        "الفارغة": ga_df[col].isnull().sum(),
+                        "عينة": str(ga_df[col].dropna().iloc[0]) if len(ga_df[col].dropna()) > 0 else "-"
+                    })
+                st.dataframe(pd.DataFrame(dtype_data), use_container_width=True, hide_index=True)
+
+                # Numeric columns analysis
+                num_cols = ga_df.select_dtypes('number').columns.tolist()
+                cat_cols = [c for c in ga_df.columns if ga_df[c].dtype == 'object' and ga_df[c].nunique() < 30 and ga_df[c].nunique() > 1]
+
+                if num_cols:
+                    st.markdown("### 📈 الإحصائيات الوصفية")
+                    desc = ga_df[num_cols].describe().T
+                    desc.columns = ["العدد","المتوسط","الانحراف","الأدنى","25%","الوسيط","75%","الأقصى"]
+                    st.dataframe(desc.style.format("{:,.2f}"), use_container_width=True)
+
+                    # Auto charts
+                    st.markdown("### 📊 رسوم بيانية تلقائية")
+
+                    # Histogram for numeric columns
+                    sel_num = st.selectbox("اختر عمود رقمي:", num_cols, key="ga_num")
+                    fig = px.histogram(ga_df, x=sel_num, nbins=30, title=f"توزيع: {sel_num}", color_discrete_sequence=[CL['p']])
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                    if len(num_cols) >= 2:
+                        sc1, sc2 = st.columns(2)
+                        with sc1: sel_x = st.selectbox("المحور X:", num_cols, index=0, key="ga_x")
+                        with sc2: sel_y = st.selectbox("المحور Y:", num_cols, index=min(1, len(num_cols)-1), key="ga_y")
+                        color_col = st.selectbox("التلوين حسب (اختياري):", ["بدون"] + cat_cols, key="ga_clr") if cat_cols else "بدون"
+                        fig = px.scatter(ga_df, x=sel_x, y=sel_y, color=None if color_col=="بدون" else color_col,
+                            title=f"{sel_y} vs {sel_x}", opacity=0.6)
+                        fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
+                        st.plotly_chart(fig, use_container_width=True)
+
+                if cat_cols:
+                    st.markdown("### 📊 تحليل الأعمدة النصية")
+                    sel_cat = st.selectbox("اختر عمود:", cat_cols, key="ga_cat")
+                    vc = ga_df[sel_cat].value_counts().head(15)
+                    fig = px.bar(x=vc.index, y=vc.values, title=f"توزيع: {sel_cat}", labels={"x": sel_cat, "y": "العدد"}, color_discrete_sequence=[CL['a']])
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                    # Cross analysis
+                    if num_cols and cat_cols:
+                        st.markdown("### 📊 تحليل متقاطع")
+                        cx1, cx2 = st.columns(2)
+                        with cx1: cross_cat = st.selectbox("التصنيف:", cat_cols, key="ga_cc")
+                        with cx2: cross_num = st.selectbox("القيمة:", num_cols, key="ga_cn")
+                        cross_agg = ga_df.groupby(cross_cat)[cross_num].agg(['mean','sum','count']).reset_index()
+                        cross_agg.columns = [cross_cat, "المتوسط", "الإجمالي", "العدد"]
+                        fig = px.bar(cross_agg, x=cross_cat, y="المتوسط", title=f"متوسط {cross_num} حسب {cross_cat}", text_auto=".1f", color_discrete_sequence=[CL['s']])
+                        fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350)
+                        st.plotly_chart(fig, use_container_width=True)
+
+                # Correlation heatmap
+                if len(num_cols) >= 3:
+                    st.markdown("### 🔥 خريطة الارتباط")
+                    corr = ga_df[num_cols].corr()
+                    fig = px.imshow(corr, text_auto=".2f", aspect="auto", title="مصفوفة الارتباط", color_continuous_scale="RdBu_r")
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=500)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                # Raw data
+                with st.expander("📋 عرض البيانات الخام"):
+                    st.dataframe(ga_df, use_container_width=True, height=400)
+
+        elif page == "🤖 أسئلة ذكية":
+            hdr("🤖 المحلل الذكي", "اطرح أسئلة عن بياناتك بالعربي أو الإنجليزي")
+
+            if len(emp) > 0:
+                st.success(f"📂 البيانات جاهزة: {len(emp):,} صف × {len(emp.columns)} عمود")
+
+                q = st.text_input("💬 اسأل عن بياناتك:", placeholder="مثال: كم متوسط الرواتب حسب القسم؟ أو ما أعلى 5 رواتب؟", key="ga_q")
+
+                if q:
+                    num_cols = emp.select_dtypes('number').columns.tolist()
+                    cat_cols = [c for c in emp.columns if emp[c].dtype=='object' and emp[c].nunique() < 50 and emp[c].nunique() > 1]
+                    ql = q.lower()
+
+                    try:
+                        # Pattern matching for common questions
+                        if any(w in ql for w in ['متوسط','average','mean']):
+                            if num_cols:
+                                matched_num = None
+                                for nc in num_cols:
+                                    if any(p in ql for p in [nc.lower(), nc.replace('_',' ').lower()]):
+                                        matched_num = nc; break
+                                if not matched_num: matched_num = num_cols[0]
+
+                                matched_cat = None
+                                for cc in cat_cols:
+                                    if any(p in ql for p in [cc.lower(), cc.replace('_',' ').lower(), 'قسم','department','div']):
+                                        matched_cat = cc; break
+
+                                if matched_cat:
+                                    result = emp.groupby(matched_cat)[matched_num].mean().sort_values(ascending=False)
+                                    st.dataframe(result.reset_index().rename(columns={matched_num: f"متوسط {matched_num}"}), use_container_width=True, hide_index=True)
+                                    fig = px.bar(x=result.index, y=result.values, title=f"متوسط {matched_num} حسب {matched_cat}", text_auto=".1f")
+                                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350)
+                                    st.plotly_chart(fig, use_container_width=True)
+                                else:
+                                    for nc in num_cols:
+                                        st.metric(nc, f"{emp[nc].mean():,.2f}")
+
+                        elif any(w in ql for w in ['أعلى','top','highest','أكبر','max']):
+                            n = 5
+                            for w in ql.split():
+                                try: n = int(w); break
+                                except: pass
+                            sort_col = num_cols[0] if num_cols else emp.columns[0]
+                            for nc in num_cols:
+                                if nc.lower() in ql: sort_col = nc; break
+                            st.dataframe(emp.nlargest(n, sort_col), use_container_width=True, hide_index=True)
+
+                        elif any(w in ql for w in ['أقل','bottom','lowest','أصغر','min']):
+                            n = 5
+                            for w in ql.split():
+                                try: n = int(w); break
+                                except: pass
+                            sort_col = num_cols[0] if num_cols else emp.columns[0]
+                            for nc in num_cols:
+                                if nc.lower() in ql: sort_col = nc; break
+                            st.dataframe(emp.nsmallest(n, sort_col), use_container_width=True, hide_index=True)
+
+                        elif any(w in ql for w in ['عدد','count','كم','how many']):
+                            matched_cat = None
+                            for cc in cat_cols:
+                                if any(p in ql for p in [cc.lower(), cc.replace('_',' ').lower()]):
+                                    matched_cat = cc; break
+                            if matched_cat:
+                                vc = emp[matched_cat].value_counts()
+                                st.dataframe(vc.reset_index().rename(columns={matched_cat: "الفئة", "count": "العدد"}), use_container_width=True, hide_index=True)
+                                fig = px.pie(names=vc.index, values=vc.values, title=f"توزيع {matched_cat}")
+                                fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350)
+                                st.plotly_chart(fig, use_container_width=True)
+                            else:
+                                st.metric("إجمالي الصفوف", f"{len(emp):,}")
+
+                        elif any(w in ql for w in ['مجموع','total','sum','إجمالي']):
+                            for nc in num_cols:
+                                if nc.lower() in ql or any(p in ql for p in nc.lower().split('_')):
+                                    st.metric(f"مجموع {nc}", f"{emp[nc].sum():,.2f}")
+                                    break
+                            else:
+                                if num_cols:
+                                    sums = {nc: emp[nc].sum() for nc in num_cols}
+                                    st.dataframe(pd.DataFrame({"العمود": sums.keys(), "المجموع": [f"{v:,.2f}" for v in sums.values()]}), use_container_width=True, hide_index=True)
+
+                        elif any(w in ql for w in ['توزيع','distribution','histogram']):
+                            matched_col = num_cols[0] if num_cols else None
+                            for nc in num_cols:
+                                if nc.lower() in ql: matched_col = nc; break
+                            if matched_col:
+                                fig = px.histogram(emp, x=matched_col, nbins=25, title=f"توزيع {matched_col}")
+                                fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350)
+                                st.plotly_chart(fig, use_container_width=True)
+
+                        elif any(w in ql for w in ['أعمدة','columns','حقول','fields']):
+                            st.write("📋 الأعمدة المتاحة:")
+                            for i, c in enumerate(emp.columns, 1):
+                                st.write(f"  {i}. **{c}** ({emp[c].dtype})")
+
+                        else:
+                            st.warning("💡 حاول صياغة السؤال بطريقة مختلفة. أمثلة:")
+                            st.write("- ما متوسط الرواتب حسب القسم؟")
+                            st.write("- أعلى 10 رواتب")
+                            st.write("- عدد الموظفين حسب الجنسية")
+                            st.write("- توزيع الأعمار")
+                            st.write("- مجموع الرواتب")
+
+                    except Exception as e:
+                        st.error(f"خطأ: {e}")
+                        st.info("حاول سؤال آخر أو تأكد من البيانات")
+            else:
+                ibox("ارفع ملف بيانات من القائمة الجانبية أولاً.", "warning")
+
+
+    # =========================================
+    #       📤 REPORTS & EXPORT MODULE
+    # =========================================
+    elif section == "📤 التقارير والتصدير":
+
+        if page == "📄 تقرير PDF":
+            hdr("📄 تصدير تقرير PDF احترافي", "تقرير شامل بشعار الشركة وتنسيق رسمي")
+
+            if len(emp) > 0:
+                st.markdown("### ⚙️ إعدادات التقرير")
+                pc1, pc2 = st.columns(2)
+                with pc1:
+                    pdf_title = st.text_input("عنوان التقرير:", "تقرير الموارد البشرية", key="pdft")
+                    pdf_company = st.text_input("اسم الشركة:", "رسال الود لتقنية المعلومات", key="pdfc")
+                    pdf_prepared = st.text_input("إعداد:", emp_name if 'emp_name' in dir() else "", key="pdfp")
+                with pc2:
+                    pdf_period = st.text_input("الفترة:", datetime.now().strftime('%Y'), key="pdfpr")
+                    pdf_sections = st.multiselect("الأقسام المطلوبة:",
+                        ["ملخص تنفيذي","إحصائيات القوى العاملة","تحليل الرواتب","توزيع الأقسام","توزيع الجنسيات"],
+                        default=["ملخص تنفيذي","إحصائيات القوى العاملة"],
+                        key="pdfsec")
+
+                if st.button("📄 إنشاء تقرير PDF", type="primary", key="pdfbtn"):
+                    try:
+                        from fpdf import FPDF
+
+                        class ArabicPDF(FPDF):
+                            def header(self):
+                                self.set_fill_color(15, 76, 92)
+                                self.rect(0, 0, 210, 25, 'F')
+                                self.set_text_color(255, 255, 255)
+                                self.set_font('Helvetica', 'B', 14)
+                                self.cell(0, 25, pdf_company, align='C', ln=True)
+
+                            def footer(self):
+                                self.set_y(-15)
+                                self.set_text_color(128, 128, 128)
+                                self.set_font('Helvetica', '', 8)
+                                self.cell(0, 10, f'Page {self.page_no()}/{{nb}} | {datetime.now().strftime("%Y-%m-%d")}', align='C')
+
+                        pdf = ArabicPDF()
+                        pdf.alias_nb_pages()
+                        pdf.add_page()
+                        pdf.set_auto_page_break(auto=True, margin=20)
+
+                        # Title
+                        pdf.ln(30)
+                        pdf.set_text_color(15, 76, 92)
+                        pdf.set_font('Helvetica', 'B', 20)
+                        pdf.cell(0, 12, pdf_title, align='C', ln=True)
+                        pdf.set_font('Helvetica', '', 11)
+                        pdf.set_text_color(100, 100, 100)
+                        pdf.cell(0, 8, f"Period: {pdf_period} | Prepared by: {pdf_prepared}", align='C', ln=True)
+                        pdf.ln(10)
+
+                        n = len(emp)
+                        num_cols = emp.select_dtypes('number').columns.tolist()
+
+                        if "ملخص تنفيذي" in pdf_sections:
+                            pdf.set_fill_color(46, 117, 182)
+                            pdf.set_text_color(255, 255, 255)
+                            pdf.set_font('Helvetica', 'B', 13)
+                            pdf.cell(0, 10, '  Executive Summary', fill=True, ln=True)
+                            pdf.set_text_color(0, 0, 0)
+                            pdf.set_font('Helvetica', '', 10)
+                            pdf.ln(5)
+                            pdf.cell(0, 7, f"Total Employees: {n}", ln=True)
+                            sal_col = [c for c in num_cols if 'gross' in c.lower() or 'salary' in c.lower() or 'net' in c.lower()]
+                            if sal_col:
+                                sc = sal_col[0]
+                                latest = emp.drop_duplicates(subset=[c for c in emp.columns if 'id' in c.lower() or 'name' in c.lower()][:1], keep='last') if any('id' in c.lower() for c in emp.columns) else emp
+                                pdf.cell(0, 7, f"Avg Salary ({sc}): {latest[sc].mean():,.2f} SAR", ln=True)
+                                pdf.cell(0, 7, f"Total Payroll: {latest[sc].sum():,.2f} SAR", ln=True)
+                            pdf.ln(8)
+
+                        if "إحصائيات القوى العاملة" in pdf_sections:
+                            pdf.set_fill_color(46, 117, 182)
+                            pdf.set_text_color(255, 255, 255)
+                            pdf.set_font('Helvetica', 'B', 13)
+                            pdf.cell(0, 10, '  Workforce Statistics', fill=True, ln=True)
+                            pdf.set_text_color(0, 0, 0)
+                            pdf.set_font('Helvetica', '', 10)
+                            pdf.ln(5)
+
+                            cat_cols = [c for c in emp.columns if emp[c].dtype=='object' and 1 < emp[c].nunique() < 30]
+                            for cc in cat_cols[:5]:
+                                pdf.set_font('Helvetica', 'B', 10)
+                                pdf.cell(0, 7, f"{cc}:", ln=True)
+                                pdf.set_font('Helvetica', '', 9)
+                                for val, cnt in emp[cc].value_counts().head(8).items():
+                                    pct = cnt/len(emp)*100
+                                    pdf.cell(0, 6, f"    {val}: {cnt} ({pct:.1f}%)", ln=True)
+                                pdf.ln(3)
+
+                        if "تحليل الرواتب" in pdf_sections and num_cols:
+                            pdf.add_page()
+                            pdf.set_fill_color(46, 117, 182)
+                            pdf.set_text_color(255, 255, 255)
+                            pdf.set_font('Helvetica', 'B', 13)
+                            pdf.cell(0, 10, '  Salary Analysis', fill=True, ln=True)
+                            pdf.set_text_color(0, 0, 0)
+                            pdf.set_font('Helvetica', '', 10)
+                            pdf.ln(5)
+
+                            # Stats table
+                            pdf.set_font('Helvetica', 'B', 9)
+                            pdf.set_fill_color(230, 240, 250)
+                            headers = ['Column', 'Mean', 'Min', 'Max', 'Std']
+                            widths = [50, 35, 35, 35, 35]
+                            for i, h in enumerate(headers):
+                                pdf.cell(widths[i], 8, h, border=1, fill=True, align='C')
+                            pdf.ln()
+                            pdf.set_font('Helvetica', '', 8)
+                            for nc in num_cols[:10]:
+                                vals = [nc[:25], f"{emp[nc].mean():,.1f}", f"{emp[nc].min():,.1f}", f"{emp[nc].max():,.1f}", f"{emp[nc].std():,.1f}"]
+                                for i, v in enumerate(vals):
+                                    pdf.cell(widths[i], 7, v, border=1, align='C')
+                                pdf.ln()
+
+                        pdf_bytes = pdf.output()
+                        st.download_button("📥 تحميل PDF", data=bytes(pdf_bytes),
+                            file_name=f"{pdf_title}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                            mime="application/pdf", type="primary", use_container_width=True)
+                        st.success("✅ تم إنشاء التقرير بنجاح!")
+
+                    except ImportError:
+                        st.error("مكتبة fpdf2 غير مثبتة. أضف `fpdf2` في requirements.txt")
+                    except Exception as e:
+                        st.error(f"خطأ: {e}")
+            else:
+                ibox("ارفع ملف بيانات أولاً من القائمة الجانبية.", "warning")
+
+        elif page == "📝 تقرير Word":
+            hdr("📝 تصدير تقرير Word احترافي", "مستند Word منسق بشكل احترافي")
+
+            if len(emp) > 0:
+                wc1, wc2 = st.columns(2)
+                with wc1:
+                    word_title = st.text_input("عنوان التقرير:", "تقرير الموارد البشرية", key="wdt")
+                    word_company = st.text_input("اسم الشركة:", "رسال الود لتقنية المعلومات", key="wdc")
+                with wc2:
+                    word_prepared = st.text_input("إعداد:", "", key="wdp")
+                    word_period = st.text_input("الفترة:", datetime.now().strftime('%Y'), key="wdpr")
+
+                if st.button("📝 إنشاء تقرير Word", type="primary", key="wdbtn"):
+                    try:
+                        from docx import Document
+                        from docx.shared import Inches, Pt, Cm, RGBColor
+                        from docx.enum.text import WD_ALIGN_PARAGRAPH
+                        from docx.enum.table import WD_TABLE_ALIGNMENT
+
+                        doc = Document()
+
+                        # Style adjustments
+                        style = doc.styles['Normal']
+                        style.font.name = 'Calibri'
+                        style.font.size = Pt(11)
+
+                        # Title
+                        p = doc.add_paragraph()
+                        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        run = p.add_run(word_company)
+                        run.font.size = Pt(18)
+                        run.font.bold = True
+                        run.font.color.rgb = RGBColor(15, 76, 92)
+
+                        p = doc.add_paragraph()
+                        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        run = p.add_run(word_title)
+                        run.font.size = Pt(14)
+                        run.font.color.rgb = RGBColor(46, 117, 182)
+
+                        p = doc.add_paragraph()
+                        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        run = p.add_run(f"Period: {word_period} | Prepared by: {word_prepared} | Date: {datetime.now().strftime('%Y-%m-%d')}")
+                        run.font.size = Pt(9)
+                        run.font.color.rgb = RGBColor(128, 128, 128)
+
+                        doc.add_paragraph("_" * 60)
+
+                        # Summary
+                        doc.add_heading('Executive Summary', level=1)
+                        n = len(emp)
+                        num_cols = emp.select_dtypes('number').columns.tolist()
+                        doc.add_paragraph(f"Total Records: {n:,}")
+
+                        # Category breakdown
+                        cat_cols = [c for c in emp.columns if emp[c].dtype=='object' and 1 < emp[c].nunique() < 30]
+                        for cc in cat_cols[:4]:
+                            doc.add_heading(cc, level=2)
+                            table = doc.add_table(rows=1, cols=3)
+                            table.style = 'Light Grid Accent 1'
+                            table.alignment = WD_TABLE_ALIGNMENT.CENTER
+                            hdr_cells = table.rows[0].cells
+                            hdr_cells[0].text = cc; hdr_cells[1].text = 'Count'; hdr_cells[2].text = '%'
+                            for val, cnt in emp[cc].value_counts().head(8).items():
+                                row_cells = table.add_row().cells
+                                row_cells[0].text = str(val)
+                                row_cells[1].text = str(cnt)
+                                row_cells[2].text = f"{cnt/n*100:.1f}%"
+                            doc.add_paragraph("")
+
+                        # Numeric summary
+                        if num_cols:
+                            doc.add_heading('Numeric Summary', level=1)
+                            table = doc.add_table(rows=1, cols=5)
+                            table.style = 'Light Grid Accent 1'
+                            table.alignment = WD_TABLE_ALIGNMENT.CENTER
+                            for i, h in enumerate(['Column', 'Mean', 'Min', 'Max', 'Std']):
+                                table.rows[0].cells[i].text = h
+                            for nc in num_cols[:12]:
+                                row_cells = table.add_row().cells
+                                row_cells[0].text = nc[:30]
+                                row_cells[1].text = f"{emp[nc].mean():,.2f}"
+                                row_cells[2].text = f"{emp[nc].min():,.2f}"
+                                row_cells[3].text = f"{emp[nc].max():,.2f}"
+                                row_cells[4].text = f"{emp[nc].std():,.2f}"
+
+                        # Footer
+                        doc.add_paragraph("")
+                        p = doc.add_paragraph()
+                        run = p.add_run("This report is auto-generated by HR Analytics Platform - Risal Al-Wud IT")
+                        run.font.size = Pt(8)
+                        run.font.color.rgb = RGBColor(128, 128, 128)
+
+                        doc_bytes = io.BytesIO()
+                        doc.save(doc_bytes)
+
+                        st.download_button("📥 تحميل Word", data=doc_bytes.getvalue(),
+                            file_name=f"{word_title}_{datetime.now().strftime('%Y%m%d')}.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            type="primary", use_container_width=True)
+                        st.success("✅ تم إنشاء التقرير بنجاح!")
+
+                    except ImportError:
+                        st.error("مكتبة python-docx غير مثبتة. أضف `python-docx` في requirements.txt")
+                    except Exception as e:
+                        st.error(f"خطأ: {e}")
+            else:
+                ibox("ارفع ملف بيانات أولاً من القائمة الجانبية.", "warning")
+
+        elif page == "📊 تقرير شامل":
+            hdr("📊 التقرير الشامل", "تصدير جميع التحليلات في ملف Excel واحد")
+
+            if len(emp) > 0:
+                st.markdown("### ⚙️ اختر محتوى التقرير")
+                rpt_summary = st.checkbox("📊 ملخص تنفيذي", value=True, key="rpts")
+                rpt_workforce = st.checkbox("👥 تحليل القوى العاملة", value=True, key="rptw")
+                rpt_salary = st.checkbox("💰 تحليل الرواتب", value=True, key="rptsalx")
+                rpt_recruit = st.checkbox("🎯 بيانات التوظيف", value=True, key="rptr2")
+                rpt_training = st.checkbox("📚 بيانات التدريب", value=True, key="rptt")
+
+                if st.button("📊 إنشاء التقرير الشامل", type="primary", key="rptbtn"):
+                    ox = io.BytesIO()
+                    with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
+                        num_cols = emp.select_dtypes('number').columns.tolist()
+                        cat_cols = [c for c in emp.columns if emp[c].dtype=='object' and 1 < emp[c].nunique() < 30]
+
+                        if rpt_summary:
+                            summary_data = {"المؤشر": [], "القيمة": []}
+                            summary_data["المؤشر"].append("إجمالي السجلات"); summary_data["القيمة"].append(len(emp))
+                            summary_data["المؤشر"].append("الأعمدة"); summary_data["القيمة"].append(len(emp.columns))
+                            for nc in num_cols[:5]:
+                                summary_data["المؤشر"].append(f"متوسط {nc}"); summary_data["القيمة"].append(round(emp[nc].mean(), 2))
+                                summary_data["المؤشر"].append(f"إجمالي {nc}"); summary_data["القيمة"].append(round(emp[nc].sum(), 2))
+                            pd.DataFrame(summary_data).to_excel(w, sheet_name='ملخص تنفيذي', index=False)
+                            w.sheets['ملخص تنفيذي'].right_to_left()
+
+                        if rpt_workforce:
+                            for cc in cat_cols[:6]:
+                                safe_name = cc[:28]
+                                vc = emp[cc].value_counts().reset_index()
+                                vc.columns = [cc, "العدد"]
+                                vc["النسبة %"] = (vc["العدد"] / len(emp) * 100).round(1)
+                                vc.to_excel(w, sheet_name=safe_name, index=False)
+                                try: w.sheets[safe_name].right_to_left()
+                                except: pass
+
+                        if rpt_salary and num_cols:
+                            desc = emp[num_cols].describe().T.reset_index()
+                            desc.columns = ["العمود","العدد","المتوسط","الانحراف","الأدنى","25%","الوسيط","75%","الأقصى"]
+                            desc.to_excel(w, sheet_name='تحليل الرواتب', index=False)
+                            w.sheets['تحليل الرواتب'].right_to_left()
+
+                        if rpt_recruit:
+                            if st.session_state.get('recruit_plans'):
+                                pd.DataFrame(st.session_state.recruit_plans).to_excel(w, sheet_name='خطة التوظيف', index=False)
+                                w.sheets['خطة التوظيف'].right_to_left()
+                            if st.session_state.get('recruit_tracking'):
+                                pd.DataFrame(st.session_state.recruit_tracking).to_excel(w, sheet_name='متابعة التوظيف', index=False)
+                                w.sheets['متابعة التوظيف'].right_to_left()
+
+                        if rpt_training and 'budget_data' in st.session_state:
+                            pd.DataFrame(st.session_state.budget_data).to_excel(w, sheet_name='ميزانية التدريب', index=False)
+                            w.sheets['ميزانية التدريب'].right_to_left()
+
+                        # Raw data
+                        emp.to_excel(w, sheet_name='البيانات الخام', index=False)
+
+                    st.download_button("📥 تحميل التقرير الشامل", data=ox.getvalue(),
+                        file_name=f"HR_Report_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        type="primary", use_container_width=True)
+                    st.success("✅ تم إنشاء التقرير الشامل!")
+            else:
+                ibox("ارفع ملف بيانات أولاً من القائمة الجانبية.", "warning")
+
+
 if __name__ == "__main__":
     main()
+
