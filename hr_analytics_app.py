@@ -483,7 +483,7 @@ def hash_pw(pw):
 
 # Default users (can be managed in-app)
 DEFAULT_USERS = {
-    "admin": {"password": hash_pw("admin123"), "role": "مدير", "name": "مدير النظام", "email": "", "dept": "الإدارة", "sections": "all"},
+    "admin": {"password": hash_pw("admin123"), "role": "مدير", "name": "مدير النظام", "email": "HR@resal.me", "dept": "الإدارة", "sections": "all"},
     "analyst": {"password": hash_pw("analyst123"), "role": "محلل", "name": "محلل البيانات", "email": "", "dept": "التحليلات",
         "sections": "📊 التحليلات العامة,💰 تحليل الرواتب,👥 Headcount,🔍 التحليل العام,📤 التقارير والتصدير"},
     "viewer": {"password": hash_pw("viewer123"), "role": "عارض", "name": "عارض", "email": "", "dept": "",
@@ -517,7 +517,7 @@ def send_test_email(to_email, emp_name, tests, deadline, assigned_by, app_url=""
             return False, "لم يتم تكوين إعدادات البريد الإلكتروني. اذهب إلى إدارة المستخدمين > إعدادات SMTP"
 
         sender_email = smtp_cfg['email']
-        sender_name = smtp_cfg.get('sender_name', 'منصة HR - رسال الود')
+        sender_name = smtp_cfg.get('sender_name', 'إدارة الموارد البشرية - رسال الود')
 
         tests_list = "\n".join([f"  - {t}" for t in tests])
         msg = MIMEMultipart('alternative')
@@ -668,6 +668,9 @@ def get_email_log():
 
 # SMTP Provider presets
 SMTP_PROVIDERS = {
+    "رسال الود (resal.me)": {"server": "smtp.resal.me", "port": 587, "use_ssl": False,
+        "email": "HR@resal.me",
+        "help": "البريد الرسمي للشركة. أدخل كلمة مرور حساب HR@resal.me أو تواصل مع مسؤول IT للحصول على كلمة مرور التطبيق"},
     "Gmail": {"server": "smtp.gmail.com", "port": 587, "use_ssl": False,
         "help": "استخدم App Password من: myaccount.google.com/apppasswords (تأكد من تفعيل المصادقة الثنائية أولاً)"},
     "Outlook/Hotmail": {"server": "smtp-mail.outlook.com", "port": 587, "use_ssl": False,
@@ -777,11 +780,12 @@ def user_management_page():
                 min_value=1, max_value=65535, key="smtp_port")
             use_ssl = st.checkbox("استخدام SSL (بدلاً من TLS)", value=smtp_cfg.get('use_ssl', prov.get('use_ssl', False)), key="smtp_ssl")
         with sm2:
-            smtp_email = st.text_input("البريد المرسل:", value=smtp_cfg.get('email',''), key="smtp_email",
-                placeholder="your-email@gmail.com")
+            default_email = smtp_cfg.get('email', '') or prov.get('email', '')
+            smtp_email = st.text_input("البريد المرسل:", value=default_email, key="smtp_email",
+                placeholder="HR@resal.me")
             smtp_pass = st.text_input("كلمة مرور التطبيق (App Password):", type="password",
                 value=smtp_cfg.get('password',''), key="smtp_pass")
-            sender_name = st.text_input("اسم المرسل:", value=smtp_cfg.get('sender_name','منصة HR - رسال الود'), key="smtp_sender")
+            sender_name = st.text_input("اسم المرسل:", value=smtp_cfg.get('sender_name','إدارة الموارد البشرية - رسال الود'), key="smtp_sender")
 
         app_url = st.text_input("رابط التطبيق (اختياري - يظهر في الإيميل):",
             value=smtp_cfg.get('app_url',''), key="smtp_url",
@@ -3689,13 +3693,52 @@ def main():
 
                 # Email section
                 st.markdown("#### 📧 إرسال إشعار بالبريد")
+
+                # Check SMTP config status
+                smtp_cfg = st.session_state.get('smtp_config', {})
+                if not smtp_cfg.get('email'):
+                    smtp_cfg = load_smtp_config()
+                    if smtp_cfg:
+                        st.session_state.smtp_config = smtp_cfg
+
+                smtp_ready = bool(smtp_cfg.get('email') and smtp_cfg.get('password') and smtp_cfg.get('server'))
+
+                if not smtp_ready:
+                    st.warning("⚠️ إعدادات البريد غير مكوّنة. أكمل الإعداد السريع أدناه:")
+                    with st.expander("⚡ إعداد سريع للبريد", expanded=True):
+                        qp = st.selectbox("مزود البريد:", list(SMTP_PROVIDERS.keys()), key="q_prov")
+                        qprov = SMTP_PROVIDERS[qp]
+                        st.caption(f"💡 {qprov['help']}")
+                        q1, q2 = st.columns(2)
+                        with q1:
+                            q_default_email = qprov.get('email', '')
+                            q_email = st.text_input("البريد المرسل:", value=q_default_email, key="q_email", placeholder="HR@resal.me")
+                            q_server = st.text_input("خادم SMTP:", value=qprov['server'], key="q_server")
+                        with q2:
+                            q_pass = st.text_input("كلمة مرور البريد:", type="password", key="q_pass")
+                            q_port = st.number_input("المنفذ:", value=qprov['port'], key="q_port")
+                        q_url = st.text_input("رابط التطبيق (اختياري):", key="q_url", placeholder="https://your-app.streamlit.app")
+                        if st.button("💾 حفظ وتفعيل البريد", type="primary", key="q_save"):
+                            if q_email and q_pass:
+                                new_cfg = {'server': q_server, 'port': int(q_port), 'email': q_email,
+                                    'password': q_pass, 'sender_name': 'إدارة الموارد البشرية - رسال الود',
+                                    'app_url': q_url, 'use_ssl': qprov.get('use_ssl', False), 'provider': qp}
+                                st.session_state.smtp_config = new_cfg
+                                save_smtp_config(new_cfg)
+                                st.success("✅ تم تفعيل البريد بنجاح!")
+                                st.rerun()
+                            else:
+                                st.error("أدخل البريد وكلمة المرور")
+                else:
+                    st.success(f"✅ البريد مفعّل: {smtp_cfg['email']}")
+
                 email_c1, email_c2 = st.columns([3,1])
                 with email_c1:
-                    assign_email = st.text_input("البريد الإلكتروني (عمل أو شخصي):",
+                    assign_email = st.text_input("البريد الإلكتروني للموظف (عمل أو شخصي):",
                         value=assign_email_default, key="assign_email",
                         placeholder="employee@company.com أو employee@gmail.com")
                 with email_c2:
-                    send_email_flag = st.checkbox("إرسال إشعار", value=True, key="send_flag")
+                    send_email_flag = st.checkbox("إرسال إشعار", value=smtp_ready, key="send_flag")
 
                 bc1, bc2 = st.columns(2)
                 with bc1:
