@@ -9,7 +9,9 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import io, math, json, sqlite3, os
+import io, math, json, sqlite3, os, smtplib, smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 import openpyxl
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
@@ -481,21 +483,78 @@ def hash_pw(pw):
 
 # Default users (can be managed in-app)
 DEFAULT_USERS = {
-    "admin": {"password": hash_pw("admin123"), "role": "مدير", "name": "مدير النظام", "sections": "all"},
-    "analyst": {"password": hash_pw("analyst123"), "role": "محلل", "name": "محلل البيانات",
+    "admin": {"password": hash_pw("admin123"), "role": "مدير", "name": "مدير النظام", "email": "", "dept": "الإدارة", "sections": "all"},
+    "analyst": {"password": hash_pw("analyst123"), "role": "محلل", "name": "محلل البيانات", "email": "", "dept": "التحليلات",
         "sections": "📊 التحليلات العامة,💰 تحليل الرواتب,👥 Headcount,🔍 التحليل العام,📤 التقارير والتصدير"},
-    "viewer": {"password": hash_pw("viewer123"), "role": "عارض", "name": "عارض",
+    "viewer": {"password": hash_pw("viewer123"), "role": "عارض", "name": "عارض", "email": "", "dept": "",
         "sections": "📊 التحليلات العامة,📤 التقارير والتصدير"},
+    "emp1": {"password": hash_pw("emp123"), "role": "موظف", "name": "أحمد محمد", "email": "", "dept": "تقنية المعلومات",
+        "sections": "🧠 اختبارات الشخصية"},
+    "emp2": {"password": hash_pw("emp123"), "role": "موظف", "name": "سارة أحمد", "email": "", "dept": "الموارد البشرية",
+        "sections": "🧠 اختبارات الشخصية"},
 }
 
 ROLE_DESCRIPTIONS = {
     "مدير": "وصول كامل لجميع الأقسام + إدارة المستخدمين",
     "محلل": "وصول للتحليلات والتقارير بدون إدارة المستخدمين",
+    "موظف": "أداء الاختبارات المعيّنة + عرض نتائجه فقط",
     "عارض": "عرض التقارير فقط بدون تعديل",
 }
 
 ALL_SECTIONS = ["📊 التحليلات العامة","💰 تحليل الرواتب","👥 Headcount","⚖️ حاسبة المستحقات",
     "📚 التدريب والتطوير","🎯 التوظيف","🔍 التحليل العام","📝 الاستبيانات","🧠 اختبارات الشخصية","📤 التقارير والتصدير"]
+
+# Email sending function
+def send_test_email(to_email, emp_name, tests, deadline, assigned_by, app_url=""):
+    """Send email notification about assigned tests"""
+    try:
+        smtp_cfg = st.session_state.get('smtp_config', {})
+        if not smtp_cfg.get('server') or not smtp_cfg.get('email'):
+            return False, "لم يتم تكوين إعدادات البريد الإلكتروني"
+
+        tests_list = "\n".join([f"  - {t}" for t in tests])
+        msg = MIMEMultipart('alternative')
+        msg['From'] = smtp_cfg['email']
+        msg['To'] = to_email
+        msg['Subject'] = f"تعيين اختبارات شخصية جديدة - {emp_name}"
+
+        html_body = f"""
+        <html dir="rtl"><body style="font-family:Arial,sans-serif;direction:rtl;text-align:right;">
+        <div style="max-width:600px;margin:0 auto;border:1px solid #ddd;border-radius:12px;overflow:hidden;">
+            <div style="background:linear-gradient(135deg,#0F4C5C,#1A1A2E);color:white;padding:20px;text-align:center;">
+                <h2 style="margin:0;color:white;">منصة تحليلات الموارد البشرية</h2>
+                <p style="margin:5px 0 0;opacity:0.8;">رسال الود لتقنية المعلومات</p>
+            </div>
+            <div style="padding:25px;">
+                <h3 style="color:#0F4C5C;">مرحباً {emp_name},</h3>
+                <p>تم تعيين اختبارات شخصية جديدة لك من قبل <strong>{assigned_by}</strong>.</p>
+                <div style="background:#f8f9fa;border-right:4px solid #E36414;padding:15px;margin:15px 0;border-radius:8px;">
+                    <p style="margin:0 0 10px;font-weight:bold;color:#E36414;">الاختبارات المطلوبة:</p>
+                    {"".join([f'<p style="margin:5px 0;padding-right:15px;">✅ {t}</p>' for t in tests])}
+                </div>
+                <p><strong>الموعد النهائي:</strong> <span style="color:#E74C3C;">{deadline}</span></p>
+                <p>يرجى تسجيل الدخول إلى المنصة وإكمال الاختبارات المطلوبة قبل الموعد النهائي.</p>
+                {f'<a href="{app_url}" style="display:inline-block;background:#E36414;color:white;padding:12px 30px;border-radius:8px;text-decoration:none;margin:10px 0;">الدخول إلى المنصة</a>' if app_url else ''}
+                <hr style="border:none;border-top:1px solid #eee;margin:20px 0;">
+                <p style="font-size:12px;color:#888;">هذه رسالة تلقائية من منصة تحليلات الموارد البشرية. الاختبارات إجبارية ولا يمكن تأجيلها بدون موافقة المدير.</p>
+            </div>
+        </div>
+        </body></html>"""
+
+        text_body = f"""مرحباً {emp_name},\n\nتم تعيين اختبارات شخصية جديدة لك:\n{tests_list}\n\nالموعد النهائي: {deadline}\nمعيّن بواسطة: {assigned_by}\n\nيرجى تسجيل الدخول وإكمال الاختبارات."""
+
+        msg.attach(MIMEText(text_body, 'plain', 'utf-8'))
+        msg.attach(MIMEText(html_body, 'html', 'utf-8'))
+
+        port = int(smtp_cfg.get('port', 587))
+        server = smtplib.SMTP(smtp_cfg['server'], port)
+        server.starttls()
+        server.login(smtp_cfg['email'], smtp_cfg['password'])
+        server.send_message(msg)
+        server.quit()
+        return True, "تم الإرسال بنجاح"
+    except Exception as e:
+        return False, str(e)
 
 def init_users():
     if 'users_db' not in st.session_state:
@@ -519,6 +578,8 @@ def login_page():
                     st.session_state.user_role = users[username]["role"]
                     st.session_state.user_name = users[username]["name"]
                     st.session_state.user_sections = users[username]["sections"]
+                    st.session_state.user_email = users[username].get("email", "")
+                    st.session_state.user_dept = users[username].get("dept", "")
                     st.rerun()
                 else:
                     st.error("❌ اسم المستخدم أو كلمة المرور غير صحيحة")
@@ -529,6 +590,8 @@ def login_page():
                 st.session_state.user_role = "عارض"
                 st.session_state.user_name = "زائر"
                 st.session_state.user_sections = "all"
+                st.session_state.user_email = ""
+                st.session_state.user_dept = ""
                 st.rerun()
 
         st.markdown("---")
@@ -538,6 +601,8 @@ def login_page():
             st.markdown("| admin | admin123 | مدير |")
             st.markdown("| analyst | analyst123 | محلل |")
             st.markdown("| viewer | viewer123 | عارض |")
+            st.markdown("| emp1 | emp123 | موظف (أحمد محمد) |")
+            st.markdown("| emp2 | emp123 | موظف (سارة أحمد) |")
 
 def check_section_access(section_name):
     if not st.session_state.get('logged_in'): return False
@@ -559,8 +624,24 @@ def user_management_page():
     user_rows = []
     for uname, udata in users.items():
         user_rows.append({"المستخدم": uname, "الاسم": udata["name"], "الدور": udata["role"],
+            "البريد": udata.get("email",""), "القسم": udata.get("dept",""),
             "الأقسام": "جميع الأقسام" if udata["sections"]=="all" else udata["sections"]})
     st.dataframe(pd.DataFrame(user_rows), use_container_width=True, hide_index=True)
+
+    # SMTP Configuration
+    with st.expander("⚙️ إعدادات البريد الإلكتروني (SMTP)"):
+        st.caption("مطلوب لإرسال إشعارات تعيين الاختبارات للموظفين")
+        smtp_cfg = st.session_state.get('smtp_config', {})
+        sm1, sm2 = st.columns(2)
+        with sm1:
+            smtp_server = st.text_input("خادم SMTP:", value=smtp_cfg.get('server','smtp.gmail.com'), key="smtp_srv")
+            smtp_port = st.number_input("المنفذ:", value=int(smtp_cfg.get('port',587)), key="smtp_port")
+        with sm2:
+            smtp_email = st.text_input("البريد المرسل:", value=smtp_cfg.get('email',''), key="smtp_email")
+            smtp_pass = st.text_input("كلمة مرور التطبيق:", type="password", value=smtp_cfg.get('password',''), key="smtp_pass")
+        if st.button("💾 حفظ إعدادات SMTP", key="smtp_save"):
+            st.session_state.smtp_config = {'server': smtp_server, 'port': smtp_port, 'email': smtp_email, 'password': smtp_pass}
+            st.success("✅ تم حفظ إعدادات البريد")
 
     # Add new user
     st.markdown("### ➕ إضافة مستخدم جديد")
@@ -569,11 +650,16 @@ def user_management_page():
         new_user = st.text_input("اسم المستخدم:", key="nu_user")
         new_pass = st.text_input("كلمة المرور:", type="password", key="nu_pass")
         new_name = st.text_input("الاسم الكامل:", key="nu_name")
+        new_email = st.text_input("البريد الإلكتروني:", key="nu_email", placeholder="example@company.com")
+        new_dept = st.text_input("القسم:", key="nu_dept")
     with uc2:
         new_role = st.selectbox("الدور:", list(ROLE_DESCRIPTIONS.keys()), key="nu_role")
         st.info(f"📋 {ROLE_DESCRIPTIONS[new_role]}")
         if new_role == "مدير":
             new_sections = "all"
+        elif new_role == "موظف":
+            new_sections = "🧠 اختبارات الشخصية"
+            st.caption("📌 الموظف يحصل تلقائياً على صلاحية اختبارات الشخصية")
         else:
             new_sections_list = st.multiselect("الأقسام المتاحة:", ALL_SECTIONS, default=ALL_SECTIONS[:3], key="nu_sec")
             new_sections = ",".join(new_sections_list) if new_sections_list else "all"
@@ -582,11 +668,26 @@ def user_management_page():
         if new_user and new_pass and new_name:
             st.session_state.users_db[new_user] = {
                 "password": hash_pw(new_pass), "role": new_role,
-                "name": new_name, "sections": new_sections}
+                "name": new_name, "email": new_email, "dept": new_dept, "sections": new_sections}
             st.success(f"✅ تم إضافة {new_name} بدور {new_role}")
             st.rerun()
         else:
-            st.error("يرجى تعبئة جميع الحقول")
+            st.error("يرجى تعبئة الاسم واسم المستخدم وكلمة المرور على الأقل")
+
+    # Edit user email
+    st.markdown("### ✏️ تعديل بريد مستخدم")
+    edit_user = st.selectbox("اختر المستخدم:", list(users.keys()), key="edit_u")
+    if edit_user:
+        cur_email = users[edit_user].get("email","")
+        cur_dept = users[edit_user].get("dept","")
+        ec1, ec2 = st.columns(2)
+        with ec1: upd_email = st.text_input("البريد الجديد:", value=cur_email, key="upd_email")
+        with ec2: upd_dept = st.text_input("القسم:", value=cur_dept, key="upd_dept")
+        if st.button("💾 تحديث", key="upd_btn"):
+            st.session_state.users_db[edit_user]["email"] = upd_email
+            st.session_state.users_db[edit_user]["dept"] = upd_dept
+            st.success(f"✅ تم تحديث بيانات {edit_user}")
+            st.rerun()
 
     # Delete user
     st.markdown("### 🗑️ حذف مستخدم")
@@ -3325,36 +3426,133 @@ def main():
 
         # ===== PAGE: Test Assignment =====
         if page == "📋 تعيين الاختبارات":
-            hdr("📋 تعيين اختبارات الشخصية", "المدير يعيّن اختبارات إجبارية للموظفين")
+            hdr("📋 تعيين اختبارات الشخصية", "تعيين اختبارات إجبارية للموظفين مع إرسال إشعار بالبريد")
 
-            if st.session_state.get('user_role') == "مدير" or st.session_state.get('current_user') == "guest":
-                st.markdown("### 👤 تعيين اختبار لموظف")
+            # Get current user info
+            cur_role = st.session_state.get('user_role', '')
+            cur_name = st.session_state.get('user_name', '')
+            cur_dept = st.session_state.get('user_dept', '')
+
+            # === Employee Self-Service Section ===
+            st.markdown("### 👤 الاختبارات الخاصة بي")
+            if cur_role == "موظف":
+                # Auto show employee's assigned tests
+                my_tests = [a for a in st.session_state.test_assignments if a["الموظف"] == cur_name]
+                if my_tests:
+                    for mt in my_tests:
+                        completed = any(r["الاسم"]==cur_name and mt["الاختبار"] in r.get("type","") for r in st.session_state.personality_results)
+                        status = "✅ مكتمل" if completed else "⏳ مطلوب (إجباري)"
+                        ibox(f"**{mt['الاختبار']}** | الموعد: {mt['الموعد النهائي']} | الحالة: {status} | معيّن بواسطة: {mt['معيّن_بواسطة']}", "success" if completed else "warning")
+                        if not completed:
+                            st.caption("👆 اذهب لصفحة الاختبار المطلوب من القائمة الجانبية لإتمامه")
+                else:
+                    ibox("لا توجد اختبارات معيّنة لك حالياً. يمكنك أداء أي اختبار اختيارياً من القائمة الجانبية.")
+
+                st.markdown("---")
+                st.markdown("### 📊 نتائجي السابقة")
+                my_results = [r for r in st.session_state.personality_results if r["الاسم"] == cur_name]
+                if my_results:
+                    for mr in my_results:
+                        st.markdown(f"- **{mr['type']}** | {mr['التاريخ']} | {'إجباري' if mr.get('إجباري') else 'اختياري'}")
+                else:
+                    st.caption("لم تكمل أي اختبار بعد.")
+
+            elif cur_role != "موظف":
+                # Non-employee can search
+                my_name_check = st.text_input("أدخل اسم الموظف لعرض اختباراته:", key="my_name_check")
+                if my_name_check and st.session_state.test_assignments:
+                    my_tests = [a for a in st.session_state.test_assignments if a["الموظف"] == my_name_check]
+                    if my_tests:
+                        for mt in my_tests:
+                            completed = any(r["الاسم"]==my_name_check and mt["الاختبار"] in r.get("type","") for r in st.session_state.personality_results)
+                            status = "✅ مكتمل" if completed else "⏳ مطلوب (إجباري)"
+                            ibox(f"**{mt['الاختبار']}** | الموعد: {mt['الموعد النهائي']} | الحالة: {status}", "success" if completed else "warning")
+                    else:
+                        ibox("لا توجد اختبارات معيّنة لهذا الموظف.")
+
+            # === Manager Assignment Section ===
+            if cur_role == "مدير" or st.session_state.get('current_user') == "guest":
+                st.markdown("---")
+                st.markdown("### 📌 تعيين اختبار لموظف (المدير)")
+
+                # Get employee list from users_db
+                emp_users = {uname: udata for uname, udata in st.session_state.get('users_db',{}).items()
+                    if udata.get('role') == 'موظف'}
+                emp_names = [udata["name"] for udata in emp_users.values()]
+
                 ac1, ac2 = st.columns(2)
                 with ac1:
-                    assign_emp = st.text_input("اسم الموظف:", key="assign_emp")
-                    assign_dept = st.text_input("القسم:", key="assign_dept")
+                    assign_method = st.radio("طريقة التعيين:", ["اختيار من الموظفين المسجلين", "إدخال يدوي"], horizontal=True, key="assign_method")
+
+                    if assign_method == "اختيار من الموظفين المسجلين" and emp_names:
+                        assign_emp = st.selectbox("اختر الموظف:", emp_names, key="assign_emp_sel")
+                        # Auto-fill dept and email
+                        sel_user_data = next((ud for ud in emp_users.values() if ud["name"] == assign_emp), {})
+                        assign_dept = sel_user_data.get("dept", "")
+                        assign_email_default = sel_user_data.get("email", "")
+                        st.caption(f"القسم: {assign_dept}" if assign_dept else "")
+                    else:
+                        assign_emp = st.text_input("اسم الموظف:", key="assign_emp")
+                        assign_dept = st.text_input("القسم:", key="assign_dept")
+                        assign_email_default = ""
+
                 with ac2:
                     assign_tests = st.multiselect("الاختبارات المطلوبة:", ALL_TESTS, key="assign_tests")
                     assign_deadline = st.date_input("الموعد النهائي:", key="assign_dl")
 
-                if st.button("📌 تعيين الاختبارات", type="primary", key="assign_btn"):
-                    if assign_emp and assign_tests:
-                        for t in assign_tests:
-                            assignment = {
-                                "الموظف": assign_emp, "القسم": assign_dept,
-                                "الاختبار": t, "الموعد النهائي": str(assign_deadline),
-                                "الحالة": "لم يبدأ", "معيّن_بواسطة": st.session_state.get('user_name', 'المدير'),
-                                "إجباري": True
-                            }
-                            db_save_assignment(assignment)
-                            st.session_state.test_assignments.append(assignment)
-                        st.success(f"✅ تم تعيين {len(assign_tests)} اختبار/ات لـ {assign_emp}")
-                        st.rerun()
+                # Email section
+                st.markdown("#### 📧 إرسال إشعار بالبريد")
+                email_c1, email_c2 = st.columns([3,1])
+                with email_c1:
+                    assign_email = st.text_input("البريد الإلكتروني (عمل أو شخصي):",
+                        value=assign_email_default, key="assign_email",
+                        placeholder="employee@company.com أو employee@gmail.com")
+                with email_c2:
+                    send_email_flag = st.checkbox("إرسال إشعار", value=True, key="send_flag")
 
-                # Show assignments
+                bc1, bc2 = st.columns(2)
+                with bc1:
+                    if st.button("📌 تعيين الاختبارات", type="primary", key="assign_btn", use_container_width=True):
+                        if assign_emp and assign_tests:
+                            for t in assign_tests:
+                                assignment = {
+                                    "الموظف": assign_emp, "القسم": assign_dept,
+                                    "الاختبار": t, "الموعد النهائي": str(assign_deadline),
+                                    "الحالة": "لم يبدأ", "معيّن_بواسطة": st.session_state.get('user_name', 'المدير'),
+                                    "إجباري": True, "البريد": assign_email
+                                }
+                                db_save_assignment(assignment)
+                                st.session_state.test_assignments.append(assignment)
+                            st.success(f"✅ تم تعيين {len(assign_tests)} اختبار/ات لـ {assign_emp}")
+
+                            # Send email
+                            if send_email_flag and assign_email:
+                                ok, msg = send_test_email(assign_email, assign_emp, assign_tests,
+                                    str(assign_deadline), st.session_state.get('user_name','المدير'))
+                                if ok:
+                                    st.success(f"📧 تم إرسال الإشعار إلى {assign_email}")
+                                else:
+                                    st.warning(f"⚠️ لم يتم الإرسال: {msg}")
+                            elif send_email_flag and not assign_email:
+                                st.warning("⚠️ لم يتم إدخال بريد إلكتروني")
+                            st.rerun()
+                        else:
+                            st.error("يرجى إدخال اسم الموظف واختيار اختبار واحد على الأقل")
+
+                with bc2:
+                    if assign_email and assign_tests and assign_emp:
+                        if st.button("📧 إرسال إشعار فقط (بدون تعيين)", key="send_only", use_container_width=True):
+                            ok, msg = send_test_email(assign_email, assign_emp, assign_tests,
+                                str(assign_deadline), st.session_state.get('user_name','المدير'))
+                            if ok:
+                                st.success(f"📧 تم إرسال الإشعار إلى {assign_email}")
+                            else:
+                                st.warning(f"⚠️ {msg}")
+
+                # Show all assignments
                 if st.session_state.test_assignments:
                     st.markdown("---")
-                    st.markdown("### 📋 الاختبارات المعيّنة")
+                    st.markdown("### 📋 جميع الاختبارات المعيّنة")
                     adf = pd.DataFrame(st.session_state.test_assignments)
                     # Check completed
                     completed_names = {(r["الاسم"], r["type"]) for r in st.session_state.personality_results}
@@ -3379,31 +3577,19 @@ def main():
                             st.rerun()
                     else:
                         st.caption("⚠️ حذف التعيينات متاح لمدير النظام فقط")
-            else:
-                st.warning("⚠️ تعيين الاختبارات متاح للمدير فقط")
-
-            # Employee view - show assigned tests
-            st.markdown("---")
-            st.markdown("### 👤 الاختبارات المعيّنة لي")
-            my_name = st.text_input("أدخل اسمك لعرض الاختبارات المعيّنة:", key="my_name_check")
-            if my_name and st.session_state.test_assignments:
-                my_tests = [a for a in st.session_state.test_assignments if a["الموظف"] == my_name]
-                if my_tests:
-                    for mt in my_tests:
-                        completed = any(r["الاسم"]==my_name and mt["الاختبار"] in r["type"] for r in st.session_state.personality_results)
-                        status = "✅ مكتمل" if completed else "⏳ مطلوب (إجباري)"
-                        color = "ok" if completed else "warn"
-                        ibox(f"**{mt['الاختبار']}** | الموعد: {mt['الموعد النهائي']} | الحالة: {status} | معيّن بواسطة: {mt['معيّن_بواسطة']}", "success" if completed else "warning")
-                else:
-                    ibox("لا توجد اختبارات معيّنة لك.")
 
         # ===== PAGE: Big Five =====
         elif page == "🧠 Big Five (OCEAN)":
             hdr("🧠 Big Five - OCEAN Model", "نموذج العوامل الخمسة الكبرى للشخصية (25 سؤال)")
-            b1, b2 = st.columns(2)
-            with b1: bf_name = st.text_input("الاسم:", key="bf_name")
-            with b2: bf_dept = st.text_input("القسم:", key="bf_dept")
-            # Check mandatory
+            is_emp = st.session_state.get('user_role') == "موظف"
+            if is_emp:
+                bf_name = st.session_state.get('user_name','')
+                bf_dept = st.session_state.get('user_dept','')
+                st.info(f"👤 مرحباً {bf_name} | القسم: {bf_dept}")
+            else:
+                b1, b2 = st.columns(2)
+                with b1: bf_name = st.text_input("الاسم:", key="bf_name")
+                with b2: bf_dept = st.text_input("القسم:", key="bf_dept")
             is_mand = any(a["الموظف"]==bf_name and "Big Five" in a["الاختبار"] for a in st.session_state.test_assignments)
             assigned_by = next((a["معيّن_بواسطة"] for a in st.session_state.test_assignments if a["الموظف"]==bf_name and "Big Five" in a["الاختبار"]), "")
             if is_mand: ibox(f"⚠️ هذا الاختبار إجباري - معيّن بواسطة: {assigned_by}", "warning")
@@ -3414,9 +3600,15 @@ def main():
         elif page == "📊 Thomas PPA":
             hdr("📊 Thomas PPA", "تحليل الملف الشخصي المهني (24 سؤال)")
             st.caption("مبني على نموذج DISC لتحليل السلوك المهني: الهيمنة، التأثير، الثبات، الامتثال")
-            t1, t2 = st.columns(2)
-            with t1: tp_name = st.text_input("الاسم:", key="tp_name")
-            with t2: tp_dept = st.text_input("القسم:", key="tp_dept")
+            is_emp = st.session_state.get('user_role') == "موظف"
+            if is_emp:
+                tp_name = st.session_state.get('user_name','')
+                tp_dept = st.session_state.get('user_dept','')
+                st.info(f"👤 مرحباً {tp_name} | القسم: {tp_dept}")
+            else:
+                t1, t2 = st.columns(2)
+                with t1: tp_name = st.text_input("الاسم:", key="tp_name")
+                with t2: tp_dept = st.text_input("القسم:", key="tp_dept")
             is_mand = any(a["الموظف"]==tp_name and "Thomas" in a["الاختبار"] for a in st.session_state.test_assignments)
             assigned_by = next((a["معيّن_بواسطة"] for a in st.session_state.test_assignments if a["الموظف"]==tp_name and "Thomas" in a["الاختبار"]), "")
             if is_mand: ibox(f"⚠️ هذا الاختبار إجباري - معيّن بواسطة: {assigned_by}", "warning")
@@ -3427,9 +3619,15 @@ def main():
         elif page == "🔬 Hogan HPI":
             hdr("🔬 Hogan HPI", "مقياس هوجان للشخصية المهنية (28 سؤال)")
             st.caption("يقيس 7 مقاييس أساسية: التوازن النفسي، الطموح، الاجتماعية، الحساسية، الحصافة، الفضول، التعلم")
-            h1, h2 = st.columns(2)
-            with h1: hg_name = st.text_input("الاسم:", key="hg_name")
-            with h2: hg_dept = st.text_input("القسم:", key="hg_dept")
+            is_emp = st.session_state.get('user_role') == "موظف"
+            if is_emp:
+                hg_name = st.session_state.get('user_name','')
+                hg_dept = st.session_state.get('user_dept','')
+                st.info(f"👤 مرحباً {hg_name} | القسم: {hg_dept}")
+            else:
+                h1, h2 = st.columns(2)
+                with h1: hg_name = st.text_input("الاسم:", key="hg_name")
+                with h2: hg_dept = st.text_input("القسم:", key="hg_dept")
             is_mand = any(a["الموظف"]==hg_name and "Hogan" in a["الاختبار"] for a in st.session_state.test_assignments)
             assigned_by = next((a["معيّن_بواسطة"] for a in st.session_state.test_assignments if a["الموظف"]==hg_name and "Hogan" in a["الاختبار"]), "")
             if is_mand: ibox(f"⚠️ هذا الاختبار إجباري - معيّن بواسطة: {assigned_by}", "warning")
@@ -3440,9 +3638,15 @@ def main():
         elif page == "💡 MBTI":
             hdr("💡 MBTI", "مؤشر مايرز بريغز لأنماط الشخصية (32 سؤال)")
             st.caption("يحدد نمط الشخصية من 16 نمط عبر 4 أبعاد: الطاقة، المعلومات، القرارات، أسلوب الحياة")
-            m1, m2 = st.columns(2)
-            with m1: mb_name = st.text_input("الاسم:", key="mb_name")
-            with m2: mb_dept = st.text_input("القسم:", key="mb_dept")
+            is_emp = st.session_state.get('user_role') == "موظف"
+            if is_emp:
+                mb_name = st.session_state.get('user_name','')
+                mb_dept = st.session_state.get('user_dept','')
+                st.info(f"👤 مرحباً {mb_name} | القسم: {mb_dept}")
+            else:
+                m1, m2 = st.columns(2)
+                with m1: mb_name = st.text_input("الاسم:", key="mb_name")
+                with m2: mb_dept = st.text_input("القسم:", key="mb_dept")
             is_mand = any(a["الموظف"]==mb_name and "MBTI" in a["الاختبار"] for a in st.session_state.test_assignments)
             assigned_by = next((a["معيّن_بواسطة"] for a in st.session_state.test_assignments if a["الموظف"]==mb_name and "MBTI" in a["الاختبار"]), "")
             if is_mand: ibox(f"⚠️ هذا الاختبار إجباري - معيّن بواسطة: {assigned_by}", "warning")
@@ -3453,9 +3657,15 @@ def main():
         elif page == "💎 DISC":
             hdr("💎 اختبار DISC", "تقييم أنماط السلوك المهني الأربعة (24 سؤال)")
             st.caption("يقيس 4 أنماط سلوكية: الهيمنة (D)، التأثير (I)، الثبات (S)، الالتزام (C) مع تحديد النمط المركب")
-            d1, d2 = st.columns(2)
-            with d1: disc_name = st.text_input("الاسم:", key="disc_name")
-            with d2: disc_dept = st.text_input("القسم:", key="disc_dept")
+            is_emp = st.session_state.get('user_role') == "موظف"
+            if is_emp:
+                disc_name = st.session_state.get('user_name','')
+                disc_dept = st.session_state.get('user_dept','')
+                st.info(f"👤 مرحباً {disc_name} | القسم: {disc_dept}")
+            else:
+                d1, d2 = st.columns(2)
+                with d1: disc_name = st.text_input("الاسم:", key="disc_name")
+                with d2: disc_dept = st.text_input("القسم:", key="disc_dept")
             is_mand = any(a["الموظف"]==disc_name and "DISC" in a["الاختبار"] for a in st.session_state.test_assignments)
             assigned_by = next((a["معيّن_بواسطة"] for a in st.session_state.test_assignments if a["الموظف"]==disc_name and "DISC" in a["الاختبار"]), "")
             if is_mand: ibox(f"⚠️ هذا الاختبار إجباري - معيّن بواسطة: {assigned_by}", "warning")
