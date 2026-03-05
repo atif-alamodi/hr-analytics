@@ -1702,7 +1702,7 @@ def main():
         elif section == "🎯 التوظيف":
             page = st.radio("📌", ["📋 تخطيط التوظيف","🤖 Benchmark ذكاء اصطناعي","🌍 مقارنة الأسواق","📊 متابعة التوظيف","📥 تصدير التوظيف"], label_visibility="collapsed")
         elif section == "🚀 Onboarding":
-            page = st.radio("📌", ["🚀 إنشاء Onboarding","📋 خطة 30/60/90","👥 متابعة الموظفين الجدد","🎬 محتوى تفاعلي","📥 تصدير Onboarding"], label_visibility="collapsed")
+            page = st.radio("📌", ["🚀 إنشاء Onboarding","📋 خطة 30/60/90","👥 متابعة الموظفين الجدد","📊 تحليلات Onboarding","🎬 عرض تقديمي AI","🏢 معلومات الشركة","📥 تصدير Onboarding"], label_visibility="collapsed")
         elif section == "🔍 التحليل العام":
             page = st.radio("📌", ["📊 تحليل تلقائي","🤖 أسئلة ذكية"], label_visibility="collapsed")
         elif section == "📝 الاستبيانات":
@@ -4004,7 +4004,89 @@ def main():
     elif section == "🚀 Onboarding":
 
         if 'onboarding_plans' not in st.session_state:
-            st.session_state.onboarding_plans = []
+            # Load from database
+            try:
+                conn = get_conn()
+                c = conn.cursor()
+                c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("onboarding_plans",))
+                row = c.fetchone()
+                conn.close()
+                if row:
+                    st.session_state.onboarding_plans = json.loads(row[0])
+                else:
+                    st.session_state.onboarding_plans = []
+            except:
+                st.session_state.onboarding_plans = []
+
+        # Load company info from DB or use defaults
+        if 'company_info' not in st.session_state:
+            try:
+                conn = get_conn()
+                c = conn.cursor()
+                c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("company_info",))
+                row = c.fetchone()
+                conn.close()
+                if row:
+                    st.session_state.company_info = json.loads(row[0])
+                else:
+                    raise Exception("No data")
+            except:
+                st.session_state.company_info = {
+                    "name": "رسال الود لتقنية المعلومات",
+                    "name_en": "Resal",
+                    "tagline": "Infrastructure for Non-Cash Value",
+                    "who_we_are": "Resal, headquartered in Saudi Arabia, is a pioneering digital cards and rewards platform established in 2018. Renowned for its expertise in gift cards, rewards, and loyalty programs, Resal connects merchants, companies, and consumers through a platform that enables the issuance, management, and distribution of various prepaid products, including prepaid cards, loyalty, digital vouchers, and rewards.\n\nResal is at the forefront of revolutionizing the alternative payment and stored value landscape. Stored value refers to a prepaid monetary value stored on a device or in an account, which can be used for future transactions. This concept encompasses a variety of forms, including prepaid cards, gift cards, digital wallets, branded currency, and loyalty points.\n\nThe global shift towards digital payments represents a $2 trillion market projected to reach $2.5 trillion globally and $20 billion in MENA by 2027.",
+                    "purpose": "Make people smile, make life easier, support our society and our economy",
+                    "mission": "We are here to make people and businesses smile and delight by developing the prepaid cards, rewards and loyalty solutions to make it easy to send, and amazing to receive wherever and whenever.",
+                    "vision": "The leading and the most innovative digital prepaid gift cards and rewards company in the MENA",
+                    "values": [
+                        {"name": "Integrity & Transparency", "name_ar": "النزاهة والشفافية", "desc": "We are open, direct, and honest with all. Successes and failures, good news and bad news, we share openly. It makes us all stronger."},
+                        {"name": "One Team", "name_ar": "فريق واحد", "desc": "We work together, learn together, succeed together, to meet our customer needs, to help our company win, to support our community and our economy."},
+                        {"name": "Customer Focus", "name_ar": "التركيز على العميل", "desc": "We are here to listen to our customers to help them and to make them happy. We treat our customers the way we want our own family to be treated."},
+                        {"name": "Learning & Growth", "name_ar": "التعلم والنمو", "desc": "There is no end to knowledge. We need more, so we believe in knowledge sharing."},
+                        {"name": "Innovation", "name_ar": "الابتكار", "desc": "We never give up seeking innovative ways to solve customer problems and delivering valuable solutions."},
+                    ],
+                    "products": [
+                        {"name": "Glee", "desc": "SaaS solution that enables organizations to manage and send digital rewards to employees and customers."},
+                        {"name": "Channels", "desc": "Business API and white-label technology offering digital gift cards from over 400 brands to 3rd party channel partners."},
+                        {"name": "BOONUS (Loyalty)", "desc": "Loyalty management platform based on multiple rewarding programs that enable merchants to increase retention and spending."},
+                        {"name": "xCard", "desc": "Prepaid digital gift cards issuance solution which enables merchants to easily issue, manage and redeem digital gift cards."},
+                        {"name": "Resal App & Wallet", "desc": "Consumer mobile app and wallet to convert rewards from leading loyalty programs, enabling smarter spending across brands."},
+                    ],
+                    "milestones": [
+                        {"year": "2016", "event": "Founded by Hatem Kameli and Fouad Al-Farhan in Jeddah"},
+                        {"year": "2018", "event": "Launched digital gift cards + Resal for Business + Expansion to Egypt"},
+                        {"year": "2020", "event": "10x Growth, +300 merchants, Amazon Partnership, Launched Glee"},
+                        {"year": "2021", "event": "Pivoted to Fintech, Mastercard Partnership, Acquired BOONUS, Best Technology Provider Award"},
+                        {"year": "2022", "event": "ISO 27001, Best Place to Work, +100M SAR total sales milestone"},
+                        {"year": "2023", "event": "Unicorns Program - Monshaat, +1000 brands, +1.5M users"},
+                    ],
+                    "market": {
+                        "global_prepaid": "$2.5 Trillion by 2027",
+                        "closed_loop": "$680 Billion by 2027",
+                        "loyalty_rewards": "$255 Billion by 2027",
+                        "mena_tam": "$27+ Billion by 2027 (MENA)",
+                        "saudi_prepaid": "$11 Billion by 2027",
+                    },
+                    "stats": {
+                        "brands": "1,000+",
+                        "clients": "1,000+",
+                        "users": "1.5M+",
+                        "growth": "100%+",
+                    },
+                    "work_policies": {
+                        "hours": "8:00 AM - 5:00 PM (Sunday - Thursday)",
+                        "leave": "21 days annual leave (Saudi Labor Law)",
+                        "probation": "90 days",
+                        "insurance": "Medical insurance from Day 1",
+                        "locations": "Jeddah (HQ), Riyadh, Cairo",
+                    },
+                    "contacts": {
+                        "hr_email": "HR@resal.me",
+                        "it_email": "IT@resal.me",
+                        "website": "resal.me",
+                    }
+                }
 
         ONBOARDING_CHECKLIST = {
             "قبل اليوم الأول": [
@@ -4097,6 +4179,14 @@ def main():
                         "progress": 0
                     }
                     st.session_state.onboarding_plans.append(plan)
+                    # Save to database for persistence
+                    try:
+                        conn = get_conn()
+                        c = conn.cursor()
+                        _upsert_config(c, "onboarding_plans", json.dumps(st.session_state.onboarding_plans, ensure_ascii=False))
+                        conn.commit()
+                        conn.close()
+                    except: pass
 
                     # Send welcome email
                     smtp_cfg = st.session_state.get('smtp_config', {})
@@ -4208,8 +4298,226 @@ def main():
                 fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
                 st.plotly_chart(fig, use_container_width=True)
 
-        elif page == "🎬 محتوى تفاعلي":
-            hdr("🎬 محتوى Onboarding تفاعلي بالذكاء الاصطناعي","صفحة ترحيب تفاعلية مع صوت")
+        elif page == "📊 تحليلات Onboarding":
+            hdr("📊 تحليلات Onboarding","إحصائيات وتحليل فعالية برنامج تهيئة الموظفين الجدد")
+
+            plans = st.session_state.onboarding_plans
+
+            # Initialize survey data
+            if 'ob_surveys' not in st.session_state:
+                try:
+                    conn = get_conn()
+                    c = conn.cursor()
+                    c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("ob_surveys",))
+                    row = c.fetchone()
+                    conn.close()
+                    st.session_state.ob_surveys = json.loads(row[0]) if row else []
+                except:
+                    st.session_state.ob_surveys = []
+
+            # ===== KPIs =====
+            st.markdown("### 📊 مؤشرات الأداء الرئيسية")
+            total_plans = len(plans)
+            surveys = st.session_state.ob_surveys
+
+            if total_plans > 0:
+                # Calculate metrics
+                active_plans = [p for p in plans if p.get('status','جاري') == 'جاري']
+                completed_plans = [p for p in plans if p.get('status') == 'مكتمل']
+                depts = set(p.get('dept','') for p in plans)
+                avg_satisfaction = sum(s.get('overall',0) for s in surveys) / max(len(surveys),1) if surveys else 0
+                completion_rate = len(completed_plans) / max(total_plans,1) * 100
+
+                k1,k2,k3,k4,k5,k6 = st.columns(6)
+                with k1: kpi("📋 إجمالي الخطط", str(total_plans))
+                with k2: kpi("🔄 جاري", str(len(active_plans)))
+                with k3: kpi("✅ مكتمل", str(len(completed_plans)))
+                with k4: kpi("📊 معدل الإكمال", f"{completion_rate:.0f}%")
+                with k5: kpi("⭐ رضا الموظفين", f"{avg_satisfaction:.1f}/5" if surveys else "N/A")
+                with k6: kpi("📌 الأقسام", str(len(depts)))
+
+                # ===== Charts =====
+                st.markdown("---")
+                ch1, ch2 = st.columns(2)
+
+                with ch1:
+                    # Plans by department
+                    dept_counts = {}
+                    for p in plans:
+                        d = p.get('dept','غير محدد')
+                        dept_counts[d] = dept_counts.get(d,0) + 1
+                    fig = px.pie(values=list(dept_counts.values()), names=list(dept_counts.keys()),
+                        title='توزيع Onboarding حسب القسم', hole=0.35, color_discrete_sequence=CL['dept'])
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                with ch2:
+                    # Plans by status/phase
+                    phase_counts = {"قبل المباشرة":0, "30 يوم":0, "60 يوم":0, "90 يوم":0, "بعد التجربة":0}
+                    for p in plans:
+                        try:
+                            start = datetime.strptime(p['start_date'], '%Y-%m-%d')
+                            days = (datetime.now() - start).days
+                            phase = "قبل المباشرة" if days < 0 else ("30 يوم" if days <= 30 else ("60 يوم" if days <= 60 else ("90 يوم" if days <= 90 else "بعد التجربة")))
+                            phase_counts[phase] += 1
+                        except: pass
+                    fig = px.bar(x=list(phase_counts.keys()), y=list(phase_counts.values()),
+                        title='توزيع حسب المرحلة', color=list(phase_counts.keys()),
+                        color_discrete_map={"قبل المباشرة":"#95A5A6","30 يوم":"#E36414","60 يوم":"#E9C46A","90 يوم":"#27AE60","بعد التجربة":"#2980B9"})
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350, showlegend=False)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                # Monthly trend
+                if total_plans > 1:
+                    monthly = {}
+                    for p in plans:
+                        m = p.get('start_date','')[:7]
+                        monthly[m] = monthly.get(m,0) + 1
+                    if monthly:
+                        fig = px.line(x=list(monthly.keys()), y=list(monthly.values()),
+                            title='عدد Onboarding الشهري', markers=True)
+                        fig.update_layout(font=dict(family="Noto Sans Arabic"), height=300,
+                            xaxis_title="الشهر", yaxis_title="العدد")
+                        st.plotly_chart(fig, use_container_width=True)
+
+            else:
+                st.info("لا توجد خطط Onboarding بعد. أنشئ خطة أولاً.")
+
+            # ===== Survey Section =====
+            st.markdown("---")
+            st.markdown("### 📝 استبيان رضا الموظف الجديد عن Onboarding")
+
+            if plans:
+                with st.expander("➕ إضافة تقييم جديد", expanded=not bool(surveys)):
+                    sv_emp = st.selectbox("الموظف:", [f"{p['name']} - {p['title']}" for p in plans], key="sv_emp")
+
+                    st.markdown("#### قيّم تجربة Onboarding (1 = ضعيف، 5 = ممتاز)")
+                    survey_questions = {
+                        "overall": "التقييم العام لتجربة Onboarding",
+                        "welcome": "جودة الاستقبال والترحيب",
+                        "training": "كفاية التدريب والتأهيل",
+                        "tools": "توفر الأدوات والأنظمة في الوقت المناسب",
+                        "manager": "دعم المدير المباشر",
+                        "team": "تعاون الفريق والاندماج",
+                        "clarity": "وضوح المهام والتوقعات",
+                        "culture": "فهم ثقافة وقيم الشركة",
+                    }
+                    survey_labels = {
+                        "overall": "التقييم العام", "welcome": "الاستقبال والترحيب",
+                        "training": "التدريب والتأهيل", "tools": "الأدوات والأنظمة",
+                        "manager": "دعم المدير", "team": "تعاون الفريق",
+                        "clarity": "وضوح المهام", "culture": "ثقافة الشركة",
+                    }
+
+                    scores = {}
+                    for key, question in survey_questions.items():
+                        scores[key] = st.slider(f"{'⭐' * 5} {question}", 1, 5, 4, key=f"sv_{key}")
+
+                    sv_comment = st.text_area("ملاحظات إضافية:", placeholder="ما أعجبك؟ ما يمكن تحسينه؟", key="sv_comment")
+                    sv_recommend = st.radio("هل توصي بتجربة Onboarding للموظفين الجدد؟", ["نعم بالتأكيد","نعم","محايد","لا"], horizontal=True, key="sv_rec")
+
+                    if st.button("📊 حفظ التقييم", type="primary", use_container_width=True, key="sv_save"):
+                        survey = {
+                            "employee": sv_emp,
+                            "date": datetime.now().strftime("%Y-%m-%d"),
+                            "scores": scores,
+                            **scores,
+                            "comment": sv_comment,
+                            "recommend": sv_recommend,
+                            "nps": 5 if "بالتأكيد" in sv_recommend else (4 if sv_recommend=="نعم" else (3 if sv_recommend=="محايد" else 1))
+                        }
+                        st.session_state.ob_surveys.append(survey)
+                        # Save to DB
+                        try:
+                            conn = get_conn()
+                            c = conn.cursor()
+                            _upsert_config(c, "ob_surveys", json.dumps(st.session_state.ob_surveys, ensure_ascii=False))
+                            conn.commit()
+                            conn.close()
+                        except: pass
+                        st.success("✅ تم حفظ التقييم بنجاح")
+                        st.rerun()
+
+            # ===== Survey Results =====
+            if surveys:
+                st.markdown("---")
+                st.markdown("### 📈 نتائج استبيانات Onboarding")
+
+                # Summary table
+                sv_rows = []
+                for s in surveys:
+                    sv_rows.append({
+                        "الموظف": s.get('employee',''), "التاريخ": s.get('date',''),
+                        "التقييم العام": f"{s.get('overall',0)}/5",
+                        "الاستقبال": s.get('welcome',0), "التدريب": s.get('training',0),
+                        "الأدوات": s.get('tools',0), "المدير": s.get('manager',0),
+                        "الفريق": s.get('team',0), "الوضوح": s.get('clarity',0),
+                        "الثقافة": s.get('culture',0), "التوصية": s.get('recommend','')
+                    })
+                st.dataframe(pd.DataFrame(sv_rows), use_container_width=True, hide_index=True)
+
+                # Average scores radar chart
+                avg_scores = {}
+                survey_labels_ar = {"overall":"التقييم العام","welcome":"الاستقبال","training":"التدريب",
+                    "tools":"الأدوات","manager":"المدير","team":"الفريق","clarity":"الوضوح","culture":"الثقافة"}
+                for key in ["overall","welcome","training","tools","manager","team","clarity","culture"]:
+                    vals = [s.get(key,0) for s in surveys if s.get(key,0) > 0]
+                    avg_scores[survey_labels_ar.get(key,key)] = sum(vals)/max(len(vals),1) if vals else 0
+
+                rc1, rc2 = st.columns(2)
+                with rc1:
+                    fig = go.Figure()
+                    categories = list(avg_scores.keys())
+                    values = list(avg_scores.values()) + [list(avg_scores.values())[0]]
+                    fig.add_trace(go.Scatterpolar(r=values, theta=categories + [categories[0]],
+                        fill='toself', line=dict(color='#E36414'), fillcolor='rgba(227,100,20,0.2)', name='المتوسط'))
+                    fig.update_layout(polar=dict(radialaxis=dict(range=[0,5])),
+                        title='متوسط التقييمات (Radar)', font=dict(family="Noto Sans Arabic"), height=400)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                with rc2:
+                    # Bar chart of averages
+                    fig = px.bar(x=list(avg_scores.keys()), y=list(avg_scores.values()),
+                        title='متوسط التقييمات حسب المعيار', color=list(avg_scores.values()),
+                        color_continuous_scale='RdYlGn', range_color=[1,5])
+                    fig.add_hline(y=4, line_dash="dash", line_color="green", annotation_text="الهدف: 4/5")
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400, yaxis_range=[0,5])
+                    st.plotly_chart(fig, use_container_width=True)
+
+                # NPS Score
+                nps_scores = [s.get('nps',3) for s in surveys]
+                promoters = sum(1 for n in nps_scores if n >= 4)
+                detractors = sum(1 for n in nps_scores if n <= 2)
+                nps = round((promoters - detractors) / max(len(nps_scores),1) * 100)
+
+                st.markdown("### 🎯 مؤشر صافي الترويج (eNPS)")
+                nc1, nc2, nc3, nc4 = st.columns(4)
+                with nc1: kpi("🟢 مروّجين", str(promoters))
+                with nc2: kpi("🟡 محايدين", str(len(nps_scores) - promoters - detractors))
+                with nc3: kpi("🔴 منتقدين", str(detractors))
+                with nc4: kpi("📊 eNPS Score", f"{nps}")
+
+                # Comments
+                comments = [s.get('comment','') for s in surveys if s.get('comment','').strip()]
+                if comments:
+                    st.markdown("### 💬 ملاحظات الموظفين")
+                    for c in comments:
+                        st.markdown(f"> {c}")
+
+                # Effectiveness summary
+                st.markdown("---")
+                st.markdown("### 📊 ملخص فعالية Onboarding")
+                overall_avg = avg_scores.get('التقييم العام', 0)
+                if overall_avg >= 4:
+                    ibox(f"تقييم البرنامج: **{overall_avg:.1f}/5** - ممتاز ✅\n\nبرنامج Onboarding يحقق نتائج ممتازة. يُنصح بالاستمرار مع تحسينات طفيفة في المجالات الأقل تقييماً.", "success")
+                elif overall_avg >= 3:
+                    lowest = min(avg_scores, key=avg_scores.get)
+                    ibox(f"تقييم البرنامج: **{overall_avg:.1f}/5** - جيد ⚠️\n\nيحتاج تحسين في: **{lowest}** ({avg_scores[lowest]:.1f}/5). يُنصح بمراجعة هذا الجانب وتطويره.", "warning")
+                else:
+                    ibox(f"تقييم البرنامج: **{overall_avg:.1f}/5** - يحتاج تطوير 🔴\n\nيُنصح بمراجعة شاملة لبرنامج Onboarding وإعادة تصميم المراحل ذات التقييم المنخفض.", "error" if hasattr(st, 'error') else "warning")
+
+        elif page == "🎬 عرض تقديمي AI":
+            hdr("🎬 عرض تقديمي Onboarding بالذكاء الاصطناعي","عرض slides احترافي مع سرد صوتي تفاعلي")
 
             if not st.session_state.onboarding_plans:
                 st.info("🚀 أنشئ خطة Onboarding أولاً")
@@ -4218,128 +4526,236 @@ def main():
             sel_emp = st.selectbox("اختر الموظف:", [f"{p['name']} - {p['title']}" for p in st.session_state.onboarding_plans], key="ob_sel_ai")
             sel_idx = [f"{p['name']} - {p['title']}" for p in st.session_state.onboarding_plans].index(sel_emp)
             plan = st.session_state.onboarding_plans[sel_idx]
+            ci = st.session_state.company_info
 
-            st.markdown("### ⚙️ تخصيص المحتوى")
-            cc1, cc2 = st.columns(2)
-            with cc1:
-                company_name = st.text_input("اسم الشركة:", value="رسال الود لتقنية المعلومات", key="ob_company")
-                company_desc = st.text_area("وصف الشركة:", value="شركة متخصصة في تقنية المعلومات والمدفوعات الرقمية وبطاقات الولاء", key="ob_desc", height=80)
-            with cc2:
-                welcome_msg = st.text_area("رسالة ترحيبية مخصصة:", value=f"مرحباً {plan['name']}! نحن سعداء بانضمامك لفريق {company_name}. نتطلع لرحلة نجاح مشتركة.", key="ob_welcome", height=80)
-                voice_lang = st.selectbox("لغة الصوت:", ["ar-SA","en-US","ar-EG"], key="ob_voice")
+            st.markdown("### ⚙️ تخصيص العرض")
+            slides_sel = st.multiselect("الشرائح المطلوبة:",
+                ["ترحيب","من نحن","رؤيتنا ورسالتنا","قيمنا","منتجاتنا","إنجازاتنا","السوق","فريقك","خطة 30/60/90","سياسات","تواصل"],
+                default=["ترحيب","من نحن","رؤيتنا ورسالتنا","قيمنا","منتجاتنا","فريقك","خطة 30/60/90"], key="ob_slides")
+            voice_lang = st.selectbox("لغة السرد:", ["ar-SA","en-US","ar-EG"], key="ob_voice")
 
-            sections_content = st.multiselect("أقسام المحتوى:",
-                ["رسالة ترحيب","عن الشركة","فريقك","خطة 30/60/90","سياسات مهمة","معلومات تواصل"],
-                default=["رسالة ترحيب","عن الشركة","فريقك","خطة 30/60/90"], key="ob_sections")
+            if st.button("🎬 إنشاء العرض التقديمي", type="primary", use_container_width=True, key="ob_gen"):
 
-            if st.button("🎬 إنشاء صفحة Onboarding التفاعلية", type="primary", use_container_width=True, key="ob_gen"):
+                # Build narration script for TTS
+                narration_parts = []
+                if "ترحيب" in slides_sel:
+                    narration_parts.append(f"مرحباً {plan['name']}! أهلاً بك في {ci['name']}. نحن سعيدون جداً بانضمامك لفريقنا بصفتك {plan['title']} في قسم {plan['dept']}.")
+                if "من نحن" in slides_sel:
+                    narration_parts.append(f"{ci['name_en']} هي منصة رائدة في البطاقات الرقمية والمكافآت تأسست في 2018 في المملكة العربية السعودية. نربط التجار والشركات والمستهلكين من خلال منصة شاملة للبطاقات مسبقة الدفع وبرامج الولاء.")
+                if "رؤيتنا ورسالتنا" in slides_sel:
+                    narration_parts.append(f"هدفنا هو {ci['purpose']}. رؤيتنا أن نكون {ci['vision']}.")
+                if "قيمنا" in slides_sel:
+                    vals_text = "، ".join([v['name_ar'] for v in ci['values']])
+                    narration_parts.append(f"قيمنا الأساسية هي: {vals_text}.")
+                if "منتجاتنا" in slides_sel:
+                    prods = "، ".join([p['name'] for p in ci['products']])
+                    narration_parts.append(f"نقدم مجموعة من المنتجات المبتكرة تشمل: {prods}.")
+                if "فريقك" in slides_sel:
+                    narration_parts.append(f"ستعمل في قسم {plan['dept']} تحت إشراف {plan.get('manager','')}. تاريخ مباشرتك هو {plan['start_date']}.")
+                narration_parts.append("نتمنى لك التوفيق والنجاح في رحلتك معنا!")
+                full_narration = " ".join(narration_parts)
 
-                # Generate interactive HTML with TTS
+                # Build values HTML
+                vals_html = ""
+                colors = ['#E36414','#264653','#2A9D8F','#E9C46A','#F4A261']
+                for i, v in enumerate(ci.get('values',[])):
+                    vals_html += f"<div style='background:white;border-radius:12px;padding:20px;border-top:4px solid {colors[i%5]};text-align:center'><h3 style='color:{colors[i%5]};margin:0'>{v['name_ar']}</h3><p style='font-size:0.85em;color:#0F4C5C;font-weight:600;margin:5px 0'>{v['name']}</p><p style='color:#555;font-size:0.85em;margin:0'>{v['desc']}</p></div>"
+
+                # Build products HTML
+                prods_html = ""
+                for p in ci.get('products',[]):
+                    prods_html += f"<div style='background:white;border-radius:10px;padding:18px;border-right:4px solid #E36414'><h4 style='color:#0F4C5C;margin:0 0 5px'>{p['name']}</h4><p style='color:#555;margin:0;font-size:0.9em'>{p['desc']}</p></div>"
+
+                # Build milestones HTML
+                miles_html = ""
+                for m in ci.get('milestones',[]):
+                    miles_html += f"<div style='display:flex;align-items:center;gap:15px;margin:10px 0'><div style='background:#E36414;color:white;padding:8px 16px;border-radius:20px;font-weight:700;min-width:60px;text-align:center'>{m['year']}</div><div style='color:#333'>{m['event']}</div></div>"
+
+                # Build market stats HTML
+                market = ci.get('market',{})
+                market_html = ""
+                for k, v in market.items():
+                    label = k.replace('_',' ').title()
+                    market_html += f"<div style='background:white;border-radius:10px;padding:15px;text-align:center'><div style='font-size:1.3em;font-weight:700;color:#E36414'>{v}</div><div style='color:#888;font-size:0.8em;margin-top:4px'>{label}</div></div>"
+
+                # Build tasks HTML
                 tasks_html = ""
                 for phase, tasks in ONBOARDING_CHECKLIST.items():
-                    tasks_html += f"<h3 style='color:#E36414;margin-top:20px;'>{phase}</h3><ul>"
-                    for t in tasks:
-                        tasks_html += f"<li><strong>{t['task']}</strong> <span style='color:#888;'>({t['owner']})</span></li>"
-                    tasks_html += "</ul>"
+                    tasks_html += f"<h4 style='color:#E36414;margin:15px 0 8px'>{phase}</h4>"
+                    for t in tasks[:4]:
+                        tasks_html += f"<div style='padding:6px 12px;margin:4px 0;background:#f8f9fa;border-radius:6px;font-size:0.9em'>✅ {t['task']} <span style='color:#888'>({t['owner']})</span></div>"
 
-                html_content = f"""<!DOCTYPE html>
+                stats = ci.get('stats',{})
+
+                html = f"""<!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Onboarding - {plan['name']}</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;600;700;800&display=swap');
 *{{margin:0;padding:0;box-sizing:border-box}}
-body{{font-family:'Noto Sans Arabic',sans-serif;background:#f8f9fa;direction:rtl}}
-.hero{{background:linear-gradient(135deg,#0F4C5C,#1A1A2E);color:white;padding:60px 40px;text-align:center}}
-.hero h1{{font-size:2.5em;margin-bottom:10px}}
-.hero .subtitle{{opacity:0.8;font-size:1.1em}}
-.hero .logo{{width:80px;height:80px;background:linear-gradient(135deg,#E36414,#E9C46A);border-radius:16px;display:inline-flex;align-items:center;justify-content:center;font-size:28px;font-weight:800;margin-bottom:20px}}
-.container{{max-width:900px;margin:0 auto;padding:30px 20px}}
-.card{{background:white;border-radius:12px;padding:25px;margin:15px 0;box-shadow:0 2px 8px rgba(0,0,0,0.08)}}
-.card h2{{color:#0F4C5C;margin-bottom:12px;font-size:1.4em}}
-.card p{{color:#555;line-height:1.8}}
-.info-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:15px 0}}
-.info-item{{background:#f0f4f8;padding:12px;border-radius:8px;text-align:center}}
-.info-item .label{{color:#888;font-size:0.85em}}
-.info-item .value{{color:#0F4C5C;font-weight:700;font-size:1.1em;margin-top:4px}}
-.phase{{border-right:4px solid #E36414;padding:15px 20px;margin:10px 0;background:#fff8f3;border-radius:0 8px 8px 0}}
-.btn{{display:inline-block;padding:12px 30px;border-radius:8px;border:none;cursor:pointer;font-size:1em;font-family:inherit;margin:5px}}
-.btn-primary{{background:linear-gradient(135deg,#E36414,#E9C46A);color:white}}
-.btn-secondary{{background:#264653;color:white}}
-.tts-controls{{position:fixed;bottom:20px;left:20px;z-index:999;background:white;padding:12px 20px;border-radius:30px;box-shadow:0 4px 15px rgba(0,0,0,0.15)}}
-.footer{{text-align:center;padding:30px;color:#888;font-size:0.85em;border-top:1px solid #eee;margin-top:40px}}
-ul{{padding-right:20px}} li{{margin:8px 0;color:#444}}
+body{{font-family:'Noto Sans Arabic',sans-serif;background:#0a0a1a;color:white;overflow:hidden;height:100vh}}
+.slide{{display:none;height:100vh;padding:40px 60px;flex-direction:column;justify-content:center;position:relative;overflow:hidden}}
+.slide.active{{display:flex}}
+.slide::before{{content:'';position:absolute;top:0;left:0;right:0;bottom:0;z-index:0}}
+.slide>*{{position:relative;z-index:1}}
+.s-welcome::before{{background:linear-gradient(135deg,#0F4C5C,#1A1A2E)}}
+.s-who::before{{background:linear-gradient(135deg,#1A1A2E,#264653)}}
+.s-vision::before{{background:linear-gradient(135deg,#264653,#0F4C5C)}}
+.s-values::before{{background:linear-gradient(135deg,#f8f9fa,#e9ecef);}} .s-values *{{color:#333}}
+.s-products::before{{background:linear-gradient(135deg,#1A1A2E,#0F4C5C)}}
+.s-milestones::before{{background:linear-gradient(135deg,#0F4C5C,#264653)}}
+.s-market::before{{background:linear-gradient(135deg,#264653,#1A1A2E)}}
+.s-team::before{{background:linear-gradient(135deg,#E36414,#E9C46A);}}
+.s-plan::before{{background:linear-gradient(135deg,#f8f9fa,#e9ecef);}} .s-plan *{{color:#333}}
+.s-policies::before{{background:linear-gradient(135deg,#264653,#0F4C5C)}}
+.s-contact::before{{background:linear-gradient(135deg,#0F4C5C,#1A1A2E)}}
+.logo{{width:70px;height:70px;background:linear-gradient(135deg,#E36414,#E9C46A);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;margin-bottom:20px}}
+h1{{font-size:2.8em;margin-bottom:10px}} h2{{font-size:2em;margin-bottom:15px}} h3{{margin-bottom:8px}}
+.subtitle{{opacity:0.7;font-size:1.1em;margin-bottom:30px}}
+.grid2{{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-top:15px}}
+.grid3{{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:15px}}
+.grid5{{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:15px}}
+.stat{{background:rgba(255,255,255,0.1);border-radius:10px;padding:18px;text-align:center}}
+.stat .num{{font-size:2em;font-weight:800;color:#E9C46A}}
+.stat .lbl{{font-size:0.8em;opacity:0.7;margin-top:4px}}
+.nav{{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:999;background:rgba(0,0,0,0.6);padding:10px 20px;border-radius:30px;backdrop-filter:blur(10px)}}
+.nav button{{background:rgba(255,255,255,0.2);border:none;color:white;padding:8px 16px;border-radius:20px;cursor:pointer;font-family:inherit;font-size:0.9em}}
+.nav button:hover{{background:#E36414}} .nav button.active{{background:#E36414}}
+.nav .speak{{background:#27AE60}}
+.counter{{position:fixed;top:20px;left:20px;background:rgba(0,0,0,0.4);padding:6px 14px;border-radius:20px;font-size:0.8em;z-index:999}}
+.progress{{position:fixed;top:0;left:0;height:4px;background:#E36414;z-index:999;transition:width 0.3s}}
 </style>
 </head>
 <body>
+<div class="progress" id="prog"></div>
+<div class="counter" id="counter"></div>
 
-<div class="hero">
-<div class="logo">HR</div>
-<h1>مرحباً بك في {company_name}</h1>
-<p class="subtitle">{plan['name']} | {plan['title']} | {plan['dept']}</p>
-</div>
+{"<div class='slide s-welcome active' id='s0'><div class='logo'>HR</div><h1>" + ci['name_en'] + "</h1><p class='subtitle'>" + ci['tagline'] + "</p><h2>Welcome, " + plan['name'] + "!</h2><p style=\"font-size:1.2em;opacity:0.9\">" + plan['title'] + " | " + plan['dept'] + "</p><p style=\"margin-top:20px;opacity:0.6\">Starting: " + plan['start_date'] + "</p></div>" if "ترحيب" in slides_sel else ""}
 
-<div class="container">
+{"<div class='slide s-who'><h2>🏢 Who We Are</h2><p style=\"font-size:1.05em;line-height:1.8;max-width:800px\">" + ci.get('who_we_are','')[:500] + "</p><div class='grid2' style='margin-top:25px'><div class='stat'><div class='num'>" + stats.get('brands','1000+') + "</div><div class='lbl'>Brands</div></div><div class='stat'><div class='num'>" + stats.get('clients','1000+') + "</div><div class='lbl'>Clients</div></div><div class='stat'><div class='num'>" + stats.get('users','1.5M+') + "</div><div class='lbl'>Users</div></div><div class='stat'><div class='num'>" + stats.get('growth','100%+') + "</div><div class='lbl'>Growth</div></div></div></div>" if "من نحن" in slides_sel else ""}
 
-{"<div class='card'><h2>👋 رسالة ترحيب</h2><p>" + welcome_msg + "</p></div>" if "رسالة ترحيب" in sections_content else ""}
+{"<div class='slide s-vision'><h2>🎯 Our Purpose, Mission & Vision</h2><div style='margin:20px 0'><div style='background:rgba(255,255,255,0.1);padding:20px;border-radius:12px;margin:12px 0;border-right:4px solid #E9C46A'><h3 style='color:#E9C46A'>Purpose (Why)</h3><p>" + ci.get('purpose','') + "</p></div><div style='background:rgba(255,255,255,0.1);padding:20px;border-radius:12px;margin:12px 0;border-right:4px solid #E36414'><h3 style='color:#E36414'>Mission (What)</h3><p>" + ci.get('mission','') + "</p></div><div style='background:rgba(255,255,255,0.1);padding:20px;border-radius:12px;margin:12px 0;border-right:4px solid #2A9D8F'><h3 style='color:#2A9D8F'>Vision (Where)</h3><p>" + ci.get('vision','') + "</p></div></div></div>" if "رؤيتنا ورسالتنا" in slides_sel else ""}
 
-{"<div class='card'><h2>🏢 عن الشركة</h2><p>" + company_desc + "</p></div>" if "عن الشركة" in sections_content else ""}
+{"<div class='slide s-values'><h2 style='color:#0F4C5C'>💎 Our Values</h2><div class='grid5'>" + vals_html + "</div></div>" if "قيمنا" in slides_sel else ""}
 
-{"<div class='card'><h2>👥 فريقك</h2><div class='info-grid'><div class='info-item'><div class='label'>القسم</div><div class='value'>" + plan['dept'] + "</div></div><div class='info-item'><div class='label'>المدير المباشر</div><div class='value'>" + plan.get('manager','') + "</div></div><div class='info-item'><div class='label'>تاريخ المباشرة</div><div class='value'>" + plan['start_date'] + "</div></div><div class='info-item'><div class='label'>نوع التوظيف</div><div class='value'>" + plan.get('type','دوام كامل') + "</div></div></div></div>" if "فريقك" in sections_content else ""}
+{"<div class='slide s-products'><h2>📦 Our Products</h2><div class='grid2' style='gap:12px'>" + prods_html + "</div></div>" if "منتجاتنا" in slides_sel else ""}
 
-{"<div class='card'><h2>📋 خطة 30/60/90 يوم</h2>" + tasks_html + "</div>" if "خطة 30/60/90" in sections_content else ""}
+{"<div class='slide s-milestones'><h2>🏆 Our Journey</h2><div style='max-width:700px'>" + miles_html + "</div></div>" if "إنجازاتنا" in slides_sel else ""}
 
-{"<div class='card'><h2>📌 سياسات مهمة</h2><ul><li>ساعات العمل: 8:00 ص - 5:00 م (أحد - خميس)</li><li>الإجازات: حسب نظام العمل السعودي (21 يوم سنوياً)</li><li>فترة التجربة: 90 يوم</li><li>التأمين الطبي: يبدأ من اليوم الأول</li></ul></div>" if "سياسات مهمة" in sections_content else ""}
+{"<div class='slide s-market'><h2>📊 Market Opportunity</h2><div class='grid3'>" + market_html + "</div></div>" if "السوق" in slides_sel else ""}
 
-{"<div class='card'><h2>📞 معلومات تواصل</h2><div class='info-grid'><div class='info-item'><div class='label'>الموارد البشرية</div><div class='value'>HR@resal.me</div></div><div class='info-item'><div class='label'>الدعم التقني</div><div class='value'>IT@resal.me</div></div></div></div>" if "معلومات تواصل" in sections_content else ""}
+{"<div class='slide s-team'><h2>👥 Your Team</h2><div class='grid2'><div class='stat'><div class='lbl'>Department</div><div class='num' style='font-size:1.3em'>" + plan['dept'] + "</div></div><div class='stat'><div class='lbl'>Manager</div><div class='num' style='font-size:1.3em'>" + plan.get('manager','') + "</div></div><div class='stat'><div class='lbl'>Start Date</div><div class='num' style='font-size:1.3em'>" + plan['start_date'] + "</div></div><div class='stat'><div class='lbl'>Type</div><div class='num' style='font-size:1.3em'>" + plan.get('type','Full-Time') + "</div></div></div></div>" if "فريقك" in slides_sel else ""}
 
-</div>
+{"<div class='slide s-plan'><h2 style='color:#0F4C5C'>📋 Your 30/60/90 Day Plan</h2><div style='max-height:70vh;overflow-y:auto'>" + tasks_html + "</div></div>" if "خطة 30/60/90" in slides_sel else ""}
 
-<!-- TTS Controls -->
-<div class="tts-controls">
-<button class="btn btn-primary" onclick="speak()">🔊 استمع</button>
-<button class="btn btn-secondary" onclick="stopSpeak()">⏹️ إيقاف</button>
-</div>
+{"<div class='slide s-policies'><h2>📌 Key Policies</h2><div class='grid2'>" + "".join([f"<div class='stat'><div class='lbl'>{k}</div><div style='font-size:1em;margin-top:6px'>{v}</div></div>" for k,v in ci.get('work_policies',{}).items()]) + "</div></div>" if "سياسات" in slides_sel else ""}
 
-<div class="footer">
-<p>تم إنشاؤه بواسطة منصة تحليلات الموارد البشرية | {company_name}</p>
-<p>{datetime.now().strftime('%Y-%m-%d')}</p>
+{"<div class='slide s-contact'><h2>📞 Stay Connected</h2><div class='grid2'>" + "".join([f"<div class='stat'><div class='lbl'>{k}</div><div class='num' style='font-size:1em'>{v}</div></div>" for k,v in ci.get('contacts',{}).items()]) + "</div><p style='margin-top:40px;font-size:1.3em;text-align:center'>Welcome aboard, {plan['name']}! 🎉</p></div>" if "تواصل" in slides_sel else ""}
+
+<div class="nav">
+<button onclick="prev()">◀ السابق</button>
+<button onclick="next()">التالي ▶</button>
+<button class="speak" onclick="speakAll()">🔊 سرد صوتي</button>
+<button onclick="stopSpeak()">⏹</button>
 </div>
 
 <script>
-let utterance;
-function speak() {{
-    stopSpeak();
-    const text = `{welcome_msg}. مرحباً بك في {company_name}. المسمى الوظيفي: {plan['title']}. القسم: {plan['dept']}. المدير المباشر: {plan.get('manager','')}. تاريخ المباشرة: {plan['start_date']}. نتمنى لك التوفيق والنجاح في رحلتك معنا.`;
-    utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = '{voice_lang}';
-    utterance.rate = 0.9;
-    speechSynthesis.speak(utterance);
-}}
-function stopSpeak() {{
-    speechSynthesis.cancel();
-}}
+const slides=document.querySelectorAll('.slide');
+let cur=0;
+function show(n){{cur=Math.max(0,Math.min(n,slides.length-1));slides.forEach((s,i)=>s.classList.toggle('active',i===cur));document.getElementById('counter').textContent=(cur+1)+'/'+slides.length;document.getElementById('prog').style.width=((cur+1)/slides.length*100)+'%';}}
+function next(){{show(cur+1)}} function prev(){{show(cur-1)}}
+document.addEventListener('keydown',e=>{{if(e.key==='ArrowRight'||e.key===' ')next();if(e.key==='ArrowLeft')prev();}});
+show(0);
+const narration=`{full_narration}`;
+let utt;
+function speakAll(){{stopSpeak();utt=new SpeechSynthesisUtterance(narration);utt.lang='{voice_lang}';utt.rate=0.85;speechSynthesis.speak(utt);}}
+function stopSpeak(){{speechSynthesis.cancel()}}
 </script>
 </body></html>"""
 
-                st.components.v1.html(html_content, height=800, scrolling=True)
+                st.components.v1.html(html, height=650, scrolling=False)
+                st.caption("⬅️ ➡️ استخدم الأسهم أو الأزرار للتنقل بين الشرائح | 🔊 اضغط 'سرد صوتي' للاستماع")
 
-                # Download buttons
                 dc1, dc2 = st.columns(2)
                 with dc1:
-                    st.download_button("📥 تحميل HTML", data=html_content.encode('utf-8'),
-                        file_name=f"Onboarding_{plan['name']}_{plan['start_date']}.html",
+                    st.download_button("📥 تحميل العرض HTML", data=html.encode('utf-8'),
+                        file_name=f"Onboarding_Presentation_{plan['name']}.html",
                         mime="text/html", use_container_width=True)
                 with dc2:
                     if plan.get('email'):
                         if st.button("📧 إرسال للموظف", use_container_width=True, key="ob_send"):
                             ok, msg = send_test_email(plan['email'], plan['name'],
-                                [f"صفحة Onboarding الخاصة بك جاهزة", f"المسمى: {plan['title']}", f"البدء: {plan['start_date']}"],
-                                plan['start_date'], company_name)
+                                [f"عرض Onboarding التقديمي جاهز لك", f"المسمى: {plan['title']}", f"البدء: {plan['start_date']}"],
+                                plan['start_date'], ci['name'])
                             if ok: st.success(f"📧 تم الإرسال إلى {plan['email']}")
                             else: st.warning(f"⚠️ {msg}")
+
+        elif page == "🏢 معلومات الشركة":
+            hdr("🏢 إدارة معلومات الشركة","تحديث المعلومات التي تظهر في عرض Onboarding")
+
+            if st.session_state.get('user_role') != "مدير":
+                st.warning("⚠️ تعديل معلومات الشركة متاح للمدير فقط")
+                # Show read-only
+                ci = st.session_state.company_info
+                st.markdown(f"### {ci['name']} ({ci['name_en']})")
+                st.markdown(f"**الرؤية:** {ci['vision']}")
+                st.markdown(f"**الرسالة:** {ci['mission']}")
+                return
+
+            ci = st.session_state.company_info
+
+            with st.expander("🏢 المعلومات الأساسية", expanded=True):
+                ci['name'] = st.text_input("اسم الشركة (عربي):", value=ci.get('name',''), key="ci_name")
+                ci['name_en'] = st.text_input("اسم الشركة (English):", value=ci.get('name_en',''), key="ci_name_en")
+                ci['tagline'] = st.text_input("الشعار:", value=ci.get('tagline',''), key="ci_tag")
+
+            with st.expander("📝 من نحن"):
+                ci['who_we_are'] = st.text_area("نبذة عن الشركة:", value=ci.get('who_we_are',''), height=200, key="ci_who")
+
+            with st.expander("🎯 الغرض والرؤية والرسالة"):
+                ci['purpose'] = st.text_area("Purpose (Why):", value=ci.get('purpose',''), key="ci_purpose")
+                ci['mission'] = st.text_area("Mission (What):", value=ci.get('mission',''), key="ci_mission")
+                ci['vision'] = st.text_area("Vision (Where):", value=ci.get('vision',''), key="ci_vision")
+
+            with st.expander("💎 القيم"):
+                for i, v in enumerate(ci.get('values',[])):
+                    vc1, vc2, vc3 = st.columns([1,1,2])
+                    with vc1: ci['values'][i]['name'] = st.text_input(f"القيمة {i+1} EN:", value=v['name'], key=f"cv_en_{i}")
+                    with vc2: ci['values'][i]['name_ar'] = st.text_input(f"القيمة {i+1} AR:", value=v['name_ar'], key=f"cv_ar_{i}")
+                    with vc3: ci['values'][i]['desc'] = st.text_input(f"الوصف:", value=v['desc'], key=f"cv_d_{i}")
+
+            with st.expander("📦 المنتجات"):
+                for i, p in enumerate(ci.get('products',[])):
+                    pc1, pc2 = st.columns([1,2])
+                    with pc1: ci['products'][i]['name'] = st.text_input(f"المنتج {i+1}:", value=p['name'], key=f"cp_n_{i}")
+                    with pc2: ci['products'][i]['desc'] = st.text_input(f"الوصف:", value=p['desc'], key=f"cp_d_{i}")
+
+            with st.expander("📊 إحصائيات"):
+                sc1, sc2, sc3, sc4 = st.columns(4)
+                with sc1: ci['stats']['brands'] = st.text_input("Brands:", value=ci.get('stats',{}).get('brands',''), key="cs_b")
+                with sc2: ci['stats']['clients'] = st.text_input("Clients:", value=ci.get('stats',{}).get('clients',''), key="cs_c")
+                with sc3: ci['stats']['users'] = st.text_input("Users:", value=ci.get('stats',{}).get('users',''), key="cs_u")
+                with sc4: ci['stats']['growth'] = st.text_input("Growth:", value=ci.get('stats',{}).get('growth',''), key="cs_g")
+
+            with st.expander("📞 التواصل والسياسات"):
+                cc1, cc2, cc3 = st.columns(3)
+                with cc1: ci['contacts']['hr_email'] = st.text_input("HR Email:", value=ci.get('contacts',{}).get('hr_email',''), key="cc_hr")
+                with cc2: ci['contacts']['it_email'] = st.text_input("IT Email:", value=ci.get('contacts',{}).get('it_email',''), key="cc_it")
+                with cc3: ci['contacts']['website'] = st.text_input("Website:", value=ci.get('contacts',{}).get('website',''), key="cc_web")
+
+            if st.button("💾 حفظ معلومات الشركة", type="primary", use_container_width=True, key="ci_save"):
+                st.session_state.company_info = ci
+                try:
+                    conn = get_conn()
+                    c = conn.cursor()
+                    _upsert_config(c, "company_info", json.dumps(ci, ensure_ascii=False))
+                    conn.commit()
+                    conn.close()
+                    st.success("✅ تم حفظ معلومات الشركة في قاعدة البيانات")
+                except Exception as e:
+                    st.warning(f"⚠️ تم الحفظ محلياً فقط: {e}")
 
         elif page == "📥 تصدير Onboarding":
             hdr("📥 تصدير تقارير Onboarding")
