@@ -1764,7 +1764,7 @@ def main():
         elif section == "🚀 Onboarding":
             page = st.radio("📌", ["🚀 إنشاء Onboarding","📋 خطة 30/60/90","👥 متابعة الموظفين الجدد","📊 تحليلات Onboarding","🎬 عرض تقديمي AI","🏢 معلومات الشركة","📥 تصدير Onboarding"], label_visibility="collapsed")
         elif section == "📜 العقود":
-            page = st.radio("📌", ["📜 إنشاء عقد","📋 العقود المحفوظة","📥 تصدير العقود"], label_visibility="collapsed")
+            page = st.radio("📌", ["📜 إنشاء عقد","🔍 تحليل العقود","📋 العقود المحفوظة","📥 تصدير العقود"], label_visibility="collapsed")
         elif section == "🔍 التحليل العام":
             page = st.radio("📌", ["📊 تحليل تلقائي","🤖 أسئلة ذكية"], label_visibility="collapsed")
         elif section == "📝 الاستبيانات":
@@ -5177,6 +5177,230 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                         st.success(f"✅ تم إنشاء {contract_type} لـ {ct_name}")
                     except Exception as e:
                         st.error(f"خطأ: {e}")
+
+        elif page == "🔍 تحليل العقود":
+            hdr("🔍 تحليل العقود","ارفع عقد (Word أو PDF) لتحليله واستخراج البيانات والبنود")
+
+            ana_file = st.file_uploader("📁 ارفع عقد للتحليل:", type=["docx","pdf","txt"], key="ct_ana_file")
+
+            if ana_file:
+                contract_text = ""
+                file_type = ana_file.name.split('.')[-1].lower()
+
+                # Extract text
+                if file_type == "docx":
+                    try:
+                        from docx import Document as DocxDoc
+                        doc = DocxDoc(io.BytesIO(ana_file.getvalue()))
+                        contract_text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
+                    except Exception as e:
+                        st.error(f"خطأ في قراءة الملف: {e}")
+                elif file_type == "pdf":
+                    try:
+                        from fpdf import FPDF
+                        # Try pdfplumber or basic extraction
+                        try:
+                            import pdfplumber
+                            with pdfplumber.open(io.BytesIO(ana_file.getvalue())) as pdf_reader:
+                                for pg in pdf_reader.pages:
+                                    txt = pg.extract_text()
+                                    if txt: contract_text += txt + "\n"
+                        except ImportError:
+                            st.warning("جاري القراءة بطريقة بديلة...")
+                            contract_text = ana_file.getvalue().decode('utf-8', errors='ignore')
+                    except: pass
+                elif file_type == "txt":
+                    contract_text = ana_file.getvalue().decode('utf-8', errors='ignore')
+
+                if not contract_text.strip():
+                    st.warning("⚠️ لم يتم استخراج نص من الملف. جرب ملف Word أو PDF نصي.")
+                    return
+
+                st.success(f"✅ تم استخراج {len(contract_text)} حرف من الملف")
+
+                # ===== Auto Analysis =====
+                st.markdown("---")
+                st.markdown("### 📊 التحليل التلقائي للعقد")
+
+                # 1. Contract type detection
+                ct_type_detected = "غير محدد"
+                if any(w in contract_text for w in ["تدريب","متدرب","برنامج تدريبي"]): ct_type_detected = "عقد تدريب"
+                elif any(w in contract_text for w in ["استشار","خدمات فنية","أتعاب"]): ct_type_detected = "عقد خدمات استشارية"
+                elif any(w in contract_text for w in ["عامل","وظيفة","راتب","بدل سكن"]): ct_type_detected = "عقد عمل"
+                elif any(w in contract_text for w in ["إيجار","تأجير"]): ct_type_detected = "عقد إيجار"
+                elif any(w in contract_text for w in ["بيع","شراء","مبيع"]): ct_type_detected = "عقد بيع"
+
+                # 2. Extract key data
+                import re
+                extracted = {}
+
+                # Names
+                name_patterns = [
+                    r'الاسم[:\s]+([^\n,،]+)',
+                    r'السيد/?\s*([^\n,،]+)',
+                    r'المتدرب[:\s]+([^\n,،]+)',
+                ]
+                for p in name_patterns:
+                    m = re.search(p, contract_text)
+                    if m and len(m.group(1).strip()) > 2:
+                        extracted['الطرف الثاني'] = m.group(1).strip()[:50]
+                        break
+
+                # Dates
+                date_patterns = [
+                    r'(\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{2,4})',
+                    r'(\d{4}[/\-]\d{1,2}[/\-]\d{1,2})',
+                ]
+                dates_found = []
+                for p in date_patterns:
+                    dates_found.extend(re.findall(p, contract_text))
+                if dates_found:
+                    extracted['التواريخ المذكورة'] = ", ".join(dates_found[:5])
+
+                # Amounts
+                amount_patterns = [
+                    r'(\d[\d,\.]+)\s*ريال',
+                    r'مبلغ[اً]?\s*(?:وقدره)?\s*[\(]?(\d[\d,\.]+)',
+                    r'راتب[اً]?\s*(?:أساسي[اً]?)?\s*(?:قدره)?\s*[\(]?(\d[\d,\.]+)',
+                ]
+                amounts = []
+                for p in amount_patterns:
+                    amounts.extend(re.findall(p, contract_text))
+                if amounts:
+                    extracted['المبالغ المذكورة'] = ", ".join([f"{a} ريال" for a in amounts[:6]])
+
+                # Duration
+                dur_patterns = [
+                    r'مدة العقد\s*([^\n\.]+)',
+                    r'لمدة\s*([^\n\.]+)',
+                ]
+                for p in dur_patterns:
+                    m = re.search(p, contract_text)
+                    if m:
+                        extracted['مدة العقد'] = m.group(1).strip()[:50]
+                        break
+
+                # ID numbers
+                id_patterns = [
+                    r'هوية[^\d]*(\d{10})',
+                    r'جواز[^\d]*(\w{1,2}\d{6,10})',
+                    r'إقامة[^\d]*(\d{10})',
+                    r'سجل تجاري[^\d]*(\d{10})',
+                ]
+                ids_found = []
+                for p in id_patterns:
+                    ids_found.extend(re.findall(p, contract_text))
+                if ids_found:
+                    extracted['أرقام الهوية/السجلات'] = ", ".join(ids_found[:3])
+
+                # 3. Clause analysis
+                clauses_keywords = {
+                    "السرية": ["سري","سرية","إفشاء","أسرار"],
+                    "فترة التجربة": ["تجربة","فترة التجربة"],
+                    "إنهاء العقد": ["إنهاء","فسخ","إلغاء","انتهاء"],
+                    "التعويض": ["تعويض","غرامة","جزائي"],
+                    "المنافسة": ["منافس","لا يعمل لدى","عدم المنافسة"],
+                    "الإجازات": ["إجازة","إجازات","سنوية"],
+                    "ساعات العمل": ["ساعات العمل","ساعات التدريب","دوام"],
+                    "التأمين الطبي": ["تأمين","طبي","صحي"],
+                    "التأمينات الاجتماعية": ["تأمينات","اجتماعية","GOSI"],
+                    "مكافأة نهاية الخدمة": ["نهاية الخدمة","مكافأة","المادة 84","المادة 85"],
+                    "حقوق الملكية الفكرية": ["ملكية فكرية","براءة","اختراع","حقوق"],
+                    "القانون الحاكم": ["نظام العمل","محكمة","قضائي","مختصة"],
+                    "البدلات": ["بدل سكن","بدل مواصلات","بدلات","علاوة"],
+                }
+
+                found_clauses = {}
+                missing_clauses = []
+                for clause_name, keywords in clauses_keywords.items():
+                    found = any(kw in contract_text for kw in keywords)
+                    if found:
+                        found_clauses[clause_name] = "✅ موجود"
+                    else:
+                        found_clauses[clause_name] = "❌ غير موجود"
+                        missing_clauses.append(clause_name)
+
+                # Display results
+                k1,k2,k3,k4 = st.columns(4)
+                with k1: kpi("📄 نوع العقد", ct_type_detected)
+                with k2: kpi("📝 عدد الأحرف", f"{len(contract_text):,}")
+                with k3: kpi("✅ بنود موجودة", str(len(found_clauses) - len(missing_clauses)))
+                with k4: kpi("⚠️ بنود ناقصة", str(len(missing_clauses)))
+
+                # Extracted data
+                if extracted:
+                    st.markdown("### 📋 البيانات المستخرجة")
+                    for k, v in extracted.items():
+                        st.markdown(f"**{k}:** {v}")
+
+                # Clauses table
+                st.markdown("### 📊 تحليل البنود والشروط")
+                clause_df = pd.DataFrame([{"البند":k, "الحالة":v} for k,v in found_clauses.items()])
+                st.dataframe(clause_df, use_container_width=True, hide_index=True)
+
+                # Warnings
+                if missing_clauses:
+                    st.markdown("### ⚠️ بنود مفقودة (يُنصح بإضافتها)")
+                    for mc in missing_clauses:
+                        st.warning(f"⚠️ **{mc}** غير موجود في العقد")
+
+                # Compliance check
+                st.markdown("### ✅ فحص التوافق مع نظام العمل السعودي")
+                compliance = []
+                if "فترة التجربة" in [k for k,v in found_clauses.items() if "✅" in v]:
+                    compliance.append({"البند":"فترة التجربة","التوافق":"✅ متوافق","الملاحظة":"مذكورة في العقد"})
+                else:
+                    compliance.append({"البند":"فترة التجربة","التوافق":"⚠️ غير مذكورة","الملاحظة":"يجب تحديدها وفق المادة 53"})
+
+                if any(kw in contract_text for kw in ["نهاية الخدمة","المادة 84"]):
+                    compliance.append({"البند":"مكافأة نهاية الخدمة","التوافق":"✅ متوافق","الملاحظة":"مذكورة وفق المادة 84-85"})
+                else:
+                    compliance.append({"البند":"مكافأة نهاية الخدمة","التوافق":"⚠️ غير مذكورة","الملاحظة":"يجب الإشارة للمادة 84-85"})
+
+                if any(kw in contract_text for kw in ["إجازة سنوية","21 يوم","22 يوم","30 يوم"]):
+                    compliance.append({"البند":"الإجازة السنوية","التوافق":"✅ متوافق","الملاحظة":"مذكورة في العقد"})
+                else:
+                    compliance.append({"البند":"الإجازة السنوية","التوافق":"⚠️ غير مذكورة","الملاحظة":"21 يوم كحد أدنى وفق المادة 109"})
+
+                if any(kw in contract_text for kw in ["48 ساعة","ثمان ساعات","8 ساعات"]):
+                    compliance.append({"البند":"ساعات العمل","التوافق":"✅ متوافق","الملاحظة":"48 ساعة أسبوعياً كحد أقصى"})
+                else:
+                    compliance.append({"البند":"ساعات العمل","التوافق":"⚠️ غير محددة","الملاحظة":"يجب ألا تتجاوز 48 ساعة وفق المادة 98"})
+
+                if any(kw in contract_text for kw in ["سري","إفشاء"]):
+                    compliance.append({"البند":"السرية","التوافق":"✅ متوافق","الملاحظة":"بند السرية موجود"})
+                else:
+                    compliance.append({"البند":"السرية","التوافق":"⚠️ غير موجود","الملاحظة":"يُنصح بإضافة بند السرية"})
+
+                st.dataframe(pd.DataFrame(compliance), use_container_width=True, hide_index=True)
+
+                # Risk score
+                total_checks = len(compliance)
+                passed = sum(1 for c in compliance if "✅" in c['التوافق'])
+                risk_score = round(passed / max(total_checks,1) * 100)
+
+                st.markdown("### 🎯 تقييم المخاطر")
+                if risk_score >= 80:
+                    ibox(f"درجة التوافق: **{risk_score}%** - العقد متوافق بشكل جيد ✅", "success")
+                elif risk_score >= 60:
+                    ibox(f"درجة التوافق: **{risk_score}%** - يحتاج تحسينات ⚠️", "warning")
+                else:
+                    ibox(f"درجة التوافق: **{risk_score}%** - يحتاج مراجعة شاملة 🔴", "warning")
+
+                # Full text preview
+                with st.expander("📄 عرض النص الكامل للعقد"):
+                    st.text_area("", value=contract_text, height=400, disabled=True)
+
+                # Export analysis
+                if st.button("📥 تصدير التحليل Excel", key="ct_ana_exp"):
+                    ox = io.BytesIO()
+                    with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
+                        pd.DataFrame([{"المفتاح":k,"القيمة":v} for k,v in extracted.items()]).to_excel(w, sheet_name='البيانات المستخرجة', index=False)
+                        clause_df.to_excel(w, sheet_name='تحليل البنود', index=False)
+                        pd.DataFrame(compliance).to_excel(w, sheet_name='فحص التوافق', index=False)
+                    st.download_button("📥 تحميل", data=ox.getvalue(),
+                        file_name=f"Contract_Analysis_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
         elif page == "📋 العقود المحفوظة":
             hdr("📋 العقود المحفوظة","عرض جميع العقود المنشأة")
