@@ -1029,16 +1029,63 @@ def init_users():
             st.session_state.users_db = DEFAULT_USERS.copy()
             db_save_users(DEFAULT_USERS)
 
+def _save_login_token(username):
+    """Save login token to database for session persistence"""
+    try:
+        import hashlib
+        token = hashlib.sha256(f"{username}_{datetime.now().strftime('%Y%m%d')}".encode()).hexdigest()[:32]
+        conn = get_conn()
+        c = conn.cursor()
+        p = _ph()
+        _upsert_config(c, f"login_token_{token}", json.dumps({"user": username, "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}))
+        conn.commit()
+        conn.close()
+        st.session_state['_login_token'] = token
+    except: pass
+
+def _restore_login():
+    """Try to restore login session from token"""
+    try:
+        token = st.session_state.get('_login_token')
+        if not token: return False
+        conn = get_conn()
+        c = conn.cursor()
+        p = _ph()
+        c.execute(f"SELECT value FROM app_config WHERE key = {p}", (f"login_token_{token}",))
+        row = c.fetchone()
+        conn.close()
+        if row:
+            data = json.loads(row[0])
+            username = data.get("user")
+            init_users()
+            users = st.session_state.users_db
+            if username in users:
+                st.session_state.logged_in = True
+                st.session_state.current_user = username
+                st.session_state.user_role = users[username]["role"]
+                st.session_state.user_name = users[username]["name"]
+                st.session_state.user_sections = users[username]["sections"]
+                st.session_state.user_email = users[username].get("email", "")
+                st.session_state.user_dept = users[username].get("dept", "")
+                return True
+    except: pass
+    return False
+
 def login_page():
     st.markdown("<div style='text-align:center;padding:40px 0;'><div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:80px;height:80px;border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:32px;font-weight:800;color:white;'>HR</div><h1 style='color:#0F4C5C;'>منصة تحليلات الموارد البشرية</h1><p style='color:#64748B;'>رسال الود لتقنية المعلومات</p></div>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
         st.markdown("### 🔐 تسجيل الدخول")
-        username = st.text_input("اسم المستخدم:", key="login_user")
-        password = st.text_input("كلمة المرور:", type="password", key="login_pass")
-        lc1, lc2 = st.columns(2)
-        with lc1:
-            if st.button("🔓 دخول", type="primary", use_container_width=True):
+        with st.form("login_form", clear_on_submit=False):
+            username = st.text_input("اسم المستخدم:", key="login_user")
+            password = st.text_input("كلمة المرور:", type="password", key="login_pass")
+            lc1, lc2 = st.columns(2)
+            with lc1:
+                login_btn = st.form_submit_button("🔓 دخول", type="primary", use_container_width=True)
+            with lc2:
+                guest_btn = st.form_submit_button("👤 دخول بدون حساب", use_container_width=True)
+
+            if login_btn:
                 init_users()
                 users = st.session_state.users_db
                 if username in users and users[username]["password"] == hash_pw(password):
@@ -1049,11 +1096,13 @@ def login_page():
                     st.session_state.user_sections = users[username]["sections"]
                     st.session_state.user_email = users[username].get("email", "")
                     st.session_state.user_dept = users[username].get("dept", "")
+                    # Persist login token to survive reruns
+                    _save_login_token(username)
                     st.rerun()
                 else:
                     st.error("❌ اسم المستخدم أو كلمة المرور غير صحيحة")
-        with lc2:
-            if st.button("👤 دخول بدون حساب", use_container_width=True):
+
+            if guest_btn:
                 st.session_state.logged_in = True
                 st.session_state.current_user = "guest"
                 st.session_state.user_role = "عارض"
@@ -1598,13 +1647,15 @@ DISC_STYLES = {
 
 # ===== MAIN APP =====
 def main():
-    # Auth check
+    # Auth check with session persistence
     if 'logged_in' not in st.session_state:
         st.session_state.logged_in = False
 
+    # Try restoring login if not logged in
     if not st.session_state.logged_in:
-        login_page()
-        return
+        if not _restore_login():
+            login_page()
+            return
 
     init_users()
 
@@ -1648,7 +1699,17 @@ def main():
         # Logout button
         st.markdown("---")
         if st.button("🚪 تسجيل الخروج", use_container_width=True):
-            for key in ['logged_in','current_user','user_role','user_name','user_sections']:
+            # Clear login token
+            token = st.session_state.get('_login_token')
+            if token:
+                try:
+                    conn = get_conn()
+                    c = conn.cursor()
+                    c.execute(f"DELETE FROM app_config WHERE key = {_ph()}", (f"login_token_{token}",))
+                    conn.commit()
+                    conn.close()
+                except: pass
+            for key in ['logged_in','current_user','user_role','user_name','user_sections','_login_token']:
                 st.session_state.pop(key, None)
             st.rerun()
 
@@ -1656,16 +1717,57 @@ def main():
         st.markdown("##### 📁 ملف البيانات")
         file = st.file_uploader("ارفع Excel", type=["xlsx","xls","csv"], label_visibility="collapsed", key="main_uploader")
         if file:
-            # Store file bytes in session_state immediately
+            # Store file bytes in session_state + save to DB for persistence
+            file_bytes_val = file.getvalue()
             st.session_state['uploaded_file_name'] = file.name
-            st.session_state['uploaded_file_bytes'] = file.getvalue()
+            st.session_state['uploaded_file_bytes'] = file_bytes_val
+            # Save to cloud DB for cross-device persistence
+            try:
+                import base64
+                if len(file_bytes_val) < 4_000_000:  # Only save files under 4MB to DB
+                    encoded = base64.b64encode(file_bytes_val).decode('ascii')
+                    conn = get_conn()
+                    c = conn.cursor()
+                    _upsert_config(c, "last_uploaded_file", json.dumps({"name": file.name, "size": len(file_bytes_val)}))
+                    _upsert_config(c, "last_uploaded_data", encoded)
+                    conn.commit()
+                    conn.close()
+            except: pass
             st.success(f"✅ {file.name}")
         elif 'uploaded_file_name' in st.session_state:
             st.info(f"📂 {st.session_state['uploaded_file_name']}")
             if st.button("🗑️ إزالة الملف", use_container_width=True):
                 for k in ['uploaded_file_name','uploaded_file_bytes','_parsed_cache_key','_parsed_emp','_parsed_sal','_parsed_sheets']:
                     st.session_state.pop(k, None)
+                # Also clear from DB
+                try:
+                    conn = get_conn()
+                    c = conn.cursor()
+                    c.execute(f"DELETE FROM app_config WHERE key IN ({_ph()},{_ph()})", ("last_uploaded_file","last_uploaded_data"))
+                    conn.commit()
+                    conn.close()
+                except: pass
                 st.rerun()
+        else:
+            # Try restoring file from cloud DB
+            try:
+                import base64
+                conn = get_conn()
+                c = conn.cursor()
+                c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("last_uploaded_file",))
+                meta_row = c.fetchone()
+                if meta_row:
+                    meta = json.loads(meta_row[0])
+                    c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("last_uploaded_data",))
+                    data_row = c.fetchone()
+                    conn.close()
+                    if data_row:
+                        st.session_state['uploaded_file_name'] = meta['name']
+                        st.session_state['uploaded_file_bytes'] = base64.b64decode(data_row[0])
+                        st.info(f"📂 {meta['name']} (مسترجع من السحابة)")
+                else:
+                    conn.close()
+            except: pass
 
 
     # ===== LOAD DATA =====
