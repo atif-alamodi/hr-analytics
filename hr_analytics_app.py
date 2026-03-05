@@ -278,11 +278,62 @@ def db_load_users():
     except: pass
     return None
 
-def generate_employee_pdf(result):
-    """Generate PDF report for a single employee test"""
+def _get_arabic_font_path():
+    """Find an Arabic-supporting TTF font on the system"""
+    candidates = [
+        "/usr/share/fonts/truetype/freefont/FreeSerif.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf",
+    ]
+    for p in candidates:
+        if os.path.exists(p): return p
+    return None
+
+def _reshape_arabic(text):
+    """Reshape Arabic text for proper PDF rendering"""
     try:
-        from fpdf import FPDF
-        pdf = FPDF()
+        import arabic_reshaper
+        from bidi.algorithm import get_display
+        reshaped = arabic_reshaper.reshape(str(text))
+        return get_display(reshaped)
+    except:
+        return str(text)
+
+def _create_pdf_with_arabic():
+    """Create FPDF instance with Arabic font support"""
+    from fpdf import FPDF
+    pdf = FPDF()
+    font_path = _get_arabic_font_path()
+    if font_path:
+        pdf.add_font("ArFont", "", font_path, uni=True)
+        pdf.add_font("ArFont", "B", font_path.replace(".ttf", ".ttf"), uni=True)
+        # Also try bold variant
+        bold_path = font_path.replace("FreeSerif", "FreeSerifBold").replace("FreeSans", "FreeSansBold").replace("DejaVuSans", "DejaVuSans-Bold")
+        if os.path.exists(bold_path):
+            pdf.add_font("ArFont", "B", bold_path, uni=True)
+    return pdf, "ArFont" if font_path else "Helvetica"
+
+def _pdf_cell(pdf, font_name, w, h, text, **kwargs):
+    """Write text to PDF cell with Arabic reshaping if needed"""
+    txt = str(text)
+    has_arabic = any('\u0600' <= c <= '\u06FF' or '\uFB50' <= c <= '\uFEFF' for c in txt)
+    if has_arabic and font_name != "Helvetica":
+        txt = _reshape_arabic(txt)
+    pdf.cell(w, h, txt, **kwargs)
+
+def _pdf_mcell(pdf, font_name, w, h, text, **kwargs):
+    """Write multi_cell with Arabic reshaping"""
+    txt = str(text)
+    has_arabic = any('\u0600' <= c <= '\u06FF' or '\uFB50' <= c <= '\uFEFF' for c in txt)
+    if has_arabic and font_name != "Helvetica":
+        txt = _reshape_arabic(txt)
+    pdf.multi_cell(w, h, txt, **kwargs)
+
+def generate_employee_pdf(result):
+    """Generate PDF report for a single employee test - with Arabic support"""
+    try:
+        pdf, fn = _create_pdf_with_arabic()
         pdf.add_page()
         pdf.set_auto_page_break(auto=True, margin=20)
 
@@ -290,107 +341,94 @@ def generate_employee_pdf(result):
         pdf.set_fill_color(15, 76, 92)
         pdf.rect(0, 0, 210, 28, 'F')
         pdf.set_text_color(255, 255, 255)
-        pdf.set_font('Helvetica', 'B', 14)
-        pdf.cell(0, 14, 'Personality Assessment Report', align='C', ln=True)
-        pdf.set_font('Helvetica', '', 10)
-        pdf.cell(0, 14, 'Risal Al-Wud IT', align='C', ln=True)
+        pdf.set_font(fn, 'B', 14)
+        _pdf_cell(pdf, fn, 0, 14, 'Personality Assessment Report', align='C', ln=True)
+        pdf.set_font(fn, '', 10)
+        _pdf_cell(pdf, fn, 0, 14, 'Risal Al-Wud IT', align='C', ln=True)
 
         pdf.ln(15)
         pdf.set_text_color(0, 0, 0)
 
         # Employee info
         pdf.set_fill_color(230, 240, 250)
-        pdf.set_font('Helvetica', 'B', 12)
-        pdf.cell(0, 10, '  Employee Information', fill=True, ln=True)
-        pdf.set_font('Helvetica', '', 10)
+        pdf.set_font(fn, 'B', 12)
+        _pdf_cell(pdf, fn, 0, 10, _reshape_arabic('  معلومات الموظف / Employee Information') if fn != 'Helvetica' else '  Employee Information', fill=True, ln=True)
+        pdf.set_font(fn, '', 10)
         pdf.ln(3)
-        pdf.cell(0, 7, f"Name: {result.get('الاسم','')}", ln=True)
-        pdf.cell(0, 7, f"Department: {result.get('القسم','')}", ln=True)
-        pdf.cell(0, 7, f"Test Type: {result.get('type','')}", ln=True)
-        pdf.cell(0, 7, f"Date: {result.get('التاريخ','')}", ln=True)
-        mandatory = "Yes (Mandatory)" if result.get('إجباري') else "Voluntary"
-        pdf.cell(0, 7, f"Status: {mandatory}", ln=True)
+        emp_name = result.get('الاسم','')
+        _pdf_cell(pdf, fn, 0, 7, f"{_reshape_arabic('الاسم') if fn != 'Helvetica' else 'Name'}: {emp_name}", ln=True)
+        _pdf_cell(pdf, fn, 0, 7, f"{_reshape_arabic('القسم') if fn != 'Helvetica' else 'Department'}: {result.get('القسم','')}", ln=True)
+        _pdf_cell(pdf, fn, 0, 7, f"{_reshape_arabic('نوع الاختبار') if fn != 'Helvetica' else 'Test Type'}: {result.get('type','')}", ln=True)
+        _pdf_cell(pdf, fn, 0, 7, f"{_reshape_arabic('التاريخ') if fn != 'Helvetica' else 'Date'}: {result.get('التاريخ','')}", ln=True)
+        mandatory = _reshape_arabic("إجباري") if result.get('إجباري') and fn != 'Helvetica' else ("Mandatory" if result.get('إجباري') else "Voluntary")
+        _pdf_cell(pdf, fn, 0, 7, f"{_reshape_arabic('الحالة') if fn != 'Helvetica' else 'Status'}: {mandatory}", ln=True)
         if result.get('معيّن_بواسطة'):
-            pdf.cell(0, 7, f"Assigned by: {result['معيّن_بواسطة']}", ln=True)
+            _pdf_cell(pdf, fn, 0, 7, f"Assigned by: {result['معيّن_بواسطة']}", ln=True)
         pdf.ln(5)
 
         # Scores
         pdf.set_fill_color(46, 117, 182)
         pdf.set_text_color(255, 255, 255)
-        pdf.set_font('Helvetica', 'B', 12)
-        pdf.cell(0, 10, '  Assessment Results', fill=True, ln=True)
+        pdf.set_font(fn, 'B', 12)
+        _pdf_cell(pdf, fn, 0, 10, _reshape_arabic('  نتائج التقييم / Assessment Results') if fn != 'Helvetica' else '  Assessment Results', fill=True, ln=True)
         pdf.set_text_color(0, 0, 0)
         pdf.ln(3)
 
         # Scores table
-        pdf.set_font('Helvetica', 'B', 9)
+        pdf.set_font(fn, 'B', 9)
         pdf.set_fill_color(230, 240, 250)
-        pdf.cell(60, 8, 'Scale', border=1, fill=True, align='C')
-        pdf.cell(30, 8, 'Score', border=1, fill=True, align='C')
-        pdf.cell(30, 8, 'Level', border=1, fill=True, align='C')
-        pdf.cell(70, 8, 'Description', border=1, fill=True, align='C')
+        _pdf_cell(pdf, fn, 60, 8, 'Scale', border=1, fill=True, align='C')
+        _pdf_cell(pdf, fn, 30, 8, 'Score', border=1, fill=True, align='C')
+        _pdf_cell(pdf, fn, 30, 8, 'Level', border=1, fill=True, align='C')
+        _pdf_cell(pdf, fn, 70, 8, 'Description', border=1, fill=True, align='C')
         pdf.ln()
-        pdf.set_font('Helvetica', '', 8)
+        pdf.set_font(fn, '', 8)
 
         scores = result.get("scores", {})
         test_type = result.get("type", "")
 
         for key, pct in scores.items():
             level = "High" if pct >= 70 else ("Medium" if pct >= 40 else "Low")
-            name = key
-            desc = ""
+            name = key; desc = ""
             if test_type == "Big Five" and key in BIG5_TRAITS:
-                info = BIG5_TRAITS[key]
-                name = f"{info['name']} ({info['en']})"
-                desc = info['high'][:40] if pct >= 60 else info['low'][:40]
+                info = BIG5_TRAITS[key]; name = info['en']; desc = info.get('high','')[:40] if pct >= 60 else info.get('low','')[:40]
             elif test_type == "Thomas PPA" and key in THOMAS_SCALES:
-                info = THOMAS_SCALES[key]
-                name = f"{info['name']} ({info['en']})"
-                desc = info['high'][:40] if pct >= 60 else info['low'][:40]
+                info = THOMAS_SCALES[key]; name = info['en']; desc = info.get('high','')[:40] if pct >= 60 else info.get('low','')[:40]
             elif test_type == "Hogan HPI" and key in HOGAN_SCALES:
-                info = HOGAN_SCALES[key]
-                name = f"{info['name']} ({info['en']})"
-                desc = info['high'][:40] if pct >= 60 else info['low'][:40]
+                info = HOGAN_SCALES[key]; name = info['en']; desc = info.get('impact','')[:40]
             elif test_type == "DISC" and key in DISC_STYLES:
-                info = DISC_STYLES[key]
-                name = f"{info['name']} ({info['en']})"
-                desc = info['high'][:40] if pct >= 60 else info['low'][:40]
+                info = DISC_STYLES[key]; name = info['en']; desc = info.get('high','')[:40] if pct >= 60 else info.get('low','')[:40]
 
-            pdf.cell(60, 7, name[:30], border=1)
-            pdf.cell(30, 7, f"{pct}%", border=1, align='C')
-            pdf.cell(30, 7, level, border=1, align='C')
-            pdf.cell(70, 7, desc, border=1)
+            _pdf_cell(pdf, fn, 60, 7, name[:30], border=1)
+            _pdf_cell(pdf, fn, 30, 7, f"{pct}%", border=1, align='C')
+            _pdf_cell(pdf, fn, 30, 7, level, border=1, align='C')
+            _pdf_cell(pdf, fn, 70, 7, desc, border=1)
             pdf.ln()
 
         # MBTI type
         if result.get("mbti_type"):
             pdf.ln(5)
-            t = result["mbti_type"]
-            ti = MBTI_TYPES.get(t, {})
-            pdf.set_font('Helvetica', 'B', 11)
-            pdf.cell(0, 8, f"MBTI Type: {t} - {ti.get('name','')}", ln=True)
-            pdf.set_font('Helvetica', '', 9)
-            pdf.cell(0, 7, f"Description: {ti.get('desc','')}", ln=True)
-            pdf.cell(0, 7, f"Strengths: {ti.get('strengths','')}", ln=True)
-            pdf.cell(0, 7, f"Career Paths: {ti.get('careers','')}", ln=True)
+            t = result["mbti_type"]; ti = MBTI_TYPES.get(t, {})
+            pdf.set_font(fn, 'B', 11)
+            _pdf_cell(pdf, fn, 0, 8, f"MBTI Type: {t} - {ti.get('name','')}", ln=True)
+            pdf.set_font(fn, '', 9)
+            _pdf_cell(pdf, fn, 0, 7, f"Strengths: {ti.get('strengths','')}", ln=True)
+            _pdf_cell(pdf, fn, 0, 7, f"Careers: {ti.get('careers','')}", ln=True)
 
-        # Dominant style
         if result.get("dominant"):
             pdf.ln(5)
-            pdf.set_font('Helvetica', 'B', 11)
-            dom = result["dominant"]
-            sec = result.get("secondary", "")
-            pdf.cell(0, 8, f"Dominant Style: {dom}  |  Secondary: {sec}", ln=True)
+            pdf.set_font(fn, 'B', 11)
+            _pdf_cell(pdf, fn, 0, 8, f"Dominant: {result['dominant']}  |  Secondary: {result.get('secondary','')}", ln=True)
 
         # Footer
         pdf.ln(10)
         pdf.set_draw_color(200, 200, 200)
         pdf.line(10, pdf.get_y(), 200, pdf.get_y())
         pdf.ln(3)
-        pdf.set_font('Helvetica', '', 7)
+        pdf.set_font(fn, '', 7)
         pdf.set_text_color(128, 128, 128)
-        pdf.cell(0, 5, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')} | HR Analytics Platform - Risal Al-Wud IT", align='C', ln=True)
-        pdf.cell(0, 5, "CONFIDENTIAL - For authorized use only", align='C')
+        _pdf_cell(pdf, fn, 0, 5, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')} | HR Analytics - Risal Al-Wud IT", align='C', ln=True)
+        _pdf_cell(pdf, fn, 0, 5, "CONFIDENTIAL - For authorized use only", align='C')
 
         return bytes(pdf.output())
     except Exception as e:
@@ -3076,28 +3114,93 @@ def main():
             st.session_state.budget_data = DEFAULT_BUDGET.copy()
 
         if page == "📚 ميزانية التدريب":
-            hdr("📚 ميزانية التدريب","خطة توزيع ميزانية التدريب السنوية")
+            hdr("📚 ميزانية التدريب","خطة توزيع ميزانية التدريب السنوية - قابلة للتخصيص بالكامل")
             c1,c2 = st.columns(2)
-            with c1: total_budget = st.number_input("💰 إجمالي الميزانية (ريال)", 10000, 5000000, 70000, 5000)
-            with c2: fy = st.selectbox("📅 السنة", [2025,2026,2027], index=1)
+            with c1: total_budget = st.number_input("💰 إجمالي الميزانية (ريال)", 10000, 5000000, 70000, 5000, key="trn_bgt")
+            with c2: fy = st.selectbox("📅 السنة", [2025,2026,2027], index=1, key="trn_yr")
 
-            budget_df = pd.DataFrame(st.session_state.budget_data)
+            # Editable budget allocation
+            st.markdown("### ✏️ تخصيص الميزانية والأولويات")
+            st.caption("عدّل الأولوية والنسبة والعدد لكل قسم مباشرة")
+
+            if 'custom_budget' not in st.session_state:
+                st.session_state.custom_budget = [dict(d) for d in DEFAULT_BUDGET]
+
+            priorities = ["حرج","عالي","متوسط","أساسي"]
+            categories = ["محرك إيرادات","ممكّن نمو","بنية تحتية"]
+            updated = False
+
+            for i, dept_data in enumerate(st.session_state.custom_budget):
+                with st.expander(f"📌 {dept_data['dept']} | {dept_data['budget']:,} ريال | {dept_data['priority']}", expanded=False):
+                    ec1, ec2, ec3, ec4 = st.columns(4)
+                    with ec1:
+                        new_pct = st.number_input("النسبة %", 0.0, 100.0, float(dept_data['pct']), 0.5, key=f"bpct_{i}")
+                        if new_pct != dept_data['pct']:
+                            st.session_state.custom_budget[i]['pct'] = new_pct
+                            updated = True
+                    with ec2:
+                        new_pri = st.selectbox("الأولوية", priorities, index=priorities.index(dept_data['priority']) if dept_data['priority'] in priorities else 0, key=f"bpri_{i}")
+                        if new_pri != dept_data['priority']:
+                            st.session_state.custom_budget[i]['priority'] = new_pri
+                            updated = True
+                    with ec3:
+                        new_cat = st.selectbox("التصنيف", categories, index=categories.index(dept_data['cat']) if dept_data['cat'] in categories else 0, key=f"bcat_{i}")
+                        if new_cat != dept_data['cat']:
+                            st.session_state.custom_budget[i]['cat'] = new_cat
+                            updated = True
+                    with ec4:
+                        n_trainees = st.number_input("عدد المتدربين", 0, 200, dept_data.get('trainees', 5), key=f"btrn_{i}")
+                        st.session_state.custom_budget[i]['trainees'] = n_trainees
+
+                    # Trainee names
+                    if n_trainees > 0:
+                        names_str = st.text_area(f"أسماء المتدربين (فاصلة بين كل اسم):",
+                            value=dept_data.get('trainee_names', ''),
+                            placeholder="أحمد محمد, سارة أحمد, خالد علي", key=f"bnames_{i}")
+                        st.session_state.custom_budget[i]['trainee_names'] = names_str
+
+                        # Show per-person budget
+                        dept_budget = int(new_pct / 100 * total_budget)
+                        per_person = dept_budget / max(n_trainees, 1)
+                        st.caption(f"💰 ميزانية القسم: {dept_budget:,} ريال | للفرد: {per_person:,.0f} ريال")
+
+            # Recalculate budgets
+            budget_df = pd.DataFrame(st.session_state.custom_budget)
             budget_df['budget'] = (budget_df['pct']/100*total_budget).astype(int)
+            budget_df['trainees'] = budget_df.get('trainees', 5)
 
-            k1,k2,k3 = st.columns(3)
-            with k1: kpi("الميزانية", f"{total_budget:,}")
-            with k2: kpi("الأقسام", str(len(budget_df)))
+            # Normalize percentages if needed
+            total_pct = budget_df['pct'].sum()
+            if abs(total_pct - 100) > 0.5:
+                st.warning(f"⚠️ مجموع النسب = {total_pct:.1f}% (يجب أن يكون 100%)")
+
+            # KPIs
+            st.markdown("---")
+            k1,k2,k3,k4,k5 = st.columns(5)
+            with k1: kpi("💰 الميزانية", f"{total_budget:,}")
+            with k2: kpi("📌 الأقسام", str(len(budget_df)))
             with k3:
                 rev = budget_df[budget_df['cat']=='محرك إيرادات']['budget'].sum()
-                kpi("محركات الإيرادات", f"{round(rev/total_budget*100)}%")
+                kpi("محركات الإيرادات", f"{round(rev/max(total_budget,1)*100)}%")
+            with k4:
+                total_trainees = budget_df['trainees'].sum() if 'trainees' in budget_df.columns else 0
+                kpi("👥 المتدربين", str(total_trainees))
+            with k5:
+                avg_per_person = total_budget / max(total_trainees, 1)
+                kpi("💵 للفرد", f"{avg_per_person:,.0f}")
 
-            edit_df = budget_df[['dept','budget','pct','priority','cat']].copy()
-            edit_df.columns = ['القسم','الميزانية','النسبة %','الأولوية','التصنيف']
-            st.dataframe(edit_df, use_container_width=True, hide_index=True)
+            # Display table
+            show_df = budget_df[['dept','budget','pct','priority','cat']].copy()
+            if 'trainees' in budget_df.columns:
+                show_df['trainees'] = budget_df['trainees']
+                show_df['per_person'] = (budget_df['budget'] / budget_df['trainees'].clip(lower=1)).astype(int)
+            show_df.columns = ['القسم','الميزانية','النسبة %','الأولوية','التصنيف'] + (['المتدربين','للفرد'] if 'trainees' in budget_df.columns else [])
+            st.dataframe(show_df, use_container_width=True, hide_index=True)
 
+            # Charts
             c1,c2 = st.columns(2)
             with c1:
-                fig = px.pie(budget_df, values='budget', names='dept', title='توزيع الميزانية', hole=.35, color_discrete_sequence=CL['dept'])
+                fig = px.pie(budget_df, values='budget', names='dept', title='توزيع الميزانية حسب القسم', hole=.35, color_discrete_sequence=CL['dept'])
                 fig.update_layout(font=dict(family="Noto Sans Arabic"),height=380); st.plotly_chart(fig,use_container_width=True)
             with c2:
                 cat_df = budget_df.groupby('cat')['budget'].sum().reset_index()
@@ -3105,6 +3208,7 @@ def main():
                     color_discrete_map={'محرك إيرادات':CL['p'],'ممكّن نمو':CL['a'],'بنية تحتية':'#64748B'})
                 fig.update_layout(font=dict(family="Noto Sans Arabic"),height=380); st.plotly_chart(fig,use_container_width=True)
 
+            # Quarterly plan
             st.markdown("### 📅 الخطة ربع السنوية")
             q_data = []
             for _, r in budget_df.iterrows():
@@ -3117,6 +3221,19 @@ def main():
             for c in ['Q1','Q2','Q3','Q4','الإجمالي']: totals[c] = q_df[c].sum()
             q_df = pd.concat([q_df, pd.DataFrame([totals])], ignore_index=True)
             st.dataframe(q_df, use_container_width=True, hide_index=True)
+
+            # Detailed programs per department
+            st.markdown("### 📋 البرامج التدريبية المفصلة")
+            for dept_name, programs in TRAINING_PROGRAMS.items():
+                with st.expander(f"📌 {dept_name} ({len(programs)} برامج - {sum(p['budget'] for p in programs):,} ريال)"):
+                    prog_df = pd.DataFrame(programs)
+                    prog_df.columns = ['البرنامج','الميزانية','المصدر','التوقيت','الأثر المتوقع']
+                    st.dataframe(prog_df, use_container_width=True, hide_index=True)
+
+            # Reset button
+            if st.button("🔄 إعادة التعيين للقيم الافتراضية", key="trn_reset"):
+                st.session_state.custom_budget = [dict(d) for d in DEFAULT_BUDGET]
+                st.rerun()
 
         elif page == "💹 ROI التدريب":
             hdr("💹 عائد التدريب ROI","نموذج Phillips ذو 5 مستويات")
@@ -3973,102 +4090,103 @@ def main():
 
                 if st.button("📄 إنشاء تقرير PDF", type="primary", key="pdfbtn"):
                     try:
-                        from fpdf import FPDF
+                        pdf, fn = _create_pdf_with_arabic()
 
-                        class ArabicPDF(FPDF):
-                            def header(self):
-                                self.set_fill_color(15, 76, 92)
-                                self.rect(0, 0, 210, 25, 'F')
-                                self.set_text_color(255, 255, 255)
-                                self.set_font('Helvetica', 'B', 14)
-                                self.cell(0, 25, pdf_company, align='C', ln=True)
+                        class ArabicReportPDF(pdf.__class__):
+                            def header(self2):
+                                self2.set_fill_color(15, 76, 92)
+                                self2.rect(0, 0, 210, 25, 'F')
+                                self2.set_text_color(255, 255, 255)
+                                self2.set_font(fn, 'B', 14)
+                                _pdf_cell(self2, fn, 0, 25, pdf_company, align='C', ln=True)
 
-                            def footer(self):
-                                self.set_y(-15)
-                                self.set_text_color(128, 128, 128)
-                                self.set_font('Helvetica', '', 8)
-                                self.cell(0, 10, f'Page {self.page_no()}/{{nb}} | {datetime.now().strftime("%Y-%m-%d")}', align='C')
+                            def footer(self2):
+                                self2.set_y(-15)
+                                self2.set_text_color(128, 128, 128)
+                                self2.set_font(fn, '', 8)
+                                self2.cell(0, 10, f'Page {self2.page_no()} | {datetime.now().strftime("%Y-%m-%d")}', align='C')
 
-                        pdf = ArabicPDF()
-                        pdf.alias_nb_pages()
-                        pdf.add_page()
-                        pdf.set_auto_page_break(auto=True, margin=20)
+                        # Rebuild pdf as ArabicReportPDF
+                        pdf2, _ = _create_pdf_with_arabic()
+                        pdf2.__class__ = ArabicReportPDF
+                        pdf2.alias_nb_pages()
+                        pdf2.add_page()
+                        pdf2.set_auto_page_break(auto=True, margin=20)
 
                         # Title
-                        pdf.ln(30)
-                        pdf.set_text_color(15, 76, 92)
-                        pdf.set_font('Helvetica', 'B', 20)
-                        pdf.cell(0, 12, pdf_title, align='C', ln=True)
-                        pdf.set_font('Helvetica', '', 11)
-                        pdf.set_text_color(100, 100, 100)
-                        pdf.cell(0, 8, f"Period: {pdf_period} | Prepared by: {pdf_prepared}", align='C', ln=True)
-                        pdf.ln(10)
+                        pdf2.ln(30)
+                        pdf2.set_text_color(15, 76, 92)
+                        pdf2.set_font(fn, 'B', 20)
+                        _pdf_cell(pdf2, fn, 0, 12, pdf_title, align='C', ln=True)
+                        pdf2.set_font(fn, '', 11)
+                        pdf2.set_text_color(100, 100, 100)
+                        _pdf_cell(pdf2, fn, 0, 8, f"Period: {pdf_period} | Prepared by: {pdf_prepared}", align='C', ln=True)
+                        pdf2.ln(10)
 
                         n = len(emp)
                         num_cols = emp.select_dtypes('number').columns.tolist()
 
                         if "ملخص تنفيذي" in pdf_sections:
-                            pdf.set_fill_color(46, 117, 182)
-                            pdf.set_text_color(255, 255, 255)
-                            pdf.set_font('Helvetica', 'B', 13)
-                            pdf.cell(0, 10, '  Executive Summary', fill=True, ln=True)
-                            pdf.set_text_color(0, 0, 0)
-                            pdf.set_font('Helvetica', '', 10)
-                            pdf.ln(5)
-                            pdf.cell(0, 7, f"Total Employees: {n}", ln=True)
+                            pdf2.set_fill_color(46, 117, 182)
+                            pdf2.set_text_color(255, 255, 255)
+                            pdf2.set_font(fn, 'B', 13)
+                            _pdf_cell(pdf2, fn, 0, 10, _reshape_arabic('  ملخص تنفيذي / Executive Summary') if fn != 'Helvetica' else '  Executive Summary', fill=True, ln=True)
+                            pdf2.set_text_color(0, 0, 0)
+                            pdf2.set_font(fn, '', 10)
+                            pdf2.ln(5)
+                            _pdf_cell(pdf2, fn, 0, 7, f"Total Employees: {n}", ln=True)
                             sal_col = [c for c in num_cols if 'gross' in c.lower() or 'salary' in c.lower() or 'net' in c.lower()]
                             if sal_col:
                                 sc = sal_col[0]
                                 latest = emp.drop_duplicates(subset=[c for c in emp.columns if 'id' in c.lower() or 'name' in c.lower()][:1], keep='last') if any('id' in c.lower() for c in emp.columns) else emp
-                                pdf.cell(0, 7, f"Avg Salary ({sc}): {latest[sc].mean():,.2f} SAR", ln=True)
-                                pdf.cell(0, 7, f"Total Payroll: {latest[sc].sum():,.2f} SAR", ln=True)
-                            pdf.ln(8)
+                                _pdf_cell(pdf2, fn, 0, 7, f"Avg Salary ({sc}): {latest[sc].mean():,.2f} SAR", ln=True)
+                                _pdf_cell(pdf2, fn, 0, 7, f"Total Payroll: {latest[sc].sum():,.2f} SAR", ln=True)
+                            pdf2.ln(8)
 
                         if "إحصائيات القوى العاملة" in pdf_sections:
-                            pdf.set_fill_color(46, 117, 182)
-                            pdf.set_text_color(255, 255, 255)
-                            pdf.set_font('Helvetica', 'B', 13)
-                            pdf.cell(0, 10, '  Workforce Statistics', fill=True, ln=True)
-                            pdf.set_text_color(0, 0, 0)
-                            pdf.set_font('Helvetica', '', 10)
-                            pdf.ln(5)
+                            pdf2.set_fill_color(46, 117, 182)
+                            pdf2.set_text_color(255, 255, 255)
+                            pdf2.set_font(fn, 'B', 13)
+                            _pdf_cell(pdf2, fn, 0, 10, _reshape_arabic('  إحصائيات القوى العاملة / Workforce Statistics') if fn != 'Helvetica' else '  Workforce Statistics', fill=True, ln=True)
+                            pdf2.set_text_color(0, 0, 0)
+                            pdf2.set_font(fn, '', 10)
+                            pdf2.ln(5)
 
                             cat_cols = [c for c in emp.columns if emp[c].dtype=='object' and 1 < emp[c].nunique() < 30]
                             for cc in cat_cols[:5]:
-                                pdf.set_font('Helvetica', 'B', 10)
-                                pdf.cell(0, 7, f"{cc}:", ln=True)
-                                pdf.set_font('Helvetica', '', 9)
+                                pdf2.set_font(fn, 'B', 10)
+                                _pdf_cell(pdf2, fn, 0, 7, f"{cc}:", ln=True)
+                                pdf2.set_font(fn, '', 9)
                                 for val, cnt in emp[cc].value_counts().head(8).items():
                                     pct = cnt/len(emp)*100
-                                    pdf.cell(0, 6, f"    {val}: {cnt} ({pct:.1f}%)", ln=True)
-                                pdf.ln(3)
+                                    _pdf_cell(pdf2, fn, 0, 6, f"    {val}: {cnt} ({pct:.1f}%)", ln=True)
+                                pdf2.ln(3)
 
                         if "تحليل الرواتب" in pdf_sections and num_cols:
-                            pdf.add_page()
-                            pdf.set_fill_color(46, 117, 182)
-                            pdf.set_text_color(255, 255, 255)
-                            pdf.set_font('Helvetica', 'B', 13)
-                            pdf.cell(0, 10, '  Salary Analysis', fill=True, ln=True)
-                            pdf.set_text_color(0, 0, 0)
-                            pdf.set_font('Helvetica', '', 10)
-                            pdf.ln(5)
+                            pdf2.add_page()
+                            pdf2.set_fill_color(46, 117, 182)
+                            pdf2.set_text_color(255, 255, 255)
+                            pdf2.set_font(fn, 'B', 13)
+                            _pdf_cell(pdf2, fn, 0, 10, _reshape_arabic('  تحليل الرواتب / Salary Analysis') if fn != 'Helvetica' else '  Salary Analysis', fill=True, ln=True)
+                            pdf2.set_text_color(0, 0, 0)
+                            pdf2.set_font(fn, '', 10)
+                            pdf2.ln(5)
 
-                            # Stats table
-                            pdf.set_font('Helvetica', 'B', 9)
-                            pdf.set_fill_color(230, 240, 250)
+                            pdf2.set_font(fn, 'B', 9)
+                            pdf2.set_fill_color(230, 240, 250)
                             headers = ['Column', 'Mean', 'Min', 'Max', 'Std']
                             widths = [50, 35, 35, 35, 35]
                             for i, h in enumerate(headers):
-                                pdf.cell(widths[i], 8, h, border=1, fill=True, align='C')
-                            pdf.ln()
-                            pdf.set_font('Helvetica', '', 8)
+                                pdf2.cell(widths[i], 8, h, border=1, fill=True, align='C')
+                            pdf2.ln()
+                            pdf2.set_font(fn, '', 8)
                             for nc in num_cols[:10]:
                                 vals = [nc[:25], f"{emp[nc].mean():,.1f}", f"{emp[nc].min():,.1f}", f"{emp[nc].max():,.1f}", f"{emp[nc].std():,.1f}"]
                                 for i, v in enumerate(vals):
-                                    pdf.cell(widths[i], 7, v, border=1, align='C')
-                                pdf.ln()
+                                    pdf2.cell(widths[i], 7, v, border=1, align='C')
+                                pdf2.ln()
 
-                        pdf_bytes = pdf.output()
+                        pdf_bytes = pdf2.output()
                         st.download_button("📥 تحميل PDF", data=bytes(pdf_bytes),
                             file_name=f"{pdf_title}_{datetime.now().strftime('%Y%m%d')}.pdf",
                             mime="application/pdf", type="primary", use_container_width=True)
@@ -5247,3 +5365,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
