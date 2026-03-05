@@ -3216,63 +3216,77 @@ def main():
             st.session_state.budget_data = DEFAULT_BUDGET.copy()
 
         if page == "📚 ميزانية التدريب":
-            hdr("📚 ميزانية التدريب","خطة توزيع ميزانية التدريب السنوية - قابلة للتخصيص بالكامل")
+            hdr("📚 ميزانية التدريب","خطة توزيع ميزانية التدريب السنوية - عدّل مباشرة في الجدول")
             c1,c2 = st.columns(2)
             with c1: total_budget = st.number_input("💰 إجمالي الميزانية (ريال)", 10000, 5000000, 70000, 5000, key="trn_bgt")
             with c2: fy = st.selectbox("📅 السنة", [2025,2026,2027], index=1, key="trn_yr")
 
-            # Editable budget allocation
-            st.markdown("### ✏️ تخصيص الميزانية والأولويات")
-            st.caption("عدّل الأولوية والنسبة والعدد لكل قسم مباشرة")
-
+            # Initialize editable data
             if 'custom_budget' not in st.session_state:
-                st.session_state.custom_budget = [dict(d) for d in DEFAULT_BUDGET]
+                st.session_state.custom_budget = []
+                for d in DEFAULT_BUDGET:
+                    row = dict(d)
+                    row['trainees'] = 5
+                    row['trainee_names'] = ''
+                    row['job_titles'] = ''
+                    st.session_state.custom_budget.append(row)
 
-            priorities = ["حرج","عالي","متوسط","أساسي"]
-            categories = ["محرك إيرادات","ممكّن نمو","بنية تحتية"]
-            updated = False
+            # Build editable dataframe
+            edit_data = []
+            for d in st.session_state.custom_budget:
+                budget_val = int(d['pct'] / 100 * total_budget)
+                trainees = d.get('trainees', 5) or 5
+                edit_data.append({
+                    'القسم': d['dept'],
+                    'الميزانية': budget_val,
+                    'النسبة %': d['pct'],
+                    'الأولوية': d['priority'],
+                    'التصنيف': d['cat'],
+                    'المتدربين': trainees,
+                    'للفرد': int(budget_val / max(trainees, 1)),
+                    'المسميات الوظيفية': d.get('job_titles', ''),
+                    'أسماء المتدربين': d.get('trainee_names', ''),
+                })
 
-            for i, dept_data in enumerate(st.session_state.custom_budget):
-                with st.expander(f"📌 {dept_data['dept']} | {dept_data['budget']:,} ريال | {dept_data['priority']}", expanded=False):
-                    ec1, ec2, ec3, ec4 = st.columns(4)
-                    with ec1:
-                        new_pct = st.number_input("النسبة %", 0.0, 100.0, float(dept_data['pct']), 0.5, key=f"bpct_{i}")
-                        if new_pct != dept_data['pct']:
-                            st.session_state.custom_budget[i]['pct'] = new_pct
-                            updated = True
-                    with ec2:
-                        new_pri = st.selectbox("الأولوية", priorities, index=priorities.index(dept_data['priority']) if dept_data['priority'] in priorities else 0, key=f"bpri_{i}")
-                        if new_pri != dept_data['priority']:
-                            st.session_state.custom_budget[i]['priority'] = new_pri
-                            updated = True
-                    with ec3:
-                        new_cat = st.selectbox("التصنيف", categories, index=categories.index(dept_data['cat']) if dept_data['cat'] in categories else 0, key=f"bcat_{i}")
-                        if new_cat != dept_data['cat']:
-                            st.session_state.custom_budget[i]['cat'] = new_cat
-                            updated = True
-                    with ec4:
-                        n_trainees = st.number_input("عدد المتدربين", 0, 200, dept_data.get('trainees', 5), key=f"btrn_{i}")
-                        st.session_state.custom_budget[i]['trainees'] = n_trainees
+            edit_df = pd.DataFrame(edit_data)
 
-                    # Trainee names
-                    if n_trainees > 0:
-                        names_str = st.text_area(f"أسماء المتدربين (فاصلة بين كل اسم):",
-                            value=dept_data.get('trainee_names', ''),
-                            placeholder="أحمد محمد, سارة أحمد, خالد علي", key=f"bnames_{i}")
-                        st.session_state.custom_budget[i]['trainee_names'] = names_str
+            # Editable table
+            st.markdown("### ✏️ عدّل مباشرة في الجدول (اضغط على أي خلية)")
+            edited = st.data_editor(
+                edit_df,
+                column_config={
+                    'القسم': st.column_config.TextColumn('القسم', disabled=True, width='medium'),
+                    'الميزانية': st.column_config.NumberColumn('الميزانية', disabled=True, format='%d'),
+                    'النسبة %': st.column_config.NumberColumn('النسبة %', min_value=0, max_value=100, step=0.5, format='%.1f'),
+                    'الأولوية': st.column_config.SelectboxColumn('الأولوية', options=['حرج','عالي','متوسط','أساسي'], required=True),
+                    'التصنيف': st.column_config.SelectboxColumn('التصنيف', options=['محرك إيرادات','ممكّن نمو','بنية تحتية'], required=True),
+                    'المتدربين': st.column_config.NumberColumn('المتدربين', min_value=1, max_value=200, step=1),
+                    'للفرد': st.column_config.NumberColumn('للفرد', disabled=True, format='%d'),
+                    'المسميات الوظيفية': st.column_config.TextColumn('المسميات الوظيفية', width='large',
+                        help='أدخل المسميات مفصولة بفاصلة: مدير مبيعات, مندوب, محلل'),
+                    'أسماء المتدربين': st.column_config.TextColumn('أسماء المتدربين', width='large',
+                        help='أدخل الأسماء مفصولة بفاصلة: أحمد محمد, سارة أحمد'),
+                },
+                use_container_width=True, hide_index=True, num_rows="fixed",
+                key="budget_editor"
+            )
 
-                        # Show per-person budget
-                        dept_budget = int(new_pct / 100 * total_budget)
-                        per_person = dept_budget / max(n_trainees, 1)
-                        st.caption(f"💰 ميزانية القسم: {dept_budget:,} ريال | للفرد: {per_person:,.0f} ريال")
+            # Sync edits back to session_state
+            for i in range(len(edited)):
+                st.session_state.custom_budget[i]['pct'] = edited.iloc[i]['النسبة %']
+                st.session_state.custom_budget[i]['priority'] = edited.iloc[i]['الأولوية']
+                st.session_state.custom_budget[i]['cat'] = edited.iloc[i]['التصنيف']
+                st.session_state.custom_budget[i]['trainees'] = int(edited.iloc[i]['المتدربين'])
+                st.session_state.custom_budget[i]['job_titles'] = edited.iloc[i].get('المسميات الوظيفية', '')
+                st.session_state.custom_budget[i]['trainee_names'] = edited.iloc[i].get('أسماء المتدربين', '')
 
-            # Recalculate budgets
+            # Recalculate
             budget_df = pd.DataFrame(st.session_state.custom_budget)
             budget_df['budget'] = (budget_df['pct']/100*total_budget).astype(int)
-            budget_df['trainees'] = budget_df.get('trainees', 5)
+            if 'trainees' not in budget_df.columns: budget_df['trainees'] = 5
 
-            # Normalize percentages if needed
-            total_pct = budget_df['pct'].sum()
+            # Warnings
+            total_pct = edited['النسبة %'].sum()
             if abs(total_pct - 100) > 0.5:
                 st.warning(f"⚠️ مجموع النسب = {total_pct:.1f}% (يجب أن يكون 100%)")
 
@@ -3285,19 +3299,33 @@ def main():
                 rev = budget_df[budget_df['cat']=='محرك إيرادات']['budget'].sum()
                 kpi("محركات الإيرادات", f"{round(rev/max(total_budget,1)*100)}%")
             with k4:
-                total_trainees = budget_df['trainees'].sum() if 'trainees' in budget_df.columns else 0
+                total_trainees = budget_df['trainees'].sum()
                 kpi("👥 المتدربين", str(total_trainees))
             with k5:
                 avg_per_person = total_budget / max(total_trainees, 1)
                 kpi("💵 للفرد", f"{avg_per_person:,.0f}")
 
-            # Display table
-            show_df = budget_df[['dept','budget','pct','priority','cat']].copy()
-            if 'trainees' in budget_df.columns:
-                show_df['trainees'] = budget_df['trainees']
-                show_df['per_person'] = (budget_df['budget'] / budget_df['trainees'].clip(lower=1)).astype(int)
-            show_df.columns = ['القسم','الميزانية','النسبة %','الأولوية','التصنيف'] + (['المتدربين','للفرد'] if 'trainees' in budget_df.columns else [])
-            st.dataframe(show_df, use_container_width=True, hide_index=True)
+            # Trainee details per department
+            st.markdown("---")
+            st.markdown("### 👥 تفاصيل المتدربين حسب القسم")
+            for i, d in enumerate(st.session_state.custom_budget):
+                names = d.get('trainee_names', '')
+                titles = d.get('job_titles', '')
+                trainees = d.get('trainees', 5)
+                dept_budget = int(d['pct'] / 100 * total_budget)
+                if names or titles:
+                    name_list = [n.strip() for n in names.split(',') if n.strip()] if names else []
+                    title_list = [t.strip() for t in titles.split(',') if t.strip()] if titles else []
+                    max_len = max(len(name_list), len(title_list), 1)
+                    detail_rows = []
+                    for j in range(max_len):
+                        detail_rows.append({
+                            'الاسم': name_list[j] if j < len(name_list) else '',
+                            'المسمى الوظيفي': title_list[j] if j < len(title_list) else '',
+                            'الميزانية المخصصة': f"{int(dept_budget / max(trainees, 1)):,} ريال"
+                        })
+                    with st.expander(f"📌 {d['dept']} ({len(name_list)} متدرب - {dept_budget:,} ريال)"):
+                        st.dataframe(pd.DataFrame(detail_rows), use_container_width=True, hide_index=True)
 
             # Charts
             c1,c2 = st.columns(2)
@@ -3334,7 +3362,10 @@ def main():
 
             # Reset button
             if st.button("🔄 إعادة التعيين للقيم الافتراضية", key="trn_reset"):
-                st.session_state.custom_budget = [dict(d) for d in DEFAULT_BUDGET]
+                st.session_state.custom_budget = []
+                for d in DEFAULT_BUDGET:
+                    row = dict(d); row['trainees'] = 5; row['trainee_names'] = ''; row['job_titles'] = ''
+                    st.session_state.custom_budget.append(row)
                 st.rerun()
 
         elif page == "💹 ROI التدريب":
