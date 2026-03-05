@@ -5705,12 +5705,16 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                         status_col = next((c for c in cat_cols if any(x in c.lower() for x in ['status','حالة'])), None)
                         loc_col = next((c for c in cat_cols if any(x in c.lower() for x in ['location','موقع','مدينة','city'])), None)
 
-                        # Generate charts as base64
-                        import base64 as b64
+                        # Generate charts as Plotly HTML divs (no kaleido needed)
+                        charts_html = ""
 
-                        def fig_to_b64(fig, w=600, h=350):
-                            img = fig.to_image(format="png", width=w, height=h, scale=2)
-                            return b64.b64encode(img).decode()
+                        def add_chart(fig):
+                            nonlocal charts_html
+                            fig.update_layout(template='plotly_dark', paper_bgcolor='#1e1e2e', plot_bgcolor='#1e1e2e',
+                                height=350, font=dict(color='white', size=11), margin=dict(l=10,r=10,t=40,b=10),
+                                showlegend=True)
+                            chart_div = fig.to_html(full_html=False, include_plotlyjs=False)
+                            charts_html += f"<div class='chart'>{chart_div}</div>"
 
                         charts_html = ""
 
@@ -5724,7 +5728,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                                 paper_bgcolor='#1e1e2e', plot_bgcolor='#1e1e2e', height=350,
                                 font=dict(color='white'), showlegend=False, coloraxis_showscale=False,
                                 margin=dict(l=10,r=10,t=40,b=10))
-                            charts_html += f"<div class='chart'><img src='data:image/png;base64,{fig_to_b64(fig)}'/></div>"
+                            add_chart(fig)
 
                         # Chart 2: Salary distribution
                         if sal_col:
@@ -5732,7 +5736,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                             fig.update_layout(title='Salary Distribution', template='plotly_dark',
                                 paper_bgcolor='#1e1e2e', plot_bgcolor='#1e1e2e', height=350,
                                 font=dict(color='white'), margin=dict(l=10,r=10,t=40,b=10))
-                            charts_html += f"<div class='chart'><img src='data:image/png;base64,{fig_to_b64(fig)}'/></div>"
+                            add_chart(fig)
 
                         # Chart 3: Nationality pie
                         if nat_col:
@@ -5742,7 +5746,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                             fig.update_layout(title='Nationality Distribution', template='plotly_dark',
                                 paper_bgcolor='#1e1e2e', plot_bgcolor='#1e1e2e', height=350,
                                 font=dict(color='white'), margin=dict(l=10,r=10,t=40,b=10))
-                            charts_html += f"<div class='chart'><img src='data:image/png;base64,{fig_to_b64(fig)}'/></div>"
+                            add_chart(fig)
 
                         # Chart 4: Status
                         if status_col:
@@ -5752,7 +5756,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                             fig.update_layout(title='Employment Status', template='plotly_dark',
                                 paper_bgcolor='#1e1e2e', plot_bgcolor='#1e1e2e', height=350,
                                 font=dict(color='white'), margin=dict(l=10,r=10,t=40,b=10))
-                            charts_html += f"<div class='chart'><img src='data:image/png;base64,{fig_to_b64(fig)}'/></div>"
+                            add_chart(fig)
 
                         # Chart 5: Location
                         if loc_col:
@@ -5762,7 +5766,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                             fig.update_layout(title='Distribution by Location', template='plotly_dark',
                                 paper_bgcolor='#1e1e2e', plot_bgcolor='#1e1e2e', height=350,
                                 font=dict(color='white'), margin=dict(l=10,r=10,t=40,b=10))
-                            charts_html += f"<div class='chart'><img src='data:image/png;base64,{fig_to_b64(fig)}'/></div>"
+                            add_chart(fig)
 
                         # Chart 6: Salary by dept box
                         if sal_col and dept_col:
@@ -5772,7 +5776,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                             fig.update_layout(title='Salary Range by Department', template='plotly_dark',
                                 paper_bgcolor='#1e1e2e', plot_bgcolor='#1e1e2e', height=350,
                                 font=dict(color='white'), margin=dict(l=10,r=10,t=40,b=10))
-                            charts_html += f"<div class='chart'><img src='data:image/png;base64,{fig_to_b64(fig)}'/></div>"
+                            add_chart(fig)
 
                         # KPIs
                         active_count = len(emp[emp[status_col].isin(['Active','نشط','active'])]) if status_col else n
@@ -5827,6 +5831,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 <title>{rpt_title}</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
