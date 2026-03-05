@@ -843,7 +843,7 @@ ROLE_DESCRIPTIONS = {
 }
 
 ALL_SECTIONS = ["📊 التحليلات العامة","💰 تحليل الرواتب","👥 Headcount","⚖️ حاسبة المستحقات",
-    "📚 التدريب والتطوير","🎯 التوظيف","🚀 Onboarding","🔍 التحليل العام","📝 الاستبيانات","🧠 اختبارات الشخصية","📤 التقارير والتصدير"]
+    "📚 التدريب والتطوير","🎯 التوظيف","🚀 Onboarding","📜 العقود","🔍 التحليل العام","📝 الاستبيانات","🧠 اختبارات الشخصية","📤 التقارير والتصدير"]
 
 # Email sending function
 def send_test_email(to_email, emp_name, tests, deadline, assigned_by, app_url=""):
@@ -1763,6 +1763,8 @@ def main():
             page = st.radio("📌", ["📋 تخطيط التوظيف","🤖 Benchmark ذكاء اصطناعي","🌍 مقارنة الأسواق","📊 متابعة التوظيف","📥 تصدير التوظيف"], label_visibility="collapsed")
         elif section == "🚀 Onboarding":
             page = st.radio("📌", ["🚀 إنشاء Onboarding","📋 خطة 30/60/90","👥 متابعة الموظفين الجدد","📊 تحليلات Onboarding","🎬 عرض تقديمي AI","🏢 معلومات الشركة","📥 تصدير Onboarding"], label_visibility="collapsed")
+        elif section == "📜 العقود":
+            page = st.radio("📌", ["📜 إنشاء عقد","📋 العقود المحفوظة","📥 تصدير العقود"], label_visibility="collapsed")
         elif section == "🔍 التحليل العام":
             page = st.radio("📌", ["📊 تحليل تلقائي","🤖 أسئلة ذكية"], label_visibility="collapsed")
         elif section == "📝 الاستبيانات":
@@ -4901,6 +4903,348 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 
                 st.download_button("📥 تحميل", data=ox.getvalue(),
                     file_name=f"Onboarding_Report_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+    # =========================================
+    #         📜 CONTRACTS MODULE
+    # =========================================
+    elif section == "📜 العقود":
+
+        if 'saved_contracts' not in st.session_state:
+            try:
+                conn = get_conn()
+                c = conn.cursor()
+                c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("saved_contracts",))
+                row = c.fetchone()
+                conn.close()
+                st.session_state.saved_contracts = json.loads(row[0]) if row else []
+            except:
+                st.session_state.saved_contracts = []
+
+        CONTRACT_TYPES = {
+            "عقد عمل محدد المدة": {
+                "icon": "💼", "color": "#0F4C5C",
+                "fields": [
+                    {"key":"emp_name","label":"اسم الموظف","type":"text","required":True},
+                    {"key":"nationality","label":"الجنسية","type":"text","required":True},
+                    {"key":"id_type","label":"نوع الهوية","type":"select","options":["هوية وطنية","جواز سفر","إقامة"]},
+                    {"key":"id_number","label":"رقم الهوية","type":"text","required":True},
+                    {"key":"city","label":"المدينة","type":"text","default":"جدة"},
+                    {"key":"email","label":"البريد الإلكتروني","type":"text"},
+                    {"key":"phone","label":"رقم الجوال","type":"text"},
+                    {"key":"job_title","label":"المسمى الوظيفي","type":"text","required":True},
+                    {"key":"work_city","label":"مدينة العمل","type":"text","default":"جدة"},
+                    {"key":"start_date","label":"تاريخ المباشرة","type":"date"},
+                    {"key":"duration","label":"مدة العقد","type":"select","options":["سنة واحدة","سنتين","ثلاث سنوات"]},
+                    {"key":"probation","label":"فترة التجربة","type":"select","options":["3 أشهر","6 أشهر"],"default":"3 أشهر"},
+                    {"key":"basic_salary","label":"الراتب الأساسي (ريال)","type":"number","required":True},
+                    {"key":"housing","label":"بدل السكن (ريال)","type":"number"},
+                    {"key":"transport","label":"بدل المواصلات (ريال)","type":"number"},
+                    {"key":"other_allowances","label":"بدلات أخرى (ريال)","type":"number"},
+                    {"key":"work_hours","label":"ساعات العمل الأسبوعية","type":"number","default":48},
+                    {"key":"annual_leave","label":"أيام الإجازة السنوية","type":"number","default":22},
+                    {"key":"sign_date","label":"تاريخ التوقيع","type":"date"},
+                ],
+            },
+            "عقد تدريب": {
+                "icon": "🎓", "color": "#E36414",
+                "fields": [
+                    {"key":"trainee_name","label":"اسم المتدرب","type":"text","required":True},
+                    {"key":"nationality","label":"الجنسية","type":"text","required":True},
+                    {"key":"id_type","label":"نوع الهوية","type":"select","options":["هوية وطنية","جواز سفر","إقامة"]},
+                    {"key":"id_number","label":"رقم الهوية","type":"text","required":True},
+                    {"key":"city","label":"المدينة","type":"text","default":"جدة"},
+                    {"key":"email","label":"البريد الإلكتروني","type":"text"},
+                    {"key":"phone","label":"رقم الجوال","type":"text"},
+                    {"key":"training_dept","label":"قسم التدريب","type":"text"},
+                    {"key":"training_city","label":"مدينة التدريب","type":"text","default":"جدة"},
+                    {"key":"start_date","label":"تاريخ بداية التدريب","type":"date"},
+                    {"key":"duration","label":"مدة التدريب","type":"select","options":["شهر","شهرين","3 أشهر","6 أشهر","سنة"]},
+                    {"key":"reward","label":"المكافأة الشهرية (ريال) - اختياري","type":"number","default":0},
+                    {"key":"weekly_hours","label":"ساعات التدريب الأسبوعية","type":"number","default":40},
+                    {"key":"sign_date","label":"تاريخ التوقيع","type":"date"},
+                ],
+            },
+            "عقد خدمات فنية واستشارية": {
+                "icon": "🤝", "color": "#264653",
+                "fields": [
+                    {"key":"consultant_name","label":"اسم المستشار/مقدم الخدمة","type":"text","required":True},
+                    {"key":"nationality","label":"الجنسية","type":"text","required":True},
+                    {"key":"id_type","label":"نوع الهوية","type":"select","options":["هوية وطنية","جواز سفر","إقامة"]},
+                    {"key":"id_number","label":"رقم الهوية","type":"text","required":True},
+                    {"key":"city","label":"المدينة","type":"text","default":"جدة"},
+                    {"key":"email","label":"البريد الإلكتروني","type":"text"},
+                    {"key":"phone","label":"رقم الجوال","type":"text"},
+                    {"key":"service_desc","label":"وصف الخدمات المطلوبة","type":"textarea","required":True},
+                    {"key":"start_date","label":"تاريخ بداية العقد","type":"date"},
+                    {"key":"duration","label":"مدة العقد","type":"select","options":["شهر","3 أشهر","6 أشهر","سنة"]},
+                    {"key":"total_fee","label":"إجمالي الأتعاب (ريال)","type":"number","required":True},
+                    {"key":"payment_method","label":"طريقة الدفع","type":"select","options":["شهري","ربع سنوي","دفعة واحدة","حسب الإنجاز"]},
+                    {"key":"sign_date","label":"تاريخ التوقيع","type":"date"},
+                ],
+            },
+        }
+
+        if page == "📜 إنشاء عقد":
+            hdr("📜 إنشاء عقد جديد","اختر نوع العقد واملأ البيانات لإصدار عقد احترافي")
+
+            contract_type = st.selectbox("📝 نوع العقد:", list(CONTRACT_TYPES.keys()), key="ct_type")
+            ct = CONTRACT_TYPES[contract_type]
+            st.markdown(f"### {ct['icon']} {contract_type}")
+
+            # Render fields
+            field_values = {}
+            cols_per_row = 3
+            fields = ct['fields']
+            for i in range(0, len(fields), cols_per_row):
+                row_fields = fields[i:i+cols_per_row]
+                cols = st.columns(len(row_fields))
+                for j, f in enumerate(row_fields):
+                    with cols[j]:
+                        req = " *" if f.get('required') else ""
+                        if f['type'] == 'text':
+                            field_values[f['key']] = st.text_input(f"{f['label']}{req}:", value=f.get('default',''), key=f"cf_{f['key']}")
+                        elif f['type'] == 'textarea':
+                            field_values[f['key']] = st.text_area(f"{f['label']}{req}:", value=f.get('default',''), key=f"cf_{f['key']}")
+                        elif f['type'] == 'number':
+                            field_values[f['key']] = st.number_input(f"{f['label']}{req}:", value=float(f.get('default',0)), key=f"cf_{f['key']}")
+                        elif f['type'] == 'date':
+                            field_values[f['key']] = str(st.date_input(f"{f['label']}{req}:", value=date.today(), key=f"cf_{f['key']}"))
+                        elif f['type'] == 'select':
+                            opts = f.get('options',[])
+                            default_idx = opts.index(f['default']) if f.get('default') in opts else 0
+                            field_values[f['key']] = st.selectbox(f"{f['label']}{req}:", opts, index=default_idx, key=f"cf_{f['key']}")
+
+            # Preview salary breakdown for employment contract
+            if contract_type == "عقد عمل محدد المدة":
+                basic = field_values.get('basic_salary', 0)
+                housing = field_values.get('housing', 0)
+                transport = field_values.get('transport', 0)
+                other = field_values.get('other_allowances', 0)
+                total = basic + housing + transport + other
+                st.markdown("---")
+                st.markdown("### 💰 ملخص الراتب")
+                sc1,sc2,sc3,sc4,sc5 = st.columns(5)
+                with sc1: kpi("الأساسي", f"{basic:,.2f}")
+                with sc2: kpi("السكن", f"{housing:,.2f}")
+                with sc3: kpi("المواصلات", f"{transport:,.2f}")
+                with sc4: kpi("أخرى", f"{other:,.2f}")
+                with sc5: kpi("الإجمالي", f"{total:,.2f}")
+
+            if st.button("📜 إنشاء العقد وتحميله", type="primary", use_container_width=True, key="ct_create"):
+                # Check required fields
+                missing = [f['label'] for f in fields if f.get('required') and not field_values.get(f['key'])]
+                if missing:
+                    st.error(f"يرجى تعبئة الحقول المطلوبة: {', '.join(missing)}")
+                else:
+                    # Save contract
+                    contract = {
+                        "id": len(st.session_state.saved_contracts) + 1,
+                        "type": contract_type,
+                        "data": field_values,
+                        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "created_by": st.session_state.get('user_name',''),
+                        "status": "نشط"
+                    }
+                    st.session_state.saved_contracts.append(contract)
+                    # Save to DB
+                    try:
+                        conn = get_conn()
+                        c = conn.cursor()
+                        _upsert_config(c, "saved_contracts", json.dumps(st.session_state.saved_contracts, ensure_ascii=False))
+                        conn.commit()
+                        conn.close()
+                    except: pass
+
+                    # Generate PDF
+                    try:
+                        pdf, fn = _create_pdf_with_arabic()
+                        pdf.add_page()
+                        pdf.set_auto_page_break(auto=True, margin=20)
+
+                        # Header
+                        pdf.set_fill_color(15, 76, 92)
+                        pdf.rect(0, 0, 210, 30, 'F')
+                        pdf.set_text_color(255,255,255)
+                        pdf.set_font(fn, 'B', 16)
+                        _pdf_cell(pdf, fn, 0, 15, contract_type, align='C', ln=True)
+                        pdf.set_font(fn, '', 10)
+                        _pdf_cell(pdf, fn, 0, 15, 'Risal Al-Wud Information Technology', align='C', ln=True)
+
+                        pdf.ln(15)
+                        pdf.set_text_color(0,0,0)
+
+                        # Company info
+                        pdf.set_font(fn, '', 9)
+                        _pdf_cell(pdf, fn, 0, 6, "Resal Al-Wud Information Technology Co. (SPC), CR: 4030436643, Jeddah", ln=True)
+                        _pdf_cell(pdf, fn, 0, 6, f"Signed by: Hatem Abdullah Kameli (CEO) | Email: Hatem@resal.me", ln=True)
+                        pdf.ln(5)
+
+                        # Contract data
+                        pdf.set_fill_color(230,240,250)
+                        pdf.set_font(fn, 'B', 11)
+                        _pdf_cell(pdf, fn, 0, 8, '  Contract Details', fill=True, ln=True)
+                        pdf.set_font(fn, '', 9)
+                        pdf.ln(3)
+
+                        for f in fields:
+                            val = field_values.get(f['key'], '')
+                            if val:
+                                _pdf_cell(pdf, fn, 0, 6, f"{f['label']}: {val}", ln=True)
+
+                        # Fixed terms section
+                        pdf.ln(8)
+                        pdf.set_font(fn, 'B', 11)
+                        pdf.set_fill_color(46,117,182)
+                        pdf.set_text_color(255,255,255)
+                        _pdf_cell(pdf, fn, 0, 8, '  Terms & Conditions', fill=True, ln=True)
+                        pdf.set_text_color(0,0,0)
+                        pdf.set_font(fn, '', 8)
+                        pdf.ln(3)
+
+                        if contract_type == "عقد عمل محدد المدة":
+                            terms = [
+                                "The preamble is an integral part of this contract.",
+                                f"Employee works as {field_values.get('job_title','')} in {field_values.get('work_city','Jeddah')}.",
+                                f"Contract duration: {field_values.get('duration','1 year')} starting {field_values.get('start_date','')}.",
+                                f"Probation period: {field_values.get('probation','3 months')}.",
+                                "Employee must comply with all company regulations and Saudi Labor Law.",
+                                "Employee must maintain confidentiality of all company information.",
+                                "Employee must return all company property upon termination.",
+                                f"Working hours: {field_values.get('work_hours',48)} hours/week, reduced to 36 in Ramadan.",
+                                f"Annual leave: {field_values.get('annual_leave',22)} days paid leave per year.",
+                                "End of service benefits calculated per Saudi Labor Law Articles 84-85.",
+                            ]
+                        elif contract_type == "عقد تدريب":
+                            terms = [
+                                "The preamble is an integral part of this contract.",
+                                f"Training department: {field_values.get('training_dept','')} in {field_values.get('training_city','Jeddah')}.",
+                                f"Training duration: {field_values.get('duration','')} starting {field_values.get('start_date','')}.",
+                                "No obligation for financial payment unless reward is specified.",
+                                "Trainee must comply with all company regulations.",
+                                "Trainee must maintain confidentiality of all information.",
+                                "Trainee must return all equipment upon completion.",
+                                f"Weekly training hours: {field_values.get('weekly_hours',40)} hours.",
+                                "Company may terminate contract without compensation.",
+                            ]
+                        else:
+                            terms = [
+                                "The preamble is an integral part of this contract.",
+                                f"Services: {field_values.get('service_desc','')}.",
+                                f"Contract duration: {field_values.get('duration','')} starting {field_values.get('start_date','')}.",
+                                f"Total fees: {field_values.get('total_fee',0):,.2f} SAR, paid {field_values.get('payment_method','')}.",
+                                "Consultant must provide detailed invoice for services rendered.",
+                                "Consultant must maintain confidentiality during and after contract.",
+                                "Consultant must perform services personally.",
+                                "Company may terminate contract unilaterally without compensation.",
+                                "Any breach of confidentiality subjects consultant to full liability.",
+                            ]
+
+                        for i, term in enumerate(terms):
+                            _pdf_cell(pdf, fn, 0, 5, f"{i+1}. {term}", ln=True)
+
+                        # Signature section
+                        pdf.ln(15)
+                        pdf.set_font(fn, 'B', 10)
+                        pdf.cell(95, 8, 'First Party (Company)', border=1, align='C')
+                        pdf.cell(95, 8, 'Second Party', border=1, align='C')
+                        pdf.ln()
+                        pdf.set_font(fn, '', 9)
+                        pdf.cell(95, 20, 'Hatem Abdullah Kameli\nCEO', border=1, align='C')
+                        name_key = 'emp_name' if 'emp_name' in field_values else ('trainee_name' if 'trainee_name' in field_values else 'consultant_name')
+                        pdf.cell(95, 20, f"{field_values.get(name_key,'')}", border=1, align='C')
+
+                        # Footer
+                        pdf.ln(10)
+                        pdf.set_font(fn, '', 7)
+                        pdf.set_text_color(128,128,128)
+                        _pdf_cell(pdf, fn, 0, 5, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')} | HR Analytics Platform - Risal Al-Wud IT", align='C', ln=True)
+
+                        pdf_bytes = bytes(pdf.output())
+                        name_val = field_values.get(name_key, 'contract')
+                        st.download_button("📥 تحميل العقد PDF", data=pdf_bytes,
+                            file_name=f"{contract_type}_{name_val}_{field_values.get('start_date','')}.pdf",
+                            mime="application/pdf", type="primary", use_container_width=True)
+                        st.success(f"✅ تم إنشاء وحفظ {contract_type} بنجاح")
+                    except Exception as e:
+                        st.error(f"خطأ في إنشاء PDF: {e}")
+                        st.info("تم حفظ العقد في قاعدة البيانات. يمكنك تصديره لاحقاً.")
+
+        elif page == "📋 العقود المحفوظة":
+            hdr("📋 العقود المحفوظة","عرض وإدارة جميع العقود المنشأة")
+
+            contracts = st.session_state.saved_contracts
+            if not contracts:
+                st.info("📜 لا توجد عقود محفوظة. أنشئ عقداً جديداً.")
+                return
+
+            # KPIs
+            k1,k2,k3,k4 = st.columns(4)
+            with k1: kpi("📜 إجمالي العقود", str(len(contracts)))
+            types = {}
+            for c in contracts: types[c['type']] = types.get(c['type'],0) + 1
+            with k2: kpi("💼 عقود عمل", str(types.get('عقد عمل محدد المدة',0)))
+            with k3: kpi("🎓 عقود تدريب", str(types.get('عقد تدريب',0)))
+            with k4: kpi("🤝 عقود استشارية", str(types.get('عقد خدمات فنية واستشارية',0)))
+
+            # Contracts table
+            ct_rows = []
+            for c in contracts:
+                d = c['data']
+                name = d.get('emp_name', d.get('trainee_name', d.get('consultant_name', '')))
+                ct_rows.append({
+                    "#": c['id'], "النوع": c['type'], "الاسم": name,
+                    "تاريخ البدء": d.get('start_date',''),
+                    "المدة": d.get('duration',''),
+                    "الحالة": c.get('status','نشط'),
+                    "أُنشئ": c.get('created_at',''),
+                    "بواسطة": c.get('created_by','')
+                })
+            st.dataframe(pd.DataFrame(ct_rows), use_container_width=True, hide_index=True)
+
+            # View/regenerate specific contract
+            if contracts:
+                sel_ct = st.selectbox("اختر عقد للعرض:", [f"#{c['id']} - {c['type']} - {c['data'].get('emp_name', c['data'].get('trainee_name', c['data'].get('consultant_name','')))} ({c.get('created_at','')})" for c in contracts], key="ct_view")
+                sel_idx = [f"#{c['id']} - {c['type']} - {c['data'].get('emp_name', c['data'].get('trainee_name', c['data'].get('consultant_name','')))} ({c.get('created_at','')})" for c in contracts].index(sel_ct)
+                sel_c = contracts[sel_idx]
+
+                with st.expander("📄 تفاصيل العقد", expanded=True):
+                    for f_key, f_val in sel_c['data'].items():
+                        if f_val:
+                            st.markdown(f"**{f_key}:** {f_val}")
+
+            # Admin delete
+            if st.session_state.get('user_role') == "مدير":
+                if st.button("🗑️ حذف جميع العقود (مدير فقط)", key="ct_del_all"):
+                    st.session_state.saved_contracts = []
+                    try:
+                        conn = get_conn()
+                        c = conn.cursor()
+                        _upsert_config(c, "saved_contracts", "[]")
+                        conn.commit()
+                        conn.close()
+                    except: pass
+                    st.rerun()
+
+        elif page == "📥 تصدير العقود":
+            hdr("📥 تصدير العقود")
+            contracts = st.session_state.saved_contracts
+            if not contracts:
+                st.info("لا توجد عقود للتصدير")
+                return
+
+            if st.button("📥 تصدير جميع العقود Excel", type="primary", use_container_width=True):
+                ox = io.BytesIO()
+                with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
+                    rows = []
+                    for c in contracts:
+                        row = {"#": c['id'], "النوع": c['type'], "الحالة": c.get('status',''), "أُنشئ": c.get('created_at','')}
+                        row.update(c['data'])
+                        rows.append(row)
+                    pd.DataFrame(rows).to_excel(w, sheet_name='العقود', index=False)
+                st.download_button("📥 تحميل", data=ox.getvalue(),
+                    file_name=f"Contracts_{datetime.now().strftime('%Y%m%d')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
