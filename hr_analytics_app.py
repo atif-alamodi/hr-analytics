@@ -5897,14 +5897,169 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                         # Display in Streamlit
                         st.components.v1.html(html, height=900, scrolling=True)
 
-                        # Downloads
-                        dc1, dc2 = st.columns(2)
-                        with dc1:
-                            st.download_button("📥 تحميل HTML Dashboard", data=html.encode('utf-8'),
+                        # ===== 4 Export Formats =====
+                        st.markdown("---")
+                        st.markdown("### 📥 تحميل التقرير")
+                        ex1, ex2, ex3, ex4 = st.columns(4)
+
+                        # 1. HTML
+                        with ex1:
+                            st.download_button("🌐 HTML Dashboard", data=html.encode('utf-8'),
                                 file_name=f"{rpt_title}_{datetime.now().strftime('%Y%m%d')}.html",
                                 mime="text/html", type="primary", use_container_width=True)
-                        with dc2:
-                            st.caption("💡 افتح HTML في المتصفح واضغط Ctrl+P للطباعة كـ PDF")
+
+                        # 2. PDF (via HTML with print-optimized CSS)
+                        with ex2:
+                            pdf_html = html.replace('#0f0f1a','#ffffff').replace('#1e1e2e','#f8f9fa').replace('#252540','#e9ecef')
+                            pdf_html = pdf_html.replace("color:'white'","color:'#333'").replace("color:white","color:#333")
+                            pdf_html = pdf_html.replace("color:'#e0e0e0'","color:'#333'").replace("color:#e0e0e0","color:#333")
+                            # Add print CSS
+                            pdf_css = """<style>@media print{body{background:white!important;color:#333!important}
+                            .kpi{border-color:#0F4C5C!important;background:#f8f9fa!important}
+                            .kpi .value{color:#0F4C5C!important} .kpi .label{color:#555!important}
+                            .header{background:#0F4C5C!important;-webkit-print-color-adjust:exact}
+                            .chart{break-inside:avoid;page-break-inside:avoid}
+                            .section h2{color:#0F4C5C!important}}</style>"""
+                            pdf_html = pdf_html.replace('</head>', pdf_css + '</head>')
+                            # Auto-print script
+                            pdf_html = pdf_html.replace('</body>', '<script>window.onload=function(){setTimeout(function(){window.print()},1500)}</script></body>')
+                            st.download_button("📄 PDF (Print)", data=pdf_html.encode('utf-8'),
+                                file_name=f"{rpt_title}_{datetime.now().strftime('%Y%m%d')}_print.html",
+                                mime="text/html", use_container_width=True,
+                                help="افتح الملف في المتصفح وسيفتح نافذة الطباعة تلقائياً - اختر Save as PDF")
+
+                        # 3. Excel (multi-sheet with all data)
+                        with ex3:
+                            ox = io.BytesIO()
+                            with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
+                                wb = w.book
+                                hdr_f = wb.add_format({'bold':True,'font_size':12,'bg_color':'#0F4C5C','font_color':'white','align':'center','border':1})
+                                num_f = wb.add_format({'num_format':'#,##0.00','border':1})
+
+                                # Sheet 1: Executive Summary
+                                ws1 = wb.add_worksheet('Executive Summary')
+                                ws1.set_column('A:B', 30)
+                                ws1.merge_range('A1:B1', rpt_title, hdr_f)
+                                ws1.write('A2', 'Company', wb.add_format({'bold':True}))
+                                ws1.write('B2', rpt_company)
+                                ws1.write('A3', 'Period'); ws1.write('B3', rpt_period)
+                                ws1.write('A4', 'Generated'); ws1.write('B4', datetime.now().strftime('%Y-%m-%d %H:%M'))
+                                kpi_items = [('Total Records', n), ('Active Employees', active_count),
+                                    ('Departments', n_depts), ('Avg Salary', f"{avg_sal:,.0f}"),
+                                    ('Total Payroll', f"{total_payroll:,.0f}"), ('Saudization %', f"{sa_pct}%")]
+                                for i, (lbl, val) in enumerate(kpi_items):
+                                    ws1.write(5+i, 0, lbl, wb.add_format({'bold':True,'border':1}))
+                                    ws1.write(5+i, 1, str(val), wb.add_format({'border':1}))
+
+                                # Sheet 2: AI Insights
+                                ws2 = wb.add_worksheet('AI Insights')
+                                ws2.set_column('A:A', 80)
+                                ws2.write('A1', 'AI-Powered Insights', hdr_f)
+                                for i, ins in enumerate(insights):
+                                    clean = ins.replace('<strong>','').replace('</strong>','')
+                                    ws2.write(i+1, 0, clean)
+
+                                # Sheet 3: Department Analysis
+                                if dept_col:
+                                    dept_data = emp.groupby(dept_col).agg(
+                                        Count=(dept_col,'count'),
+                                        **({f'Avg Salary': (sal_col,'mean'), f'Total Salary': (sal_col,'sum'),
+                                            f'Min Salary': (sal_col,'min'), f'Max Salary': (sal_col,'max')} if sal_col else {})
+                                    ).sort_values('Count', ascending=False).reset_index()
+                                    dept_data['% of Total'] = (dept_data['Count'] / n * 100).round(1)
+                                    dept_data.to_excel(w, sheet_name='Dept Analysis', index=False)
+
+                                # Sheet 4: Full Data
+                                emp.to_excel(w, sheet_name='Raw Data', index=False)
+
+                                # Sheet 5: Nationality
+                                if nat_col:
+                                    nat_data = emp[nat_col].value_counts().reset_index()
+                                    nat_data.columns = ['Nationality','Count']
+                                    nat_data['%'] = (nat_data['Count'] / n * 100).round(1)
+                                    nat_data.to_excel(w, sheet_name='Nationality', index=False)
+
+                                # Sheet 6: Status
+                                if status_col:
+                                    stat_data = emp[status_col].value_counts().reset_index()
+                                    stat_data.columns = ['Status','Count']
+                                    stat_data.to_excel(w, sheet_name='Status', index=False)
+
+                                # Sheet 7: Salary Stats
+                                if num_cols:
+                                    desc = emp[num_cols].describe().T
+                                    desc.to_excel(w, sheet_name='Salary Statistics')
+
+                                # Format all sheets
+                                for sname in w.sheets:
+                                    w.sheets[sname].set_column('A:Z', 18)
+
+                            st.download_button("📊 Excel Report", data=ox.getvalue(),
+                                file_name=f"{rpt_title}_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True)
+
+                        # 4. Power BI (structured dataset + template)
+                        with ex4:
+                            pbi_ox = io.BytesIO()
+                            with pd.ExcelWriter(pbi_ox, engine='xlsxwriter') as w:
+                                # Clean data optimized for Power BI import
+                                pbi_data = emp.copy()
+                                # Add calculated columns for Power BI
+                                if dept_col: pbi_data['_Department'] = pbi_data[dept_col]
+                                if nat_col: pbi_data['_Nationality'] = pbi_data[nat_col]
+                                if status_col: pbi_data['_Status'] = pbi_data[status_col]
+                                if loc_col: pbi_data['_Location'] = pbi_data[loc_col]
+                                if sal_col:
+                                    pbi_data['_Salary'] = pd.to_numeric(pbi_data[sal_col], errors='coerce')
+                                    pbi_data['_SalaryBand'] = pd.cut(pbi_data['_Salary'], bins=[0,5000,10000,15000,25000,50000,999999],
+                                        labels=['0-5K','5-10K','10-15K','15-25K','25-50K','50K+'], ordered=False)
+                                pbi_data.to_excel(w, sheet_name='FactEmployees', index=False)
+
+                                # Dimension tables for Power BI star schema
+                                if dept_col:
+                                    dim_dept = emp[dept_col].value_counts().reset_index()
+                                    dim_dept.columns = ['Department','Headcount']
+                                    if sal_col:
+                                        dim_dept = dim_dept.merge(emp.groupby(dept_col)[sal_col].agg(['mean','sum','min','max']).reset_index().rename(
+                                            columns={dept_col:'Department','mean':'AvgSalary','sum':'TotalSalary','min':'MinSalary','max':'MaxSalary'}), on='Department', how='left')
+                                    dim_dept.to_excel(w, sheet_name='DimDepartment', index=False)
+
+                                if nat_col:
+                                    dim_nat = emp[nat_col].value_counts().reset_index()
+                                    dim_nat.columns = ['Nationality','Count']
+                                    dim_nat['IsSaudi'] = dim_nat['Nationality'].isin(['Saudi','سعودي','Saudi Arabian'])
+                                    dim_nat.to_excel(w, sheet_name='DimNationality', index=False)
+
+                                # KPIs table for Power BI card visuals
+                                kpi_df = pd.DataFrame([
+                                    {'KPI':'Total Employees','Value':n},
+                                    {'KPI':'Active','Value':active_count},
+                                    {'KPI':'Departments','Value':n_depts},
+                                    {'KPI':'Avg Salary','Value':round(avg_sal,0)},
+                                    {'KPI':'Total Payroll','Value':round(total_payroll,0)},
+                                    {'KPI':'Saudization %','Value':sa_pct},
+                                ])
+                                kpi_df.to_excel(w, sheet_name='KPIs', index=False)
+
+                                # Measures guide
+                                measures = pd.DataFrame([
+                                    {'Measure':'Total Headcount','DAX':'COUNTROWS(FactEmployees)','Table':'FactEmployees'},
+                                    {'Measure':'Active Count','DAX':'CALCULATE(COUNTROWS(FactEmployees), FactEmployees[_Status]="Active")','Table':'FactEmployees'},
+                                    {'Measure':'Avg Salary','DAX':'AVERAGE(FactEmployees[_Salary])','Table':'FactEmployees'},
+                                    {'Measure':'Total Payroll','DAX':'SUM(FactEmployees[_Salary])','Table':'FactEmployees'},
+                                    {'Measure':'Saudization %','DAX':'DIVIDE(CALCULATE(COUNTROWS(FactEmployees), DimNationality[IsSaudi]=TRUE), COUNTROWS(FactEmployees))','Table':'DimNationality'},
+                                    {'Measure':'Dept Count','DAX':'DISTINCTCOUNT(FactEmployees[_Department])','Table':'FactEmployees'},
+                                ])
+                                measures.to_excel(w, sheet_name='DAX_Measures_Guide', index=False)
+
+                                for sname in w.sheets: w.sheets[sname].set_column('A:Z', 18)
+
+                            st.download_button("📈 Power BI Dataset", data=pbi_ox.getvalue(),
+                                file_name=f"PowerBI_{rpt_title}_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True,
+                                help="افتح Power BI Desktop > Get Data > Excel > اختر هذا الملف")
 
             else:
                 ibox("ارفع ملف بيانات أولاً من القائمة الجانبية.", "warning")
