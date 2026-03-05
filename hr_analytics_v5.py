@@ -1764,7 +1764,7 @@ def main():
         elif section == "🚀 Onboarding":
             page = st.radio("📌", ["🚀 إنشاء Onboarding","📋 خطة 30/60/90","👥 متابعة الموظفين الجدد","📊 تحليلات Onboarding","🎬 عرض تقديمي AI","🏢 معلومات الشركة","📥 تصدير Onboarding"], label_visibility="collapsed")
         elif section == "📜 العقود":
-            page = st.radio("📌", ["📜 إنشاء عقد","📋 العقود المحفوظة","📥 تصدير العقود"], label_visibility="collapsed")
+            page = st.radio("📌", ["📜 إنشاء عقد","🔍 تحليل العقود","📋 العقود المحفوظة","📥 تصدير العقود"], label_visibility="collapsed")
         elif section == "🔍 التحليل العام":
             page = st.radio("📌", ["📊 تحليل تلقائي","🤖 أسئلة ذكية"], label_visibility="collapsed")
         elif section == "📝 الاستبيانات":
@@ -1772,7 +1772,7 @@ def main():
         elif section == "🧠 اختبارات الشخصية":
             page = st.radio("📌", ["📋 تعيين الاختبارات","🧠 Big Five (OCEAN)","📊 Thomas PPA","🔬 Hogan HPI","💡 MBTI","💎 DISC","📈 تقارير الشخصية","📥 تصدير الاختبارات"], label_visibility="collapsed")
         elif section == "📤 التقارير والتصدير":
-            page = st.radio("📌", ["📄 تقرير PDF","📝 تقرير Word","📊 تقرير شامل"], label_visibility="collapsed")
+            page = st.radio("📌", ["📊 تقرير Dashboard","📝 تقرير Word","📊 تقرير شامل"], label_visibility="collapsed")
         elif section == "👥 إدارة المستخدمين":
             page = "👥 إدارة المستخدمين"
         else:
@@ -5178,6 +5178,230 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                     except Exception as e:
                         st.error(f"خطأ: {e}")
 
+        elif page == "🔍 تحليل العقود":
+            hdr("🔍 تحليل العقود","ارفع عقد (Word أو PDF) لتحليله واستخراج البيانات والبنود")
+
+            ana_file = st.file_uploader("📁 ارفع عقد للتحليل:", type=["docx","pdf","txt"], key="ct_ana_file")
+
+            if ana_file:
+                contract_text = ""
+                file_type = ana_file.name.split('.')[-1].lower()
+
+                # Extract text
+                if file_type == "docx":
+                    try:
+                        from docx import Document as DocxDoc
+                        doc = DocxDoc(io.BytesIO(ana_file.getvalue()))
+                        contract_text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
+                    except Exception as e:
+                        st.error(f"خطأ في قراءة الملف: {e}")
+                elif file_type == "pdf":
+                    try:
+                        from fpdf import FPDF
+                        # Try pdfplumber or basic extraction
+                        try:
+                            import pdfplumber
+                            with pdfplumber.open(io.BytesIO(ana_file.getvalue())) as pdf_reader:
+                                for pg in pdf_reader.pages:
+                                    txt = pg.extract_text()
+                                    if txt: contract_text += txt + "\n"
+                        except ImportError:
+                            st.warning("جاري القراءة بطريقة بديلة...")
+                            contract_text = ana_file.getvalue().decode('utf-8', errors='ignore')
+                    except: pass
+                elif file_type == "txt":
+                    contract_text = ana_file.getvalue().decode('utf-8', errors='ignore')
+
+                if not contract_text.strip():
+                    st.warning("⚠️ لم يتم استخراج نص من الملف. جرب ملف Word أو PDF نصي.")
+                    return
+
+                st.success(f"✅ تم استخراج {len(contract_text)} حرف من الملف")
+
+                # ===== Auto Analysis =====
+                st.markdown("---")
+                st.markdown("### 📊 التحليل التلقائي للعقد")
+
+                # 1. Contract type detection
+                ct_type_detected = "غير محدد"
+                if any(w in contract_text for w in ["تدريب","متدرب","برنامج تدريبي"]): ct_type_detected = "عقد تدريب"
+                elif any(w in contract_text for w in ["استشار","خدمات فنية","أتعاب"]): ct_type_detected = "عقد خدمات استشارية"
+                elif any(w in contract_text for w in ["عامل","وظيفة","راتب","بدل سكن"]): ct_type_detected = "عقد عمل"
+                elif any(w in contract_text for w in ["إيجار","تأجير"]): ct_type_detected = "عقد إيجار"
+                elif any(w in contract_text for w in ["بيع","شراء","مبيع"]): ct_type_detected = "عقد بيع"
+
+                # 2. Extract key data
+                import re
+                extracted = {}
+
+                # Names
+                name_patterns = [
+                    r'الاسم[:\s]+([^\n,،]+)',
+                    r'السيد/?\s*([^\n,،]+)',
+                    r'المتدرب[:\s]+([^\n,،]+)',
+                ]
+                for p in name_patterns:
+                    m = re.search(p, contract_text)
+                    if m and len(m.group(1).strip()) > 2:
+                        extracted['الطرف الثاني'] = m.group(1).strip()[:50]
+                        break
+
+                # Dates
+                date_patterns = [
+                    r'(\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{2,4})',
+                    r'(\d{4}[/\-]\d{1,2}[/\-]\d{1,2})',
+                ]
+                dates_found = []
+                for p in date_patterns:
+                    dates_found.extend(re.findall(p, contract_text))
+                if dates_found:
+                    extracted['التواريخ المذكورة'] = ", ".join(dates_found[:5])
+
+                # Amounts
+                amount_patterns = [
+                    r'(\d[\d,\.]+)\s*ريال',
+                    r'مبلغ[اً]?\s*(?:وقدره)?\s*[\(]?(\d[\d,\.]+)',
+                    r'راتب[اً]?\s*(?:أساسي[اً]?)?\s*(?:قدره)?\s*[\(]?(\d[\d,\.]+)',
+                ]
+                amounts = []
+                for p in amount_patterns:
+                    amounts.extend(re.findall(p, contract_text))
+                if amounts:
+                    extracted['المبالغ المذكورة'] = ", ".join([f"{a} ريال" for a in amounts[:6]])
+
+                # Duration
+                dur_patterns = [
+                    r'مدة العقد\s*([^\n\.]+)',
+                    r'لمدة\s*([^\n\.]+)',
+                ]
+                for p in dur_patterns:
+                    m = re.search(p, contract_text)
+                    if m:
+                        extracted['مدة العقد'] = m.group(1).strip()[:50]
+                        break
+
+                # ID numbers
+                id_patterns = [
+                    r'هوية[^\d]*(\d{10})',
+                    r'جواز[^\d]*(\w{1,2}\d{6,10})',
+                    r'إقامة[^\d]*(\d{10})',
+                    r'سجل تجاري[^\d]*(\d{10})',
+                ]
+                ids_found = []
+                for p in id_patterns:
+                    ids_found.extend(re.findall(p, contract_text))
+                if ids_found:
+                    extracted['أرقام الهوية/السجلات'] = ", ".join(ids_found[:3])
+
+                # 3. Clause analysis
+                clauses_keywords = {
+                    "السرية": ["سري","سرية","إفشاء","أسرار"],
+                    "فترة التجربة": ["تجربة","فترة التجربة"],
+                    "إنهاء العقد": ["إنهاء","فسخ","إلغاء","انتهاء"],
+                    "التعويض": ["تعويض","غرامة","جزائي"],
+                    "المنافسة": ["منافس","لا يعمل لدى","عدم المنافسة"],
+                    "الإجازات": ["إجازة","إجازات","سنوية"],
+                    "ساعات العمل": ["ساعات العمل","ساعات التدريب","دوام"],
+                    "التأمين الطبي": ["تأمين","طبي","صحي"],
+                    "التأمينات الاجتماعية": ["تأمينات","اجتماعية","GOSI"],
+                    "مكافأة نهاية الخدمة": ["نهاية الخدمة","مكافأة","المادة 84","المادة 85"],
+                    "حقوق الملكية الفكرية": ["ملكية فكرية","براءة","اختراع","حقوق"],
+                    "القانون الحاكم": ["نظام العمل","محكمة","قضائي","مختصة"],
+                    "البدلات": ["بدل سكن","بدل مواصلات","بدلات","علاوة"],
+                }
+
+                found_clauses = {}
+                missing_clauses = []
+                for clause_name, keywords in clauses_keywords.items():
+                    found = any(kw in contract_text for kw in keywords)
+                    if found:
+                        found_clauses[clause_name] = "✅ موجود"
+                    else:
+                        found_clauses[clause_name] = "❌ غير موجود"
+                        missing_clauses.append(clause_name)
+
+                # Display results
+                k1,k2,k3,k4 = st.columns(4)
+                with k1: kpi("📄 نوع العقد", ct_type_detected)
+                with k2: kpi("📝 عدد الأحرف", f"{len(contract_text):,}")
+                with k3: kpi("✅ بنود موجودة", str(len(found_clauses) - len(missing_clauses)))
+                with k4: kpi("⚠️ بنود ناقصة", str(len(missing_clauses)))
+
+                # Extracted data
+                if extracted:
+                    st.markdown("### 📋 البيانات المستخرجة")
+                    for k, v in extracted.items():
+                        st.markdown(f"**{k}:** {v}")
+
+                # Clauses table
+                st.markdown("### 📊 تحليل البنود والشروط")
+                clause_df = pd.DataFrame([{"البند":k, "الحالة":v} for k,v in found_clauses.items()])
+                st.dataframe(clause_df, use_container_width=True, hide_index=True)
+
+                # Warnings
+                if missing_clauses:
+                    st.markdown("### ⚠️ بنود مفقودة (يُنصح بإضافتها)")
+                    for mc in missing_clauses:
+                        st.warning(f"⚠️ **{mc}** غير موجود في العقد")
+
+                # Compliance check
+                st.markdown("### ✅ فحص التوافق مع نظام العمل السعودي")
+                compliance = []
+                if "فترة التجربة" in [k for k,v in found_clauses.items() if "✅" in v]:
+                    compliance.append({"البند":"فترة التجربة","التوافق":"✅ متوافق","الملاحظة":"مذكورة في العقد"})
+                else:
+                    compliance.append({"البند":"فترة التجربة","التوافق":"⚠️ غير مذكورة","الملاحظة":"يجب تحديدها وفق المادة 53"})
+
+                if any(kw in contract_text for kw in ["نهاية الخدمة","المادة 84"]):
+                    compliance.append({"البند":"مكافأة نهاية الخدمة","التوافق":"✅ متوافق","الملاحظة":"مذكورة وفق المادة 84-85"})
+                else:
+                    compliance.append({"البند":"مكافأة نهاية الخدمة","التوافق":"⚠️ غير مذكورة","الملاحظة":"يجب الإشارة للمادة 84-85"})
+
+                if any(kw in contract_text for kw in ["إجازة سنوية","21 يوم","22 يوم","30 يوم"]):
+                    compliance.append({"البند":"الإجازة السنوية","التوافق":"✅ متوافق","الملاحظة":"مذكورة في العقد"})
+                else:
+                    compliance.append({"البند":"الإجازة السنوية","التوافق":"⚠️ غير مذكورة","الملاحظة":"21 يوم كحد أدنى وفق المادة 109"})
+
+                if any(kw in contract_text for kw in ["48 ساعة","ثمان ساعات","8 ساعات"]):
+                    compliance.append({"البند":"ساعات العمل","التوافق":"✅ متوافق","الملاحظة":"48 ساعة أسبوعياً كحد أقصى"})
+                else:
+                    compliance.append({"البند":"ساعات العمل","التوافق":"⚠️ غير محددة","الملاحظة":"يجب ألا تتجاوز 48 ساعة وفق المادة 98"})
+
+                if any(kw in contract_text for kw in ["سري","إفشاء"]):
+                    compliance.append({"البند":"السرية","التوافق":"✅ متوافق","الملاحظة":"بند السرية موجود"})
+                else:
+                    compliance.append({"البند":"السرية","التوافق":"⚠️ غير موجود","الملاحظة":"يُنصح بإضافة بند السرية"})
+
+                st.dataframe(pd.DataFrame(compliance), use_container_width=True, hide_index=True)
+
+                # Risk score
+                total_checks = len(compliance)
+                passed = sum(1 for c in compliance if "✅" in c['التوافق'])
+                risk_score = round(passed / max(total_checks,1) * 100)
+
+                st.markdown("### 🎯 تقييم المخاطر")
+                if risk_score >= 80:
+                    ibox(f"درجة التوافق: **{risk_score}%** - العقد متوافق بشكل جيد ✅", "success")
+                elif risk_score >= 60:
+                    ibox(f"درجة التوافق: **{risk_score}%** - يحتاج تحسينات ⚠️", "warning")
+                else:
+                    ibox(f"درجة التوافق: **{risk_score}%** - يحتاج مراجعة شاملة 🔴", "warning")
+
+                # Full text preview
+                with st.expander("📄 عرض النص الكامل للعقد"):
+                    st.text_area("", value=contract_text, height=400, disabled=True)
+
+                # Export analysis
+                if st.button("📥 تصدير التحليل Excel", key="ct_ana_exp"):
+                    ox = io.BytesIO()
+                    with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
+                        pd.DataFrame([{"المفتاح":k,"القيمة":v} for k,v in extracted.items()]).to_excel(w, sheet_name='البيانات المستخرجة', index=False)
+                        clause_df.to_excel(w, sheet_name='تحليل البنود', index=False)
+                        pd.DataFrame(compliance).to_excel(w, sheet_name='فحص التوافق', index=False)
+                    st.download_button("📥 تحميل", data=ox.getvalue(),
+                        file_name=f"Contract_Analysis_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
         elif page == "📋 العقود المحفوظة":
             hdr("📋 العقود المحفوظة","عرض جميع العقود المنشأة")
             contracts = st.session_state.saved_contracts
@@ -5453,131 +5677,230 @@ function stopSpeak(){{speechSynthesis.cancel()}}
     # =========================================
     elif section == "📤 التقارير والتصدير":
 
-        if page == "📄 تقرير PDF":
-            hdr("📄 تصدير تقرير PDF احترافي", "تقرير شامل بشعار الشركة وتنسيق رسمي")
+        if page == "📊 تقرير Dashboard":
+            hdr("📊 تقرير Dashboard احترافي","تقرير بأسلوب Power BI مع رسوم بيانية ورؤى ذكية بالذكاء الاصطناعي")
 
             if len(emp) > 0:
                 st.markdown("### ⚙️ إعدادات التقرير")
                 pc1, pc2 = st.columns(2)
                 with pc1:
-                    pdf_title = st.text_input("عنوان التقرير:", "تقرير الموارد البشرية", key="pdft")
-                    pdf_company = st.text_input("اسم الشركة:", "رسال الود لتقنية المعلومات", key="pdfc")
-                    pdf_prepared = st.text_input("إعداد:", emp_name if 'emp_name' in dir() else "", key="pdfp")
+                    rpt_title = st.text_input("عنوان التقرير:", "HR Analytics Dashboard", key="rpt_t")
+                    rpt_company = st.text_input("اسم الشركة:", "رسال الود لتقنية المعلومات", key="rpt_c")
+                    rpt_prepared = st.text_input("إعداد:", st.session_state.get('user_name',''), key="rpt_p")
                 with pc2:
-                    pdf_period = st.text_input("الفترة:", datetime.now().strftime('%Y'), key="pdfpr")
-                    pdf_sections = st.multiselect("الأقسام المطلوبة:",
-                        ["ملخص تنفيذي","إحصائيات القوى العاملة","تحليل الرواتب","توزيع الأقسام","توزيع الجنسيات"],
-                        default=["ملخص تنفيذي","إحصائيات القوى العاملة"],
-                        key="pdfsec")
+                    rpt_period = st.text_input("الفترة:", datetime.now().strftime('%Y'), key="rpt_pr")
+                    rpt_sections = st.multiselect("أقسام التقرير:",
+                        ["ملخص تنفيذي","القوى العاملة","تحليل الرواتب","الأقسام","الجنسيات","الأداء","رؤى الذكاء الاصطناعي"],
+                        default=["ملخص تنفيذي","القوى العاملة","تحليل الرواتب","رؤى الذكاء الاصطناعي"],
+                        key="rpt_sec")
 
-                if st.button("📄 إنشاء تقرير PDF", type="primary", key="pdfbtn"):
-                    try:
-                        pdf, fn = _create_pdf_with_arabic()
-
-                        class ArabicReportPDF(pdf.__class__):
-                            def header(self2):
-                                self2.set_fill_color(15, 76, 92)
-                                self2.rect(0, 0, 210, 25, 'F')
-                                self2.set_text_color(255, 255, 255)
-                                self2.set_font(fn, 'B', 14)
-                                _pdf_cell(self2, fn, 0, 25, pdf_company, align='C', ln=True)
-
-                            def footer(self2):
-                                self2.set_y(-15)
-                                self2.set_text_color(128, 128, 128)
-                                self2.set_font(fn, '', 8)
-                                self2.cell(0, 10, f'Page {self2.page_no()} | {datetime.now().strftime("%Y-%m-%d")}', align='C')
-
-                        # Rebuild pdf as ArabicReportPDF
-                        pdf2, _ = _create_pdf_with_arabic()
-                        pdf2.__class__ = ArabicReportPDF
-                        pdf2.alias_nb_pages()
-                        pdf2.add_page()
-                        pdf2.set_auto_page_break(auto=True, margin=20)
-
-                        # Title
-                        pdf2.ln(30)
-                        pdf2.set_text_color(15, 76, 92)
-                        pdf2.set_font(fn, 'B', 20)
-                        _pdf_cell(pdf2, fn, 0, 12, pdf_title, align='C', ln=True)
-                        pdf2.set_font(fn, '', 11)
-                        pdf2.set_text_color(100, 100, 100)
-                        _pdf_cell(pdf2, fn, 0, 8, f"Period: {pdf_period} | Prepared by: {pdf_prepared}", align='C', ln=True)
-                        pdf2.ln(10)
-
+                if st.button("📊 إنشاء التقرير", type="primary", use_container_width=True, key="rpt_btn"):
+                    with st.spinner("جاري إنشاء التقرير..."):
                         n = len(emp)
                         num_cols = emp.select_dtypes('number').columns.tolist()
+                        cat_cols = [c for c in emp.columns if emp[c].dtype=='object' and 1 < emp[c].nunique() < 30]
+                        sal_col = next((c for c in num_cols if any(x in c.lower() for x in ['gross','salary','net','راتب','إجمالي'])), num_cols[0] if num_cols else None)
+                        dept_col = next((c for c in cat_cols if any(x in c.lower() for x in ['dept','department','قسم','القطاع'])), cat_cols[0] if cat_cols else None)
+                        nat_col = next((c for c in cat_cols if any(x in c.lower() for x in ['nat','جنسية','nationality'])), None)
+                        status_col = next((c for c in cat_cols if any(x in c.lower() for x in ['status','حالة'])), None)
+                        loc_col = next((c for c in cat_cols if any(x in c.lower() for x in ['location','موقع','مدينة','city'])), None)
 
-                        if "ملخص تنفيذي" in pdf_sections:
-                            pdf2.set_fill_color(46, 117, 182)
-                            pdf2.set_text_color(255, 255, 255)
-                            pdf2.set_font(fn, 'B', 13)
-                            _pdf_cell(pdf2, fn, 0, 10, _reshape_arabic('  ملخص تنفيذي / Executive Summary') if fn != 'Helvetica' else '  Executive Summary', fill=True, ln=True)
-                            pdf2.set_text_color(0, 0, 0)
-                            pdf2.set_font(fn, '', 10)
-                            pdf2.ln(5)
-                            _pdf_cell(pdf2, fn, 0, 7, f"Total Employees: {n}", ln=True)
-                            sal_col = [c for c in num_cols if 'gross' in c.lower() or 'salary' in c.lower() or 'net' in c.lower()]
-                            if sal_col:
-                                sc = sal_col[0]
-                                latest = emp.drop_duplicates(subset=[c for c in emp.columns if 'id' in c.lower() or 'name' in c.lower()][:1], keep='last') if any('id' in c.lower() for c in emp.columns) else emp
-                                _pdf_cell(pdf2, fn, 0, 7, f"Avg Salary ({sc}): {latest[sc].mean():,.2f} SAR", ln=True)
-                                _pdf_cell(pdf2, fn, 0, 7, f"Total Payroll: {latest[sc].sum():,.2f} SAR", ln=True)
-                            pdf2.ln(8)
+                        # Generate charts as base64
+                        import base64 as b64
 
-                        if "إحصائيات القوى العاملة" in pdf_sections:
-                            pdf2.set_fill_color(46, 117, 182)
-                            pdf2.set_text_color(255, 255, 255)
-                            pdf2.set_font(fn, 'B', 13)
-                            _pdf_cell(pdf2, fn, 0, 10, _reshape_arabic('  إحصائيات القوى العاملة / Workforce Statistics') if fn != 'Helvetica' else '  Workforce Statistics', fill=True, ln=True)
-                            pdf2.set_text_color(0, 0, 0)
-                            pdf2.set_font(fn, '', 10)
-                            pdf2.ln(5)
+                        def fig_to_b64(fig, w=600, h=350):
+                            img = fig.to_image(format="png", width=w, height=h, scale=2)
+                            return b64.b64encode(img).decode()
 
-                            cat_cols = [c for c in emp.columns if emp[c].dtype=='object' and 1 < emp[c].nunique() < 30]
-                            for cc in cat_cols[:5]:
-                                pdf2.set_font(fn, 'B', 10)
-                                _pdf_cell(pdf2, fn, 0, 7, f"{cc}:", ln=True)
-                                pdf2.set_font(fn, '', 9)
-                                for val, cnt in emp[cc].value_counts().head(8).items():
-                                    pct = cnt/len(emp)*100
-                                    _pdf_cell(pdf2, fn, 0, 6, f"    {val}: {cnt} ({pct:.1f}%)", ln=True)
-                                pdf2.ln(3)
+                        charts_html = ""
 
-                        if "تحليل الرواتب" in pdf_sections and num_cols:
-                            pdf2.add_page()
-                            pdf2.set_fill_color(46, 117, 182)
-                            pdf2.set_text_color(255, 255, 255)
-                            pdf2.set_font(fn, 'B', 13)
-                            _pdf_cell(pdf2, fn, 0, 10, _reshape_arabic('  تحليل الرواتب / Salary Analysis') if fn != 'Helvetica' else '  Salary Analysis', fill=True, ln=True)
-                            pdf2.set_text_color(0, 0, 0)
-                            pdf2.set_font(fn, '', 10)
-                            pdf2.ln(5)
+                        # Chart 1: Department distribution
+                        if dept_col:
+                            dept_counts = emp[dept_col].value_counts().head(12)
+                            fig = px.bar(x=dept_counts.values, y=dept_counts.index, orientation='h',
+                                color=dept_counts.values, color_continuous_scale='teal',
+                                labels={'x':'Count','y':''})
+                            fig.update_layout(title='Headcount by Department', template='plotly_dark',
+                                paper_bgcolor='#1e1e2e', plot_bgcolor='#1e1e2e', height=350,
+                                font=dict(color='white'), showlegend=False, coloraxis_showscale=False,
+                                margin=dict(l=10,r=10,t=40,b=10))
+                            charts_html += f"<div class='chart'><img src='data:image/png;base64,{fig_to_b64(fig)}'/></div>"
 
-                            pdf2.set_font(fn, 'B', 9)
-                            pdf2.set_fill_color(230, 240, 250)
-                            headers = ['Column', 'Mean', 'Min', 'Max', 'Std']
-                            widths = [50, 35, 35, 35, 35]
-                            for i, h in enumerate(headers):
-                                pdf2.cell(widths[i], 8, h, border=1, fill=True, align='C')
-                            pdf2.ln()
-                            pdf2.set_font(fn, '', 8)
-                            for nc in num_cols[:10]:
-                                vals = [nc[:25], f"{emp[nc].mean():,.1f}", f"{emp[nc].min():,.1f}", f"{emp[nc].max():,.1f}", f"{emp[nc].std():,.1f}"]
-                                for i, v in enumerate(vals):
-                                    pdf2.cell(widths[i], 7, v, border=1, align='C')
-                                pdf2.ln()
+                        # Chart 2: Salary distribution
+                        if sal_col:
+                            fig = px.histogram(emp, x=sal_col, nbins=20, color_discrete_sequence=['#E36414'])
+                            fig.update_layout(title='Salary Distribution', template='plotly_dark',
+                                paper_bgcolor='#1e1e2e', plot_bgcolor='#1e1e2e', height=350,
+                                font=dict(color='white'), margin=dict(l=10,r=10,t=40,b=10))
+                            charts_html += f"<div class='chart'><img src='data:image/png;base64,{fig_to_b64(fig)}'/></div>"
 
-                        pdf_bytes = pdf2.output()
-                        st.download_button("📥 تحميل PDF", data=bytes(pdf_bytes),
-                            file_name=f"{pdf_title}_{datetime.now().strftime('%Y%m%d')}.pdf",
-                            mime="application/pdf", type="primary", use_container_width=True)
-                        st.success("✅ تم إنشاء التقرير بنجاح!")
+                        # Chart 3: Nationality pie
+                        if nat_col:
+                            nat_counts = emp[nat_col].value_counts().head(8)
+                            fig = px.pie(values=nat_counts.values, names=nat_counts.index, hole=0.4,
+                                color_discrete_sequence=px.colors.qualitative.Set2)
+                            fig.update_layout(title='Nationality Distribution', template='plotly_dark',
+                                paper_bgcolor='#1e1e2e', plot_bgcolor='#1e1e2e', height=350,
+                                font=dict(color='white'), margin=dict(l=10,r=10,t=40,b=10))
+                            charts_html += f"<div class='chart'><img src='data:image/png;base64,{fig_to_b64(fig)}'/></div>"
 
-                    except ImportError:
-                        st.error("مكتبة fpdf2 غير مثبتة. أضف `fpdf2` في requirements.txt")
-                    except Exception as e:
-                        st.error(f"خطأ: {e}")
+                        # Chart 4: Status
+                        if status_col:
+                            stat_counts = emp[status_col].value_counts()
+                            fig = px.pie(values=stat_counts.values, names=stat_counts.index, hole=0.5,
+                                color_discrete_sequence=['#27AE60','#E74C3C','#F39C12','#3498DB'])
+                            fig.update_layout(title='Employment Status', template='plotly_dark',
+                                paper_bgcolor='#1e1e2e', plot_bgcolor='#1e1e2e', height=350,
+                                font=dict(color='white'), margin=dict(l=10,r=10,t=40,b=10))
+                            charts_html += f"<div class='chart'><img src='data:image/png;base64,{fig_to_b64(fig)}'/></div>"
+
+                        # Chart 5: Location
+                        if loc_col:
+                            loc_counts = emp[loc_col].value_counts().head(8)
+                            fig = px.bar(x=loc_counts.index, y=loc_counts.values,
+                                color_discrete_sequence=['#2A9D8F'])
+                            fig.update_layout(title='Distribution by Location', template='plotly_dark',
+                                paper_bgcolor='#1e1e2e', plot_bgcolor='#1e1e2e', height=350,
+                                font=dict(color='white'), margin=dict(l=10,r=10,t=40,b=10))
+                            charts_html += f"<div class='chart'><img src='data:image/png;base64,{fig_to_b64(fig)}'/></div>"
+
+                        # Chart 6: Salary by dept box
+                        if sal_col and dept_col:
+                            top_depts = emp[dept_col].value_counts().head(8).index
+                            fig = px.box(emp[emp[dept_col].isin(top_depts)], x=dept_col, y=sal_col,
+                                color_discrete_sequence=['#E9C46A'])
+                            fig.update_layout(title='Salary Range by Department', template='plotly_dark',
+                                paper_bgcolor='#1e1e2e', plot_bgcolor='#1e1e2e', height=350,
+                                font=dict(color='white'), margin=dict(l=10,r=10,t=40,b=10))
+                            charts_html += f"<div class='chart'><img src='data:image/png;base64,{fig_to_b64(fig)}'/></div>"
+
+                        # KPIs
+                        active_count = len(emp[emp[status_col].isin(['Active','نشط','active'])]) if status_col else n
+                        avg_sal = emp[sal_col].mean() if sal_col else 0
+                        total_payroll = emp[sal_col].sum() if sal_col else 0
+                        n_depts = emp[dept_col].nunique() if dept_col else 0
+                        sa_pct = 0
+                        if nat_col:
+                            sa = len(emp[emp[nat_col].isin(['Saudi','سعودي','Saudi Arabian'])])
+                            sa_pct = round(sa / max(n,1) * 100, 1)
+
+                        # AI Insights
+                        insights = []
+                        if dept_col:
+                            top_dept = emp[dept_col].value_counts().idxmax()
+                            top_pct = emp[dept_col].value_counts().iloc[0] / n * 100
+                            insights.append(f"The largest department is <strong>{top_dept}</strong> with {top_pct:.0f}% of total workforce.")
+                        if sal_col:
+                            median = emp[sal_col].median()
+                            std = emp[sal_col].std()
+                            insights.append(f"Average salary is <strong>{avg_sal:,.0f} SAR</strong> with median at <strong>{median:,.0f} SAR</strong>. Salary spread (std) is {std:,.0f}.")
+                            if avg_sal > median * 1.15:
+                                insights.append("Salary distribution is <strong>right-skewed</strong>, indicating a few high earners pulling the average up. Consider reviewing compensation equity.")
+                        if nat_col:
+                            insights.append(f"Saudization rate is <strong>{sa_pct}%</strong>." + (" Meets Nitaqat requirements." if sa_pct >= 50 else " May need improvement for Nitaqat compliance."))
+                        if status_col:
+                            turnover = len(emp[emp[status_col].isin(['Historical','Terminated','منتهي'])]) / max(n,1) * 100
+                            insights.append(f"Historical/terminated rate is <strong>{turnover:.0f}%</strong>." + (" High turnover detected - investigate retention strategies." if turnover > 50 else ""))
+                        if dept_col and sal_col:
+                            dept_avg = emp.groupby(dept_col)[sal_col].mean().sort_values(ascending=False)
+                            insights.append(f"Highest-paid department: <strong>{dept_avg.index[0]}</strong> ({dept_avg.iloc[0]:,.0f} SAR avg).")
+
+                        insights_html = "".join([f"<div class='insight'><span class='dot'></span>{ins}</div>" for ins in insights])
+
+                        # Table
+                        table_html = ""
+                        if dept_col:
+                            dept_stats = emp.groupby(dept_col).agg(
+                                Count=(dept_col, 'count'),
+                                **({f'Avg_{sal_col}': (sal_col, 'mean')} if sal_col else {})
+                            ).sort_values('Count', ascending=False).head(12).reset_index()
+                            table_rows = ""
+                            for _, r in dept_stats.iterrows():
+                                pct = r['Count'] / n * 100
+                                bar_w = min(pct * 3, 100)
+                                sal_str = f"{r[f'Avg_{sal_col}']:,.0f}" if sal_col else "-"
+                                table_rows += f"<tr><td>{r[dept_col]}</td><td>{r['Count']}</td><td>{pct:.1f}%</td><td><div class='bar' style='width:{bar_w}%'></div></td><td>{sal_str}</td></tr>"
+                            table_html = f"""<table><thead><tr><th>Department</th><th>Count</th><th>%</th><th>Distribution</th><th>Avg Salary</th></tr></thead><tbody>{table_rows}</tbody></table>"""
+
+                        # Build full HTML
+                        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{rpt_title}</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:'Inter',sans-serif;background:#0f0f1a;color:#e0e0e0;padding:0}}
+.header{{background:linear-gradient(135deg,#0F4C5C,#1A1A2E);padding:30px 40px;border-bottom:3px solid #E36414}}
+.header h1{{font-size:1.8em;color:white;margin-bottom:5px}}
+.header .sub{{color:rgba(255,255,255,0.6);font-size:0.9em}}
+.header .logo{{float:right;width:50px;height:50px;background:linear-gradient(135deg,#E36414,#E9C46A);border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800;color:white;font-size:18px}}
+.container{{max-width:1200px;margin:0 auto;padding:20px}}
+.kpi-row{{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:20px 0}}
+.kpi{{background:linear-gradient(135deg,#1e1e2e,#252540);border-radius:12px;padding:18px;border-left:4px solid #E36414;position:relative;overflow:hidden}}
+.kpi::after{{content:'';position:absolute;top:0;right:0;width:60px;height:100%;background:linear-gradient(90deg,transparent,rgba(227,100,20,0.05))}}
+.kpi .value{{font-size:1.6em;font-weight:700;color:#E9C46A;margin-bottom:2px}}
+.kpi .label{{font-size:0.75em;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:1px}}
+.section{{margin:25px 0}}
+.section h2{{font-size:1.2em;color:#E9C46A;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.1)}}
+.charts-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(500px,1fr));gap:15px}}
+.chart{{background:#1e1e2e;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,0.05)}}
+.chart img{{width:100%;height:auto;display:block}}
+table{{width:100%;border-collapse:collapse;background:#1e1e2e;border-radius:10px;overflow:hidden;margin:10px 0}}
+thead{{background:#252540}} th{{padding:10px 12px;text-align:left;font-size:0.8em;text-transform:uppercase;letter-spacing:1px;color:#E9C46A;border-bottom:2px solid #E36414}}
+td{{padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.05);font-size:0.85em}}
+tr:hover{{background:rgba(227,100,20,0.05)}}
+.bar{{height:8px;background:linear-gradient(90deg,#E36414,#E9C46A);border-radius:4px}}
+.insights{{background:linear-gradient(135deg,#1a2332,#1e1e2e);border-radius:12px;padding:20px;border:1px solid rgba(42,157,143,0.3);margin:15px 0}}
+.insights h2{{color:#2A9D8F;border-bottom-color:rgba(42,157,143,0.3)}}
+.insight{{padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:0.9em;line-height:1.6;display:flex;align-items:flex-start;gap:10px}}
+.insight:last-child{{border:none}}
+.dot{{width:6px;height:6px;background:#2A9D8F;border-radius:50%;margin-top:8px;flex-shrink:0}}
+.insight strong{{color:#E9C46A}}
+.footer{{text-align:center;padding:20px;color:rgba(255,255,255,0.3);font-size:0.75em;border-top:1px solid rgba(255,255,255,0.05);margin-top:30px}}
+@media print{{body{{background:white;color:#333}} .kpi{{border-color:#0F4C5C}} .kpi .value{{color:#0F4C5C}} .section h2{{color:#0F4C5C}} th{{color:#0F4C5C}}}}
+</style>
+</head>
+<body>
+<div class="header">
+<div class="logo">HR</div>
+<h1>{rpt_title}</h1>
+<div class="sub">{rpt_company} | {rpt_period} | Prepared by: {rpt_prepared} | Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}</div>
+</div>
+<div class="container">
+
+<div class="kpi-row">
+<div class="kpi"><div class="value">{n:,}</div><div class="label">Total Records</div></div>
+<div class="kpi"><div class="value">{active_count:,}</div><div class="label">Active Employees</div></div>
+<div class="kpi"><div class="value">{n_depts}</div><div class="label">Departments</div></div>
+<div class="kpi"><div class="value">{avg_sal:,.0f}</div><div class="label">Avg Salary (SAR)</div></div>
+<div class="kpi"><div class="value">{total_payroll:,.0f}</div><div class="label">Total Payroll</div></div>
+<div class="kpi"><div class="value">{sa_pct}%</div><div class="label">Saudization</div></div>
+</div>
+
+{"<div class='section insights'><h2>🤖 AI-Powered Insights</h2>" + insights_html + "</div>" if "رؤى الذكاء الاصطناعي" in rpt_sections else ""}
+
+<div class="section"><h2>📊 Workforce Analytics</h2><div class="charts-grid">{charts_html}</div></div>
+
+{"<div class='section'><h2>📋 Department Breakdown</h2>" + table_html + "</div>" if table_html else ""}
+
+</div>
+<div class="footer">{rpt_company} | HR Analytics Platform | Confidential</div>
+</body></html>"""
+
+                        # Display in Streamlit
+                        st.components.v1.html(html, height=900, scrolling=True)
+
+                        # Downloads
+                        dc1, dc2 = st.columns(2)
+                        with dc1:
+                            st.download_button("📥 تحميل HTML Dashboard", data=html.encode('utf-8'),
+                                file_name=f"{rpt_title}_{datetime.now().strftime('%Y%m%d')}.html",
+                                mime="text/html", type="primary", use_container_width=True)
+                        with dc2:
+                            st.caption("💡 افتح HTML في المتصفح واضغط Ctrl+P للطباعة كـ PDF")
+
             else:
                 ibox("ارفع ملف بيانات أولاً من القائمة الجانبية.", "warning")
 
