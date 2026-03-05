@@ -1093,42 +1093,87 @@ def login_page():
     st.markdown("<div style='text-align:center;padding:40px 0;'><div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:80px;height:80px;border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:32px;font-weight:800;color:white;'>HR</div><h1 style='color:#0F4C5C;'>منصة تحليلات الموارد البشرية</h1><p style='color:#64748B;'>رسال الود لتقنية المعلومات</p></div>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        st.markdown("### 🔐 تسجيل الدخول")
-        with st.form("login_form", clear_on_submit=False):
-            username = st.text_input("اسم المستخدم:", key="login_user")
-            password = st.text_input("كلمة المرور:", type="password", key="login_pass")
-            lc1, lc2 = st.columns(2)
-            with lc1:
-                login_btn = st.form_submit_button("🔓 دخول", type="primary", use_container_width=True)
-            with lc2:
-                guest_btn = st.form_submit_button("👤 دخول بدون حساب", use_container_width=True)
+        login_tab, forgot_tab = st.tabs(["🔐 تسجيل الدخول", "🔑 استرجاع كلمة السر"])
 
-            if login_btn:
-                init_users()
-                users = st.session_state.users_db
-                if username in users and users[username]["password"] == hash_pw(password):
+        with login_tab:
+            with st.form("login_form", clear_on_submit=False):
+                username = st.text_input("اسم المستخدم:", key="login_user")
+                password = st.text_input("كلمة المرور:", type="password", key="login_pass")
+                lc1, lc2 = st.columns(2)
+                with lc1:
+                    login_btn = st.form_submit_button("🔓 دخول", type="primary", use_container_width=True)
+                with lc2:
+                    guest_btn = st.form_submit_button("👤 دخول بدون حساب", use_container_width=True)
+
+                if login_btn:
+                    init_users()
+                    users = st.session_state.users_db
+                    if username in users and users[username]["password"] == hash_pw(password):
+                        st.session_state.logged_in = True
+                        st.session_state.current_user = username
+                        st.session_state.user_role = users[username]["role"]
+                        st.session_state.user_name = users[username]["name"]
+                        st.session_state.user_sections = users[username]["sections"]
+                        st.session_state.user_email = users[username].get("email", "")
+                        st.session_state.user_dept = users[username].get("dept", "")
+                        _save_login_token(username)
+                        st.rerun()
+                    else:
+                        st.error("❌ اسم المستخدم أو كلمة المرور غير صحيحة")
+
+                if guest_btn:
                     st.session_state.logged_in = True
-                    st.session_state.current_user = username
-                    st.session_state.user_role = users[username]["role"]
-                    st.session_state.user_name = users[username]["name"]
-                    st.session_state.user_sections = users[username]["sections"]
-                    st.session_state.user_email = users[username].get("email", "")
-                    st.session_state.user_dept = users[username].get("dept", "")
-                    # Persist login token to survive reruns
-                    _save_login_token(username)
+                    st.session_state.current_user = "guest"
+                    st.session_state.user_role = "عارض"
+                    st.session_state.user_name = "زائر"
+                    st.session_state.user_sections = "all"
+                    st.session_state.user_email = ""
+                    st.session_state.user_dept = ""
                     st.rerun()
-                else:
-                    st.error("❌ اسم المستخدم أو كلمة المرور غير صحيحة")
 
-            if guest_btn:
-                st.session_state.logged_in = True
-                st.session_state.current_user = "guest"
-                st.session_state.user_role = "عارض"
-                st.session_state.user_name = "زائر"
-                st.session_state.user_sections = "all"
-                st.session_state.user_email = ""
-                st.session_state.user_dept = ""
-                st.rerun()
+        with forgot_tab:
+            st.markdown("#### 🔑 استرجاع كلمة المرور عبر البريد الإلكتروني")
+            with st.form("forgot_form", clear_on_submit=False):
+                reset_email = st.text_input("أدخل بريدك الإلكتروني المسجل:", key="reset_email", placeholder="you@company.com")
+                reset_btn = st.form_submit_button("📧 إرسال رابط الاسترجاع", type="primary", use_container_width=True)
+
+                if reset_btn and reset_email:
+                    init_users()
+                    users = st.session_state.users_db
+                    # Find user by email
+                    found_user = None
+                    for uname, udata in users.items():
+                        if udata.get('email','').lower().strip() == reset_email.lower().strip():
+                            found_user = uname
+                            break
+
+                    if found_user:
+                        # Generate temp password
+                        import random, string
+                        temp_pass = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+                        # Update password
+                        st.session_state.users_db[found_user]['password'] = hash_pw(temp_pass)
+                        db_save_users(st.session_state.users_db)
+                        # Send email
+                        smtp_cfg = st.session_state.get('smtp_config', {})
+                        if not smtp_cfg.get('email'):
+                            smtp_cfg = load_smtp_config()
+                        if smtp_cfg.get('email'):
+                            ok, msg = send_test_email(reset_email, users[found_user]['name'],
+                                [f"اسم المستخدم: {found_user}",
+                                 f"كلمة المرور المؤقتة: {temp_pass}",
+                                 "يرجى تغيير كلمة المرور فور تسجيل الدخول"],
+                                datetime.now().strftime('%Y-%m-%d'),
+                                smtp_cfg.get('sender_name', 'HR System'))
+                            if ok:
+                                st.success(f"✅ تم إرسال كلمة مرور مؤقتة إلى {reset_email}")
+                            else:
+                                st.warning(f"⚠️ لم يتم الإرسال: {msg}")
+                                st.info(f"كلمة المرور المؤقتة: **{temp_pass}** (احفظها الآن)")
+                        else:
+                            st.info(f"⚠️ إعدادات البريد غير مكوّنة. كلمة المرور المؤقتة: **{temp_pass}**")
+                    else:
+                        st.error("❌ لم يتم العثور على حساب بهذا البريد الإلكتروني")
 
         st.markdown("---")
         with st.expander("📋 الحسابات الافتراضية"):
@@ -1269,6 +1314,21 @@ def user_management_page():
                 "name": new_name, "email": new_email, "dept": new_dept, "sections": new_sections}
             db_save_users(st.session_state.users_db)
             st.success(f"✅ تم إضافة {new_name} بدور {new_role}")
+            # Send welcome email with credentials
+            if new_email:
+                smtp_cfg = st.session_state.get('smtp_config', {})
+                if not smtp_cfg.get('email'): smtp_cfg = load_smtp_config()
+                if smtp_cfg.get('email'):
+                    ok, msg = send_test_email(new_email, new_name,
+                        [f"تم إنشاء حسابك في منصة تحليلات الموارد البشرية",
+                         f"اسم المستخدم: {new_user}",
+                         f"كلمة المرور: {new_pass}",
+                         f"الدور: {new_role}",
+                         "يرجى تغيير كلمة المرور فور تسجيل الدخول الأول"],
+                        datetime.now().strftime('%Y-%m-%d'),
+                        smtp_cfg.get('sender_name', 'HR'))
+                    if ok: st.success(f"📧 تم إرسال بيانات الحساب إلى {new_email}")
+                    else: st.warning(f"⚠️ لم يتم إرسال البريد: {msg}")
             st.rerun()
         else:
             st.error("يرجى تعبئة الاسم واسم المستخدم وكلمة المرور على الأقل")
@@ -3418,7 +3478,26 @@ def main():
                 st.plotly_chart(fig, use_container_width=True)
 
         elif page == "📋 الاحتياجات التدريبية":
-            hdr("📋 تحليل الاحتياجات التدريبية")
+            hdr("📋 تحليل الاحتياجات التدريبية","مع مواءمة تلقائية مع جهات التدريب")
+
+            # Skills-to-provider mapping
+            SKILL_PROVIDER_MAP = {
+                "بيع استشاري": ["PwC Academy","Informa Connect","Dale Carnegie UAE"],
+                "CRM": ["بكه للتعليم","Coursera for Business","LinkedIn Learning"],
+                "تفاوض": ["Dale Carnegie UAE","Informa Connect","معهد الإدارة العامة"],
+                "تسويق رقمي": ["Google Certificates","Udacity MENA","Sprints"],
+                "SEO": ["Google Certificates","LinkedIn Learning","Coursera for Business"],
+                "Growth Hacking": ["Udacity MENA","Sprints","Coursera for Business"],
+                "Python/SQL": ["Udacity MENA","Coursera for Business","Sprints","Google Certificates"],
+                "Power BI": ["LinkedIn Learning","Coursera for Business","بكه للتعليم"],
+                "AI": ["Udacity MENA","Misk Academy","Google Certificates","Coursera for Business"],
+                "IFRS": ["KPMG Academy","PwC Academy","BIBF"],
+                "نمذجة مالية": ["KPMG Academy","PwC Academy","Coursera for Business"],
+                "استقطاب": ["معهد الإدارة العامة","LinkedIn Learning","الجامعة الأمريكية بالقاهرة"],
+                "أداء": ["معهد الإدارة العامة","بكه للتعليم","Informa Connect"],
+                "OKRs": ["بكه للتعليم","Coursera for Business","LinkedIn Learning"],
+            }
+
             cats = {"المبيعات":["بيع استشاري","CRM","تفاوض"],"التسويق":["تسويق رقمي","SEO","Growth Hacking"],
                     "التقنية":["Python/SQL","Power BI","AI"],"المالية":["IFRS","نمذجة مالية"],"الموارد البشرية":["استقطاب","أداء","OKRs"]}
             depts = st.multiselect("📌 الأقسام", list(cats.keys()), default=list(cats.keys())[:3])
@@ -3431,12 +3510,52 @@ def main():
                         with c1: lv = st.select_slider(f"الحالي: {s}", ["مبتدئ","أساسي","متوسط","متقدم","خبير"], value="أساسي", key=f"l_{d}_{s}")
                         with c2: tg = st.select_slider(f"المستهدف: {s}", ["مبتدئ","أساسي","متوسط","متقدم","خبير"], value="متقدم", key=f"t_{d}_{s}")
                         levels = ["مبتدئ","أساسي","متوسط","متقدم","خبير"]
-                        needs.append({"القسم":d,"المهارة":s,"الحالي":lv,"المستهدف":tg,"الفجوة":levels.index(tg)-levels.index(lv)})
+                        gap = levels.index(tg) - levels.index(lv)
+                        providers = SKILL_PROVIDER_MAP.get(s, ["Coursera for Business","LinkedIn Learning"])
+                        needs.append({"القسم":d, "المهارة":s, "الحالي":lv, "المستهدف":tg, "الفجوة":gap,
+                            "الأولوية": "حرج" if gap >= 3 else ("عالي" if gap >= 2 else "متوسط"),
+                            "جهات التدريب المقترحة": " | ".join(providers[:3])})
+
             if needs:
                 ndf = pd.DataFrame(needs)
+                st.markdown("### 📊 خريطة الفجوات والمواءمة")
                 st.dataframe(ndf, use_container_width=True, hide_index=True)
-                fig = px.bar(ndf, x='المهارة', y='الفجوة', color='القسم', title='خريطة الفجوات', color_discrete_sequence=CL['dept'])
-                fig.update_layout(font=dict(family="Noto Sans Arabic"),height=380); st.plotly_chart(fig,use_container_width=True)
+
+                nc1, nc2 = st.columns(2)
+                with nc1:
+                    fig = px.bar(ndf, x='المهارة', y='الفجوة', color='القسم', title='خريطة الفجوات', color_discrete_sequence=CL['dept'])
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380)
+                    st.plotly_chart(fig, use_container_width=True)
+                with nc2:
+                    fig = px.bar(ndf, x='المهارة', y='الفجوة', color='الأولوية', title='الأولويات',
+                        color_discrete_map={'حرج':'#E74C3C','عالي':'#E36414','متوسط':'#F39C12'})
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                # Auto-matched providers detail
+                st.markdown("---")
+                st.markdown("### 🏫 المواءمة التلقائية مع جهات التدريب")
+                for _, row in ndf.iterrows():
+                    if row['الفجوة'] > 0:
+                        with st.expander(f"📌 {row['المهارة']} ({row['القسم']}) - فجوة: {row['الفجوة']} - {row['الأولوية']}"):
+                            st.markdown(f"**المستوى الحالي:** {row['الحالي']} → **المستهدف:** {row['المستهدف']}")
+                            st.markdown("**جهات التدريب المقترحة:**")
+                            matched = SKILL_PROVIDER_MAP.get(row['المهارة'], [])
+                            for prov_name in matched:
+                                # Find provider details
+                                for market_name, market_provs in PROVIDERS.items():
+                                    for mp in market_provs:
+                                        if mp['name'] == prov_name:
+                                            st.markdown(f"- 🏫 **{mp['name']}** | {mp['spec']} | {mp['type']} | {market_name} | [{mp['url']}](https://{mp['url']})")
+
+                # Export needs analysis
+                if st.button("📥 تصدير تحليل الاحتياجات", type="primary", key="exp_needs"):
+                    ox = io.BytesIO()
+                    with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
+                        ndf.to_excel(w, sheet_name='الاحتياجات التدريبية', index=False)
+                    st.download_button("📥 تحميل", data=ox.getvalue(),
+                        file_name=f"Training_Needs_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
         elif page == "🏫 جهات التدريب":
             hdr("🏫 دليل جهات التدريب")
@@ -5350,6 +5469,26 @@ function stopSpeak(){{speechSynthesis.cancel()}}
             for i, q_item in enumerate(tmpl["questions"]):
                 answers[i] = st.slider(f"{i+1}. {q_item['q']}", 1, 5, 3, key=f"sv_q{i}")
 
+            # Notification options
+            st.markdown("### 📧 إشعار بالاستبيان")
+            notif_c1, notif_c2, notif_c3 = st.columns(3)
+            with notif_c1:
+                sv_notify_email = st.text_input("بريد الموظف (للإشعار):", key="sv_notify_email", placeholder="employee@company.com")
+            with notif_c2:
+                sv_send_email = st.checkbox("📧 إرسال نتيجة بالبريد", value=False, key="sv_send_email")
+            with notif_c3:
+                sv_send_basecamp = st.checkbox("🏕️ إرسال إلى Basecamp", value=False, key="sv_send_bc")
+
+            # Basecamp config
+            if sv_send_basecamp:
+                with st.expander("⚙️ إعدادات Basecamp"):
+                    st.caption("أدخل Webhook URL من Basecamp (Chatbot Integration)")
+                    bc_webhook = st.text_input("Basecamp Webhook URL:", key="bc_webhook",
+                        value=st.session_state.get('basecamp_webhook',''),
+                        placeholder="https://3.basecampapi.com/xxx/integrations/yyy/buckets/zzz/chats/www/lines.json")
+                    if bc_webhook:
+                        st.session_state.basecamp_webhook = bc_webhook
+
             if st.button("✅ إرسال الاستبيان", type="primary", key="sv_submit"):
                 if sv_name:
                     response = {
@@ -5365,6 +5504,33 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                     response["التفاصيل"] = {c: round(sum(v)/len(v), 2) for c, v in cats.items()}
                     st.session_state.survey_responses.append(response)
                     st.success(f"✅ تم حفظ استبيان {sv_name} - المتوسط: {response['المتوسط العام']}/5")
+
+                    # Send email notification
+                    if sv_send_email and sv_notify_email:
+                        smtp_cfg = st.session_state.get('smtp_config', {})
+                        if not smtp_cfg.get('email'): smtp_cfg = load_smtp_config()
+                        if smtp_cfg.get('email'):
+                            details = "\n".join([f"- {c}: {v}/5" for c,v in response['التفاصيل'].items()])
+                            ok, msg = send_test_email(sv_notify_email, sv_name,
+                                [f"تم تسجيل نتيجة استبيان: {template}",
+                                 f"المتوسط العام: {response['المتوسط العام']}/5",
+                                 f"التفاصيل: {details}"],
+                                str(sv_date), smtp_cfg.get('sender_name','HR'))
+                            if ok: st.success(f"📧 تم إرسال النتيجة إلى {sv_notify_email}")
+
+                    # Send to Basecamp
+                    if sv_send_basecamp and st.session_state.get('basecamp_webhook'):
+                        try:
+                            import urllib.request
+                            bc_msg = f"📝 استبيان جديد: {template}\n👤 {sv_name} ({sv_dept})\n⭐ المتوسط: {response['المتوسط العام']}/5\n📅 {sv_date}"
+                            bc_data = json.dumps({"content": bc_msg}).encode('utf-8')
+                            req = urllib.request.Request(st.session_state.basecamp_webhook,
+                                data=bc_data, headers={'Content-Type': 'application/json'}, method='POST')
+                            urllib.request.urlopen(req, timeout=10)
+                            st.success("🏕️ تم الإرسال إلى Basecamp")
+                        except Exception as e:
+                            st.warning(f"⚠️ لم يتم الإرسال إلى Basecamp: {e}")
+
                     st.rerun()
                 else:
                     st.error("يرجى إدخال الاسم")
