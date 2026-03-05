@@ -843,7 +843,7 @@ ROLE_DESCRIPTIONS = {
 }
 
 ALL_SECTIONS = ["📊 التحليلات العامة","💰 تحليل الرواتب","👥 Headcount","⚖️ حاسبة المستحقات",
-    "📚 التدريب والتطوير","🎯 التوظيف","🔍 التحليل العام","📝 الاستبيانات","🧠 اختبارات الشخصية","📤 التقارير والتصدير"]
+    "📚 التدريب والتطوير","🎯 التوظيف","🚀 Onboarding","🔍 التحليل العام","📝 الاستبيانات","🧠 اختبارات الشخصية","📤 التقارير والتصدير"]
 
 # Email sending function
 def send_test_email(to_email, emp_name, tests, deadline, assigned_by, app_url=""):
@@ -1701,6 +1701,8 @@ def main():
             page = "⚖️ حاسبة المستحقات"
         elif section == "🎯 التوظيف":
             page = st.radio("📌", ["📋 تخطيط التوظيف","🤖 Benchmark ذكاء اصطناعي","🌍 مقارنة الأسواق","📊 متابعة التوظيف","📥 تصدير التوظيف"], label_visibility="collapsed")
+        elif section == "🚀 Onboarding":
+            page = st.radio("📌", ["🚀 إنشاء Onboarding","📋 خطة 30/60/90","👥 متابعة الموظفين الجدد","🎬 محتوى تفاعلي","📥 تصدير Onboarding"], label_visibility="collapsed")
         elif section == "🔍 التحليل العام":
             page = st.radio("📌", ["📊 تحليل تلقائي","🤖 أسئلة ذكية"], label_visibility="collapsed")
         elif section == "📝 الاستبيانات":
@@ -3994,6 +3996,377 @@ def main():
             st.download_button("📥 تحميل Excel", data=ox.getvalue(),
                 file_name=f"Recruitment_{datetime.now().strftime('%Y%m%d')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary", use_container_width=True)
+
+
+    # =========================================
+    #         🚀 ONBOARDING MODULE
+    # =========================================
+    elif section == "🚀 Onboarding":
+
+        if 'onboarding_plans' not in st.session_state:
+            st.session_state.onboarding_plans = []
+
+        ONBOARDING_CHECKLIST = {
+            "قبل اليوم الأول": [
+                {"task": "إعداد عرض العمل وإرساله", "owner": "التوظيف", "days": -14},
+                {"task": "تجهيز عقد العمل", "owner": "الموارد البشرية", "days": -7},
+                {"task": "فتح ملف التأمين الطبي", "owner": "الموارد البشرية", "days": -5},
+                {"task": "تجهيز مكتب ومعدات العمل", "owner": "تقنية المعلومات", "days": -3},
+                {"task": "إنشاء حسابات البريد والأنظمة", "owner": "تقنية المعلومات", "days": -3},
+                {"task": "إرسال رسالة ترحيب + دليل الموظف الجديد", "owner": "الموارد البشرية", "days": -2},
+                {"task": "إبلاغ الفريق بانضمام الموظف الجديد", "owner": "المدير المباشر", "days": -1},
+            ],
+            "اليوم الأول": [
+                {"task": "استقبال الموظف وجولة في المكتب", "owner": "الموارد البشرية", "days": 1},
+                {"task": "تسليم أجهزة العمل وبطاقة الدخول", "owner": "تقنية المعلومات", "days": 1},
+                {"task": "التعريف بالفريق والأقسام", "owner": "المدير المباشر", "days": 1},
+                {"task": "شرح سياسات الشركة والأنظمة", "owner": "الموارد البشرية", "days": 1},
+                {"task": "إعداد حساب نظام الموارد البشرية (Jisr)", "owner": "الموارد البشرية", "days": 1},
+                {"task": "غداء ترحيبي مع الفريق", "owner": "المدير المباشر", "days": 1},
+            ],
+            "الأسبوع الأول (2-5 أيام)": [
+                {"task": "تدريب على أنظمة العمل الداخلية", "owner": "تقنية المعلومات", "days": 3},
+                {"task": "اجتماع مع المدير المباشر - الأهداف والتوقعات", "owner": "المدير المباشر", "days": 3},
+                {"task": "تدريب على المنتجات والخدمات", "owner": "فريق المنتجات", "days": 4},
+                {"task": "مراجعة خطة الأداء 30/60/90", "owner": "المدير المباشر", "days": 5},
+                {"task": "جلسة تعريف بثقافة الشركة وقيمها", "owner": "الموارد البشرية", "days": 5},
+            ],
+            "الشهر الأول (6-30 يوم)": [
+                {"task": "إتمام جميع التدريبات الإلزامية", "owner": "الموظف", "days": 15},
+                {"task": "اجتماع متابعة أسبوعي مع المدير", "owner": "المدير المباشر", "days": 7},
+                {"task": "مشروع أولي / مهمة تجريبية", "owner": "المدير المباشر", "days": 14},
+                {"task": "تقييم نهاية الشهر الأول", "owner": "المدير المباشر", "days": 30},
+                {"task": "جمع ملاحظات الموظف عن تجربة Onboarding", "owner": "الموارد البشرية", "days": 30},
+            ],
+            "الشهر الثاني (31-60 يوم)": [
+                {"task": "زيادة المسؤوليات تدريجياً", "owner": "المدير المباشر", "days": 35},
+                {"task": "حضور اجتماعات القسم والشركة", "owner": "الموظف", "days": 35},
+                {"task": "تقييم منتصف فترة التجربة", "owner": "المدير المباشر", "days": 45},
+                {"task": "تطوير العلاقات مع الأقسام الأخرى", "owner": "الموظف", "days": 50},
+                {"task": "تدريب متخصص حسب الوظيفة", "owner": "المدير المباشر", "days": 55},
+            ],
+            "الشهر الثالث (61-90 يوم)": [
+                {"task": "العمل باستقلالية كاملة", "owner": "الموظف", "days": 65},
+                {"task": "تقييم شامل نهاية فترة التجربة", "owner": "المدير المباشر + HR", "days": 85},
+                {"task": "قرار تثبيت أو تمديد التجربة", "owner": "المدير المباشر", "days": 88},
+                {"task": "وضع أهداف الأداء للسنة", "owner": "المدير المباشر", "days": 90},
+                {"task": "استبيان رضا الموظف الجديد", "owner": "الموارد البشرية", "days": 90},
+            ],
+        }
+
+        if page == "🚀 إنشاء Onboarding":
+            hdr("🚀 إنشاء خطة Onboarding","نظام تهيئة الموظفين الجدد")
+
+            st.markdown("### 👤 بيانات الموظف الجديد")
+            oc1, oc2, oc3 = st.columns(3)
+            with oc1:
+                ob_name = st.text_input("الاسم الكامل:", key="ob_name")
+                ob_email = st.text_input("البريد الإلكتروني:", key="ob_email")
+            with oc2:
+                ob_title = st.text_input("المسمى الوظيفي:", key="ob_title")
+                ob_dept = st.text_input("القسم:", key="ob_dept")
+            with oc3:
+                ob_manager = st.text_input("المدير المباشر:", key="ob_mgr")
+                ob_start = st.date_input("تاريخ المباشرة:", key="ob_start")
+
+            ob_type = st.radio("نوع التوظيف:", ["دوام كامل","دوام جزئي","عن بُعد","تعاقد"], horizontal=True, key="ob_type")
+
+            st.markdown("### 📋 تخصيص Checklist")
+            selected_phases = st.multiselect("المراحل المطلوبة:", list(ONBOARDING_CHECKLIST.keys()),
+                default=list(ONBOARDING_CHECKLIST.keys()), key="ob_phases")
+
+            # Show editable checklist
+            all_tasks = []
+            for phase in selected_phases:
+                with st.expander(f"📌 {phase} ({len(ONBOARDING_CHECKLIST[phase])} مهمة)", expanded=False):
+                    for j, task in enumerate(ONBOARDING_CHECKLIST[phase]):
+                        tc1, tc2 = st.columns([3,1])
+                        with tc1: st.markdown(f"✅ {task['task']} | **{task['owner']}**")
+                        with tc2: st.caption(f"اليوم {task['days']}")
+                        all_tasks.append({**task, "phase": phase})
+
+            if st.button("🚀 إنشاء خطة Onboarding", type="primary", use_container_width=True, key="ob_create"):
+                if ob_name and ob_title:
+                    plan = {
+                        "id": len(st.session_state.onboarding_plans) + 1,
+                        "name": ob_name, "email": ob_email, "title": ob_title,
+                        "dept": ob_dept, "manager": ob_manager,
+                        "start_date": str(ob_start), "type": ob_type,
+                        "tasks": all_tasks, "status": "جاري",
+                        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "progress": 0
+                    }
+                    st.session_state.onboarding_plans.append(plan)
+
+                    # Send welcome email
+                    smtp_cfg = st.session_state.get('smtp_config', {})
+                    if ob_email and smtp_cfg.get('email'):
+                        ok, msg = send_test_email(ob_email, ob_name,
+                            [f"بدء خطة Onboarding - {ob_title}",
+                             f"تاريخ المباشرة: {ob_start}",
+                             f"المدير المباشر: {ob_manager}"],
+                            str(ob_start), smtp_cfg.get('sender_name', 'HR'))
+                        if ok: st.success(f"📧 تم إرسال رسالة ترحيب إلى {ob_email}")
+
+                    st.success(f"✅ تم إنشاء خطة Onboarding لـ {ob_name}")
+                    st.rerun()
+                else:
+                    st.error("يرجى إدخال الاسم والمسمى الوظيفي")
+
+        elif page == "📋 خطة 30/60/90":
+            hdr("📋 خطة 30/60/90 يوم","خطة تفصيلية لفترة التجربة")
+
+            if not st.session_state.onboarding_plans:
+                st.info("🚀 أنشئ خطة Onboarding أولاً من القائمة")
+                return
+
+            sel_emp = st.selectbox("اختر الموظف:", [f"{p['name']} - {p['title']}" for p in st.session_state.onboarding_plans], key="ob_sel30")
+            sel_idx = [f"{p['name']} - {p['title']}" for p in st.session_state.onboarding_plans].index(sel_emp)
+            plan = st.session_state.onboarding_plans[sel_idx]
+
+            st.markdown(f"**{plan['name']}** | {plan['title']} | {plan['dept']} | بدأ: {plan['start_date']}")
+
+            # 30/60/90 Tabs
+            t1, t2, t3 = st.tabs(["📅 أول 30 يوم", "📅 31-60 يوم", "📅 61-90 يوم"])
+
+            with t1:
+                st.markdown("### 🎯 أهداف الشهر الأول")
+                goals_30 = ["فهم ثقافة الشركة وقيمها","التعرف على الفريق والأقسام","إتمام التدريبات الإلزامية","فهم المنتجات والخدمات","إتمام مشروع أولي"]
+                for g in goals_30:
+                    st.checkbox(g, key=f"g30_{g}_{sel_idx}")
+
+                phases_30 = [p for p in plan.get('tasks',[]) if p.get('days',0) <= 30]
+                if phases_30:
+                    st.markdown("### ✅ المهام")
+                    for t in phases_30:
+                        done = st.checkbox(f"{t['task']} ({t['owner']})", key=f"t30_{t['task']}_{sel_idx}")
+
+            with t2:
+                st.markdown("### 🎯 أهداف الشهر الثاني")
+                goals_60 = ["زيادة المسؤوليات","المساهمة في مشاريع القسم","بناء علاقات مع الأقسام","تقديم أفكار تحسينية"]
+                for g in goals_60:
+                    st.checkbox(g, key=f"g60_{g}_{sel_idx}")
+
+                phases_60 = [p for p in plan.get('tasks',[]) if 30 < p.get('days',0) <= 60]
+                if phases_60:
+                    st.markdown("### ✅ المهام")
+                    for t in phases_60:
+                        st.checkbox(f"{t['task']} ({t['owner']})", key=f"t60_{t['task']}_{sel_idx}")
+
+            with t3:
+                st.markdown("### 🎯 أهداف الشهر الثالث")
+                goals_90 = ["العمل باستقلالية","تحقيق أهداف الأداء","المساهمة الفعالة في الفريق","جاهزية للتثبيت"]
+                for g in goals_90:
+                    st.checkbox(g, key=f"g90_{g}_{sel_idx}")
+
+                phases_90 = [p for p in plan.get('tasks',[]) if 60 < p.get('days',0) <= 90]
+                if phases_90:
+                    st.markdown("### ✅ المهام")
+                    for t in phases_90:
+                        st.checkbox(f"{t['task']} ({t['owner']})", key=f"t90_{t['task']}_{sel_idx}")
+
+        elif page == "👥 متابعة الموظفين الجدد":
+            hdr("👥 متابعة الموظفين الجدد","لوحة تتبع حالة Onboarding لجميع الموظفين")
+
+            plans = st.session_state.onboarding_plans
+            if not plans:
+                st.info("🚀 لا يوجد موظفين جدد. أنشئ خطة Onboarding أولاً.")
+                return
+
+            # KPIs
+            k1,k2,k3,k4 = st.columns(4)
+            with k1: kpi("👥 الموظفين الجدد", str(len(plans)))
+            active = [p for p in plans if p.get('status') == 'جاري']
+            with k2: kpi("🔄 جاري", str(len(active)))
+            completed = [p for p in plans if p.get('status') == 'مكتمل']
+            with k3: kpi("✅ مكتمل", str(len(completed)))
+            depts = set(p.get('dept','') for p in plans)
+            with k4: kpi("📌 الأقسام", str(len(depts)))
+
+            # Table
+            plan_rows = []
+            for p in plans:
+                start = datetime.strptime(p['start_date'], '%Y-%m-%d') if isinstance(p['start_date'], str) else p['start_date']
+                days_elapsed = (datetime.now() - start).days if isinstance(start, datetime) else 0
+                phase = "قبل المباشرة" if days_elapsed < 0 else ("30 يوم" if days_elapsed <= 30 else ("60 يوم" if days_elapsed <= 60 else ("90 يوم" if days_elapsed <= 90 else "بعد التجربة")))
+                progress = min(100, max(0, int(days_elapsed / 90 * 100)))
+
+                plan_rows.append({
+                    "الاسم": p['name'], "المسمى": p['title'], "القسم": p['dept'],
+                    "المدير": p.get('manager',''), "تاريخ البدء": p['start_date'],
+                    "الأيام": days_elapsed, "المرحلة": phase,
+                    "التقدم %": progress, "الحالة": p.get('status','جاري')
+                })
+
+            st.dataframe(pd.DataFrame(plan_rows), use_container_width=True, hide_index=True)
+
+            # Timeline chart
+            if plan_rows:
+                fig = px.bar(pd.DataFrame(plan_rows), x='الاسم', y='التقدم %', color='المرحلة',
+                    title='تقدم الموظفين الجدد في Onboarding',
+                    color_discrete_map={'قبل المباشرة':'#95A5A6','30 يوم':'#E36414','60 يوم':'#E9C46A','90 يوم':'#27AE60','بعد التجربة':'#2980B9'})
+                fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
+                st.plotly_chart(fig, use_container_width=True)
+
+        elif page == "🎬 محتوى تفاعلي":
+            hdr("🎬 محتوى Onboarding تفاعلي بالذكاء الاصطناعي","صفحة ترحيب تفاعلية مع صوت")
+
+            if not st.session_state.onboarding_plans:
+                st.info("🚀 أنشئ خطة Onboarding أولاً")
+                return
+
+            sel_emp = st.selectbox("اختر الموظف:", [f"{p['name']} - {p['title']}" for p in st.session_state.onboarding_plans], key="ob_sel_ai")
+            sel_idx = [f"{p['name']} - {p['title']}" for p in st.session_state.onboarding_plans].index(sel_emp)
+            plan = st.session_state.onboarding_plans[sel_idx]
+
+            st.markdown("### ⚙️ تخصيص المحتوى")
+            cc1, cc2 = st.columns(2)
+            with cc1:
+                company_name = st.text_input("اسم الشركة:", value="رسال الود لتقنية المعلومات", key="ob_company")
+                company_desc = st.text_area("وصف الشركة:", value="شركة متخصصة في تقنية المعلومات والمدفوعات الرقمية وبطاقات الولاء", key="ob_desc", height=80)
+            with cc2:
+                welcome_msg = st.text_area("رسالة ترحيبية مخصصة:", value=f"مرحباً {plan['name']}! نحن سعداء بانضمامك لفريق {company_name}. نتطلع لرحلة نجاح مشتركة.", key="ob_welcome", height=80)
+                voice_lang = st.selectbox("لغة الصوت:", ["ar-SA","en-US","ar-EG"], key="ob_voice")
+
+            sections_content = st.multiselect("أقسام المحتوى:",
+                ["رسالة ترحيب","عن الشركة","فريقك","خطة 30/60/90","سياسات مهمة","معلومات تواصل"],
+                default=["رسالة ترحيب","عن الشركة","فريقك","خطة 30/60/90"], key="ob_sections")
+
+            if st.button("🎬 إنشاء صفحة Onboarding التفاعلية", type="primary", use_container_width=True, key="ob_gen"):
+
+                # Generate interactive HTML with TTS
+                tasks_html = ""
+                for phase, tasks in ONBOARDING_CHECKLIST.items():
+                    tasks_html += f"<h3 style='color:#E36414;margin-top:20px;'>{phase}</h3><ul>"
+                    for t in tasks:
+                        tasks_html += f"<li><strong>{t['task']}</strong> <span style='color:#888;'>({t['owner']})</span></li>"
+                    tasks_html += "</ul>"
+
+                html_content = f"""<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Onboarding - {plan['name']}</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;600;700&display=swap');
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:'Noto Sans Arabic',sans-serif;background:#f8f9fa;direction:rtl}}
+.hero{{background:linear-gradient(135deg,#0F4C5C,#1A1A2E);color:white;padding:60px 40px;text-align:center}}
+.hero h1{{font-size:2.5em;margin-bottom:10px}}
+.hero .subtitle{{opacity:0.8;font-size:1.1em}}
+.hero .logo{{width:80px;height:80px;background:linear-gradient(135deg,#E36414,#E9C46A);border-radius:16px;display:inline-flex;align-items:center;justify-content:center;font-size:28px;font-weight:800;margin-bottom:20px}}
+.container{{max-width:900px;margin:0 auto;padding:30px 20px}}
+.card{{background:white;border-radius:12px;padding:25px;margin:15px 0;box-shadow:0 2px 8px rgba(0,0,0,0.08)}}
+.card h2{{color:#0F4C5C;margin-bottom:12px;font-size:1.4em}}
+.card p{{color:#555;line-height:1.8}}
+.info-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:15px 0}}
+.info-item{{background:#f0f4f8;padding:12px;border-radius:8px;text-align:center}}
+.info-item .label{{color:#888;font-size:0.85em}}
+.info-item .value{{color:#0F4C5C;font-weight:700;font-size:1.1em;margin-top:4px}}
+.phase{{border-right:4px solid #E36414;padding:15px 20px;margin:10px 0;background:#fff8f3;border-radius:0 8px 8px 0}}
+.btn{{display:inline-block;padding:12px 30px;border-radius:8px;border:none;cursor:pointer;font-size:1em;font-family:inherit;margin:5px}}
+.btn-primary{{background:linear-gradient(135deg,#E36414,#E9C46A);color:white}}
+.btn-secondary{{background:#264653;color:white}}
+.tts-controls{{position:fixed;bottom:20px;left:20px;z-index:999;background:white;padding:12px 20px;border-radius:30px;box-shadow:0 4px 15px rgba(0,0,0,0.15)}}
+.footer{{text-align:center;padding:30px;color:#888;font-size:0.85em;border-top:1px solid #eee;margin-top:40px}}
+ul{{padding-right:20px}} li{{margin:8px 0;color:#444}}
+</style>
+</head>
+<body>
+
+<div class="hero">
+<div class="logo">HR</div>
+<h1>مرحباً بك في {company_name}</h1>
+<p class="subtitle">{plan['name']} | {plan['title']} | {plan['dept']}</p>
+</div>
+
+<div class="container">
+
+{"<div class='card'><h2>👋 رسالة ترحيب</h2><p>" + welcome_msg + "</p></div>" if "رسالة ترحيب" in sections_content else ""}
+
+{"<div class='card'><h2>🏢 عن الشركة</h2><p>" + company_desc + "</p></div>" if "عن الشركة" in sections_content else ""}
+
+{"<div class='card'><h2>👥 فريقك</h2><div class='info-grid'><div class='info-item'><div class='label'>القسم</div><div class='value'>" + plan['dept'] + "</div></div><div class='info-item'><div class='label'>المدير المباشر</div><div class='value'>" + plan.get('manager','') + "</div></div><div class='info-item'><div class='label'>تاريخ المباشرة</div><div class='value'>" + plan['start_date'] + "</div></div><div class='info-item'><div class='label'>نوع التوظيف</div><div class='value'>" + plan.get('type','دوام كامل') + "</div></div></div></div>" if "فريقك" in sections_content else ""}
+
+{"<div class='card'><h2>📋 خطة 30/60/90 يوم</h2>" + tasks_html + "</div>" if "خطة 30/60/90" in sections_content else ""}
+
+{"<div class='card'><h2>📌 سياسات مهمة</h2><ul><li>ساعات العمل: 8:00 ص - 5:00 م (أحد - خميس)</li><li>الإجازات: حسب نظام العمل السعودي (21 يوم سنوياً)</li><li>فترة التجربة: 90 يوم</li><li>التأمين الطبي: يبدأ من اليوم الأول</li></ul></div>" if "سياسات مهمة" in sections_content else ""}
+
+{"<div class='card'><h2>📞 معلومات تواصل</h2><div class='info-grid'><div class='info-item'><div class='label'>الموارد البشرية</div><div class='value'>HR@resal.me</div></div><div class='info-item'><div class='label'>الدعم التقني</div><div class='value'>IT@resal.me</div></div></div></div>" if "معلومات تواصل" in sections_content else ""}
+
+</div>
+
+<!-- TTS Controls -->
+<div class="tts-controls">
+<button class="btn btn-primary" onclick="speak()">🔊 استمع</button>
+<button class="btn btn-secondary" onclick="stopSpeak()">⏹️ إيقاف</button>
+</div>
+
+<div class="footer">
+<p>تم إنشاؤه بواسطة منصة تحليلات الموارد البشرية | {company_name}</p>
+<p>{datetime.now().strftime('%Y-%m-%d')}</p>
+</div>
+
+<script>
+let utterance;
+function speak() {{
+    stopSpeak();
+    const text = `{welcome_msg}. مرحباً بك في {company_name}. المسمى الوظيفي: {plan['title']}. القسم: {plan['dept']}. المدير المباشر: {plan.get('manager','')}. تاريخ المباشرة: {plan['start_date']}. نتمنى لك التوفيق والنجاح في رحلتك معنا.`;
+    utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = '{voice_lang}';
+    utterance.rate = 0.9;
+    speechSynthesis.speak(utterance);
+}}
+function stopSpeak() {{
+    speechSynthesis.cancel();
+}}
+</script>
+</body></html>"""
+
+                st.components.v1.html(html_content, height=800, scrolling=True)
+
+                # Download buttons
+                dc1, dc2 = st.columns(2)
+                with dc1:
+                    st.download_button("📥 تحميل HTML", data=html_content.encode('utf-8'),
+                        file_name=f"Onboarding_{plan['name']}_{plan['start_date']}.html",
+                        mime="text/html", use_container_width=True)
+                with dc2:
+                    if plan.get('email'):
+                        if st.button("📧 إرسال للموظف", use_container_width=True, key="ob_send"):
+                            ok, msg = send_test_email(plan['email'], plan['name'],
+                                [f"صفحة Onboarding الخاصة بك جاهزة", f"المسمى: {plan['title']}", f"البدء: {plan['start_date']}"],
+                                plan['start_date'], company_name)
+                            if ok: st.success(f"📧 تم الإرسال إلى {plan['email']}")
+                            else: st.warning(f"⚠️ {msg}")
+
+        elif page == "📥 تصدير Onboarding":
+            hdr("📥 تصدير تقارير Onboarding")
+            plans = st.session_state.onboarding_plans
+            if not plans:
+                st.info("لا توجد خطط Onboarding للتصدير")
+                return
+
+            if st.button("📥 تصدير Excel", type="primary", use_container_width=True, key="ob_exp"):
+                ox = io.BytesIO()
+                with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
+                    # Plans summary
+                    plan_rows = [{"الاسم":p['name'],"المسمى":p['title'],"القسم":p['dept'],
+                        "المدير":p.get('manager',''),"البدء":p['start_date'],"النوع":p.get('type',''),
+                        "الحالة":p.get('status',''),"أُنشئ":p.get('created_at','')} for p in plans]
+                    pd.DataFrame(plan_rows).to_excel(w, sheet_name='Onboarding Plans', index=False)
+
+                    # Full checklist
+                    checklist_rows = []
+                    for phase, tasks in ONBOARDING_CHECKLIST.items():
+                        for t in tasks:
+                            checklist_rows.append({"المرحلة":phase,"المهمة":t['task'],"المسؤول":t['owner'],"اليوم":t['days']})
+                    pd.DataFrame(checklist_rows).to_excel(w, sheet_name='Checklist Template', index=False)
+
+                st.download_button("📥 تحميل", data=ox.getvalue(),
+                    file_name=f"Onboarding_Report_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
     # =========================================
