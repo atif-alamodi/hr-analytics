@@ -1030,30 +1030,44 @@ def init_users():
             db_save_users(DEFAULT_USERS)
 
 def _save_login_token(username):
-    """Save login token to database for session persistence"""
+    """Save login token to database + query_params for persistence across reruns"""
     try:
         import hashlib
-        token = hashlib.sha256(f"{username}_{datetime.now().strftime('%Y%m%d')}".encode()).hexdigest()[:32]
+        token = hashlib.sha256(f"{username}_{datetime.now().strftime('%Y%m%d')}_{os.urandom(8).hex()}".encode()).hexdigest()[:32]
         conn = get_conn()
         c = conn.cursor()
-        p = _ph()
         _upsert_config(c, f"login_token_{token}", json.dumps({"user": username, "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}))
         conn.commit()
         conn.close()
         st.session_state['_login_token'] = token
+        # Save token in URL query params - survives full page reloads
+        try: st.query_params["tk"] = token
+        except: pass
     except: pass
 
 def _restore_login():
-    """Try to restore login session from token"""
+    """Try to restore login session from query_params or session_state"""
     try:
-        token = st.session_state.get('_login_token')
-        if not token: return False
+        # Priority 1: query_params (survives reruns and page reloads)
+        token = None
+        try:
+            qp = st.query_params
+            token = qp.get("tk")
+        except: pass
+
+        # Priority 2: session_state
+        if not token:
+            token = st.session_state.get('_login_token')
+
+        if not token:
+            return False
+
         conn = get_conn()
         c = conn.cursor()
-        p = _ph()
-        c.execute(f"SELECT value FROM app_config WHERE key = {p}", (f"login_token_{token}",))
+        c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", (f"login_token_{token}",))
         row = c.fetchone()
         conn.close()
+
         if row:
             data = json.loads(row[0])
             username = data.get("user")
@@ -1067,7 +1081,11 @@ def _restore_login():
                 st.session_state.user_sections = users[username]["sections"]
                 st.session_state.user_email = users[username].get("email", "")
                 st.session_state.user_dept = users[username].get("dept", "")
+                st.session_state['_login_token'] = token
                 return True
+        # Token invalid - clear it
+        try: del st.query_params["tk"]
+        except: pass
     except: pass
     return False
 
@@ -1699,7 +1717,7 @@ def main():
         # Logout button
         st.markdown("---")
         if st.button("🚪 تسجيل الخروج", use_container_width=True):
-            # Clear login token
+            # Clear login token from DB
             token = st.session_state.get('_login_token')
             if token:
                 try:
@@ -1709,6 +1727,9 @@ def main():
                     conn.commit()
                     conn.close()
                 except: pass
+            # Clear query_params token
+            try: del st.query_params["tk"]
+            except: pass
             for key in ['logged_in','current_user','user_role','user_name','user_sections','_login_token']:
                 st.session_state.pop(key, None)
             st.rerun()
