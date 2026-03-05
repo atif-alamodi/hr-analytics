@@ -18,15 +18,57 @@ from dateutil.relativedelta import relativedelta
 
 st.set_page_config(page_title="تحليلات HR | رسال الود", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
 
-# ===== DATABASE LAYER =====
+# ===== DATABASE LAYER (Cloud + Local) =====
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hr_personality.db")
 
+# Detect cloud database availability
+def _is_cloud_db():
+    """Check if cloud database (Supabase PostgreSQL) is configured"""
+    try:
+        if hasattr(st, 'secrets') and 'database' in st.secrets:
+            return bool(st.secrets["database"].get("url") or st.secrets["database"].get("host"))
+    except: pass
+    return bool(os.environ.get("DATABASE_URL"))
+
+def get_conn():
+    """Get database connection - PostgreSQL (cloud) or SQLite (local)"""
+    if _is_cloud_db():
+        import psycopg2
+        try:
+            if hasattr(st, 'secrets') and 'database' in st.secrets:
+                db = st.secrets["database"]
+                if db.get("url"):
+                    return psycopg2.connect(db["url"], sslmode="require")
+                return psycopg2.connect(host=db["host"], port=db.get("port",5432),
+                    dbname=db["dbname"], user=db["user"], password=db["password"], sslmode="require")
+            return psycopg2.connect(os.environ["DATABASE_URL"], sslmode="require")
+        except Exception as e:
+            st.warning(f"⚠️ Cloud DB error, falling back to local: {e}")
+    return sqlite3.connect(DB_PATH)
+
+def _ph():
+    """Get placeholder symbol: %s for PostgreSQL, ? for SQLite"""
+    return "%s" if _is_cloud_db() else "?"
+
+def _serial():
+    """Get auto-increment syntax"""
+    return "SERIAL PRIMARY KEY" if _is_cloud_db() else "INTEGER PRIMARY KEY AUTOINCREMENT"
+
+def _upsert_config(c, key, value):
+    """Insert or update config - handles both engines"""
+    if _is_cloud_db():
+        p = "%s"
+        c.execute(f"INSERT INTO app_config (key, value) VALUES ({p}, {p}) ON CONFLICT (key) DO UPDATE SET value = {p}", (key, value, value))
+    else:
+        c.execute("INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?)", (key, value))
+
 def init_db():
-    """Initialize SQLite database for personality test results"""
-    conn = sqlite3.connect(DB_PATH)
+    """Initialize database tables - works with both PostgreSQL and SQLite"""
+    conn = get_conn()
     c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS test_results (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+    serial = _serial()
+    c.execute(f'''CREATE TABLE IF NOT EXISTS test_results (
+        id {serial},
         emp_name TEXT NOT NULL,
         emp_dept TEXT,
         test_type TEXT NOT NULL,
@@ -40,48 +82,68 @@ def init_db():
         created_at TEXT NOT NULL,
         created_by TEXT
     )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS test_assignments (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+    c.execute(f'''CREATE TABLE IF NOT EXISTS test_assignments (
+        id {serial},
         emp_name TEXT NOT NULL,
         emp_dept TEXT,
         test_name TEXT NOT NULL,
         deadline TEXT,
-        status TEXT DEFAULT 'لم يبدأ',
+        status TEXT DEFAULT 'pending',
         assigned_by TEXT,
         is_mandatory INTEGER DEFAULT 1,
         created_at TEXT NOT NULL
+    )''')
+    c.execute(f'''CREATE TABLE IF NOT EXISTS email_log (
+        id {serial},
+        to_email TEXT, emp_name TEXT, tests TEXT,
+        status TEXT, sent_at TEXT, sent_by TEXT
+    )''')
+    c.execute(f'''CREATE TABLE IF NOT EXISTS app_config (
+        key TEXT PRIMARY KEY, value TEXT
+    )''')
+    c.execute(f'''CREATE TABLE IF NOT EXISTS users_store (
+        username TEXT PRIMARY KEY,
+        password_hash TEXT, role TEXT, name TEXT,
+        email TEXT, dept TEXT, sections TEXT
     )''')
     conn.commit()
     conn.close()
 
 def db_save_result(result, created_by=""):
     """Save a test result to database"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_conn()
     c = conn.cursor()
-    c.execute('''INSERT INTO test_results
+    p = _ph()
+    c.execute(f'''INSERT INTO test_results
         (emp_name, emp_dept, test_type, test_date, scores_json, mbti_type, dominant, secondary, is_mandatory, assigned_by, created_at, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+        VALUES ({p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p})''',
         (result.get("الاسم",""), result.get("القسم",""), result.get("type",""),
          result.get("التاريخ",""), json.dumps(result.get("scores",{}), ensure_ascii=False),
          result.get("mbti_type",""), result.get("dominant",""), result.get("secondary",""),
          1 if result.get("إجباري") else 0, result.get("معيّن_بواسطة",""),
          datetime.now().strftime("%Y-%m-%d %H:%M:%S"), created_by))
     conn.commit()
-    rid = c.lastrowid
+    # Get last inserted id
+    if _is_cloud_db():
+        c.execute("SELECT lastval()")
+        rid = c.fetchone()[0]
+    else:
+        rid = c.lastrowid
     conn.close()
     return rid
 
 def db_load_results(test_type=None, emp_name=None):
     """Load test results from database"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_conn()
     c = conn.cursor()
+    p = _ph()
     query = "SELECT * FROM test_results WHERE 1=1"
     params = []
     if test_type and test_type != "الكل":
-        query += " AND test_type = ?"
+        query += f" AND test_type = {p}"
         params.append(test_type)
     if emp_name:
-        query += " AND emp_name = ?"
+        query += f" AND emp_name = {p}"
         params.append(emp_name)
     query += " ORDER BY created_at DESC"
     c.execute(query, params)
@@ -103,15 +165,15 @@ def db_load_results(test_type=None, emp_name=None):
 
 def db_delete_result(result_id):
     """Delete a test result (admin only)"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_conn()
     c = conn.cursor()
-    c.execute("DELETE FROM test_results WHERE id = ?", (result_id,))
+    c.execute(f"DELETE FROM test_results WHERE id = {_ph()}", (result_id,))
     conn.commit()
     conn.close()
 
 def db_delete_all_results():
     """Delete all test results (admin only)"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_conn()
     c = conn.cursor()
     c.execute("DELETE FROM test_results")
     conn.commit()
@@ -119,10 +181,11 @@ def db_delete_all_results():
 
 def db_save_assignment(assignment):
     """Save test assignment to database"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_conn()
     c = conn.cursor()
-    c.execute('''INSERT INTO test_assignments (emp_name, emp_dept, test_name, deadline, status, assigned_by, is_mandatory, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+    p = _ph()
+    c.execute(f'''INSERT INTO test_assignments (emp_name, emp_dept, test_name, deadline, status, assigned_by, is_mandatory, created_at)
+        VALUES ({p},{p},{p},{p},{p},{p},{p},{p})''',
         (assignment.get("الموظف",""), assignment.get("القسم",""), assignment.get("الاختبار",""),
          assignment.get("الموعد النهائي",""), assignment.get("الحالة","لم يبدأ"),
          assignment.get("معيّن_بواسطة",""), 1 if assignment.get("إجباري") else 0,
@@ -132,10 +195,11 @@ def db_save_assignment(assignment):
 
 def db_load_assignments(emp_name=None):
     """Load test assignments from database"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_conn()
     c = conn.cursor()
+    p = _ph()
     if emp_name:
-        c.execute("SELECT * FROM test_assignments WHERE emp_name = ? ORDER BY created_at DESC", (emp_name,))
+        c.execute(f"SELECT * FROM test_assignments WHERE emp_name = {p} ORDER BY created_at DESC", (emp_name,))
     else:
         c.execute("SELECT * FROM test_assignments ORDER BY created_at DESC")
     rows = c.fetchall()
@@ -154,7 +218,7 @@ def db_load_assignments(emp_name=None):
 
 def db_delete_assignments():
     """Delete all assignments (admin only)"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_conn()
     c = conn.cursor()
     c.execute("DELETE FROM test_assignments")
     conn.commit()
@@ -162,12 +226,57 @@ def db_delete_assignments():
 
 def db_count_results():
     """Get total count of saved results"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_conn()
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM test_results")
     count = c.fetchone()[0]
     conn.close()
     return count
+
+def db_save_users(users_db):
+    """Save users to cloud database for persistence"""
+    try:
+        conn = get_conn()
+        c = conn.cursor()
+        p = _ph()
+        for uname, udata in users_db.items():
+            if _is_cloud_db():
+                c.execute(f"""INSERT INTO users_store (username, password_hash, role, name, email, dept, sections)
+                    VALUES ({p},{p},{p},{p},{p},{p},{p})
+                    ON CONFLICT (username) DO UPDATE SET
+                    password_hash=EXCLUDED.password_hash, role=EXCLUDED.role, name=EXCLUDED.name,
+                    email=EXCLUDED.email, dept=EXCLUDED.dept, sections=EXCLUDED.sections""",
+                    (uname, udata.get("password",""), udata.get("role",""), udata.get("name",""),
+                     udata.get("email",""), udata.get("dept",""), udata.get("sections","")))
+            else:
+                c.execute(f"""INSERT OR REPLACE INTO users_store (username, password_hash, role, name, email, dept, sections)
+                    VALUES ({p},{p},{p},{p},{p},{p},{p})""",
+                    (uname, udata.get("password",""), udata.get("role",""), udata.get("name",""),
+                     udata.get("email",""), udata.get("dept",""), udata.get("sections","")))
+        conn.commit()
+        conn.close()
+    except: pass
+
+def db_load_users():
+    """Load users from database"""
+    try:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("SELECT * FROM users_store")
+        rows = c.fetchall()
+        cols = [d[0] for d in c.description]
+        conn.close()
+        if rows:
+            users = {}
+            for row in rows:
+                r = dict(zip(cols, row))
+                users[r["username"]] = {
+                    "password": r["password_hash"], "role": r["role"], "name": r["name"],
+                    "email": r.get("email",""), "dept": r.get("dept",""), "sections": r.get("sections","all")
+                }
+            return users
+    except: pass
+    return None
 
 def generate_employee_pdf(result):
     """Generate PDF report for a single employee test"""
@@ -465,6 +574,83 @@ DEFAULT_BUDGET = [
 
 Q_SPLIT = {"Q1":0.35,"Q2":0.30,"Q3":0.20,"Q4":0.15}
 
+TRAINING_PROGRAMS = {
+    "المبيعات": [
+        {"program":"Advanced Consultative Selling Skills","budget":3600,"source":"External","timing":"Q1-Q2","impact":"Increase conversion rate & close major deals"},
+        {"program":"Customer Success & CLV Optimization","budget":3000,"source":"External","timing":"Q1","impact":"Improve customer retention & increase upsell"},
+        {"program":"Strategic Key Account Management","budget":2800,"source":"External","timing":"Q2","impact":"Maximize revenue from key accounts"},
+        {"program":"Customer Experience & Satisfaction (NPS/CSAT)","budget":2400,"source":"Internal","timing":"Q1-Q3","impact":"Enhance CX to increase loyalty"},
+        {"program":"Negotiation & Objection Handling","budget":2200,"source":"External","timing":"Q2-Q3","impact":"Improve contract terms & profit margins"},
+        {"program":"CRM & Sales Automation Tools","budget":2000,"source":"Internal","timing":"Q1","impact":"Increase sales team efficiency"},
+    ],
+    "التسويق": [
+        {"program":"Advanced Digital Marketing & Campaign Mgmt","budget":3000,"source":"External","timing":"Q1","impact":"Increase ROAS"},
+        {"program":"Growth Hacking & Growth Strategy","budget":2800,"source":"External","timing":"Q1-Q2","impact":"Accelerate user acquisition at lower cost"},
+        {"program":"SEO & Content Marketing Mastery","budget":2000,"source":"Online","timing":"Q2","impact":"Increase organic traffic & conversions"},
+        {"program":"Marketing Analytics & Performance","budget":2000,"source":"Online","timing":"Q1-Q2","impact":"Data-driven marketing decisions"},
+        {"program":"Brand Management & Positioning","budget":1600,"source":"External","timing":"Q3","impact":"Strengthen market positioning"},
+        {"program":"Partnership & Alliance Marketing","budget":1600,"source":"Internal","timing":"Q2-Q3","impact":"Expand commercial partner network"},
+    ],
+    "تطوير الأعمال": [
+        {"program":"BD Strategy & Strategic Partnerships","budget":3000,"source":"External","timing":"Q1","impact":"Build strategic partnerships"},
+        {"program":"New Market Expansion - MENA","budget":2400,"source":"External","timing":"Q1-Q2","impact":"Support regional expansion"},
+        {"program":"B2B Enterprise Sales","budget":2000,"source":"External","timing":"Q2","impact":"Win corporate clients"},
+        {"program":"Deal Structuring & Revenue Models","budget":1800,"source":"External","timing":"Q3","impact":"Optimize deal economics"},
+        {"program":"Industry Analysis & Competitive Intelligence","budget":1800,"source":"Online","timing":"Q2-Q3","impact":"Informed strategic decisions"},
+    ],
+    "عمليات المنتجات": [
+        {"program":"Agile Product Management","budget":2500,"source":"External","timing":"Q1","impact":"Faster product delivery"},
+        {"program":"Product Analytics & User Research","budget":2000,"source":"Online","timing":"Q1-Q2","impact":"Data-driven product decisions"},
+        {"program":"UX/UI Design Principles","budget":1800,"source":"External","timing":"Q2","impact":"Improve user experience"},
+        {"program":"API Integration & Platform Architecture","budget":1500,"source":"Online","timing":"Q2-Q3","impact":"Better system integration"},
+        {"program":"Product Roadmap & Prioritization","budget":1200,"source":"Internal","timing":"Q3","impact":"Strategic product planning"},
+    ],
+    "البيانات والذكاء": [
+        {"program":"Advanced Data Analytics & ML","budget":2500,"source":"External","timing":"Q1","impact":"Predictive business insights"},
+        {"program":"Power BI / Tableau Mastery","budget":1800,"source":"Online","timing":"Q1-Q2","impact":"Self-service analytics"},
+        {"program":"Data Engineering & Pipeline Design","budget":1500,"source":"Online","timing":"Q2","impact":"Scalable data infrastructure"},
+        {"program":"AI/ML for Business Applications","budget":1200,"source":"External","timing":"Q3","impact":"AI-driven automation"},
+    ],
+    "المالية": [
+        {"program":"Advanced Financial Modeling & Analysis","budget":1800,"source":"External","timing":"Q1","impact":"Better investment decisions"},
+        {"program":"IFRS & Regulatory Compliance","budget":1400,"source":"External","timing":"Q2","impact":"Full regulatory compliance"},
+        {"program":"Treasury & Cash Flow Management","budget":1000,"source":"Online","timing":"Q3","impact":"Optimize cash management"},
+        {"program":"Budgeting & Forecasting Excellence","budget":800,"source":"Internal","timing":"Q1-Q2","impact":"Accurate financial planning"},
+    ],
+    "الموارد البشرية": [
+        {"program":"Strategic HR Business Partnering","budget":1200,"source":"External","timing":"Q1","impact":"Align HR with business strategy"},
+        {"program":"Talent Acquisition & Employer Branding","budget":1000,"source":"External","timing":"Q2","impact":"Attract top talent"},
+        {"program":"Performance Management & OKRs","budget":1000,"source":"Online","timing":"Q1-Q3","impact":"Drive accountability"},
+        {"program":"HR Analytics & People Insights","budget":800,"source":"Online","timing":"Q2","impact":"Data-driven HR decisions"},
+    ],
+    "الحوكمة": [
+        {"program":"Enterprise Risk Management (ERM)","budget":1200,"source":"External","timing":"Q2","impact":"Proactive risk identification"},
+        {"program":"Regulatory Compliance (SAMA/PCI-DSS)","budget":1000,"source":"Online","timing":"Q1","impact":"Ensure regulatory compliance"},
+        {"program":"Information Security & Cybersecurity","budget":800,"source":"Online","timing":"Q1-Q3","impact":"Protect data & systems"},
+    ],
+    "القانونية": [
+        {"program":"Digital Commercial Contracts & SLAs","budget":1000,"source":"External","timing":"Q2","impact":"Protect company interests"},
+        {"program":"IP Protection & Trademark Law","budget":600,"source":"Online","timing":"Q3","impact":"Protect IP assets"},
+        {"program":"E-Commerce & Payments Regulations","budget":400,"source":"Internal","timing":"Q1","impact":"Compliance with regulations"},
+    ],
+}
+
+ROI_INDICATORS = [
+    "Expected 15-20% increase in sales revenue within 12 months",
+    "Improve customer retention rate by 10-15%",
+    "Reduce CAC by 10% through improved marketing efficiency",
+    "Increase CLV by 20% through customer success programs",
+    "Improve proposal win rate by 15%",
+]
+
+TRAINING_KPIS = [
+    "Training completion rate: 90%+ for all departments",
+    "Trainee satisfaction score: 4.2/5 minimum",
+    "Skills application within 30 days: 75%+ of trainees",
+    "Professional certification pass rate: 85%+ first attempt",
+    "Training hours per employee: 20 hours annually minimum",
+]
+
 def calc_roi(budget, rev_inc_pct, current_rev, ret_pct, avg_sal, hc, prod_pct):
     rev_gain = current_rev * rev_inc_pct / 100
     ret_save = ret_pct / 100 * hc * avg_sal * 0.5
@@ -612,14 +798,10 @@ def send_test_email(to_email, emp_name, tests, deadline, assigned_by, app_url=""
 def log_email_send(to_email, emp_name, tests, status):
     """Log email sending to database"""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_conn()
         c = conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS email_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            to_email TEXT, emp_name TEXT, tests TEXT,
-            status TEXT, sent_at TEXT, sent_by TEXT
-        )''')
-        c.execute("INSERT INTO email_log (to_email, emp_name, tests, status, sent_at, sent_by) VALUES (?,?,?,?,?,?)",
+        p = _ph()
+        c.execute(f"INSERT INTO email_log (to_email, emp_name, tests, status, sent_at, sent_by) VALUES ({p},{p},{p},{p},{p},{p})",
             (to_email, emp_name, ", ".join(tests), status,
              datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
              st.session_state.get('user_name','')))
@@ -630,13 +812,9 @@ def log_email_send(to_email, emp_name, tests, status):
 def save_smtp_config(cfg):
     """Save SMTP config to database for persistence"""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_conn()
         c = conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS app_config (
-            key TEXT PRIMARY KEY, value TEXT
-        )''')
-        c.execute("INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?)",
-            ("smtp_config", json.dumps(cfg, ensure_ascii=False)))
+        _upsert_config(c, "smtp_config", json.dumps(cfg, ensure_ascii=False))
         conn.commit()
         conn.close()
     except: pass
@@ -644,9 +822,10 @@ def save_smtp_config(cfg):
 def load_smtp_config():
     """Load SMTP config from database"""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_conn()
         c = conn.cursor()
-        c.execute("SELECT value FROM app_config WHERE key = 'smtp_config'")
+        p = _ph()
+        c.execute(f"SELECT value FROM app_config WHERE key = {p}", ("smtp_config",))
         row = c.fetchone()
         conn.close()
         if row:
@@ -657,7 +836,7 @@ def load_smtp_config():
 def get_email_log():
     """Get email sending log"""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_conn()
         c = conn.cursor()
         c.execute("SELECT * FROM email_log ORDER BY sent_at DESC LIMIT 50")
         rows = c.fetchall()
@@ -687,7 +866,13 @@ SMTP_PROVIDERS = {
 
 def init_users():
     if 'users_db' not in st.session_state:
-        st.session_state.users_db = DEFAULT_USERS.copy()
+        # Try loading from cloud database first
+        cloud_users = db_load_users()
+        if cloud_users:
+            st.session_state.users_db = cloud_users
+        else:
+            st.session_state.users_db = DEFAULT_USERS.copy()
+            db_save_users(DEFAULT_USERS)
 
 def login_page():
     st.markdown("<div style='text-align:center;padding:40px 0;'><div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:80px;height:80px;border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:32px;font-weight:800;color:white;'>HR</div><h1 style='color:#0F4C5C;'>منصة تحليلات الموارد البشرية</h1><p style='color:#64748B;'>رسال الود لتقنية المعلومات</p></div>", unsafe_allow_html=True)
@@ -860,6 +1045,7 @@ def user_management_page():
             st.session_state.users_db[new_user] = {
                 "password": hash_pw(new_pass), "role": new_role,
                 "name": new_name, "email": new_email, "dept": new_dept, "sections": new_sections}
+            db_save_users(st.session_state.users_db)
             st.success(f"✅ تم إضافة {new_name} بدور {new_role}")
             st.rerun()
         else:
@@ -877,6 +1063,7 @@ def user_management_page():
         if st.button("💾 تحديث", key="upd_btn"):
             st.session_state.users_db[edit_user]["email"] = upd_email
             st.session_state.users_db[edit_user]["dept"] = upd_dept
+            db_save_users(st.session_state.users_db)
             st.success(f"✅ تم تحديث بيانات {edit_user}")
             st.rerun()
 
@@ -886,6 +1073,7 @@ def user_management_page():
     if st.button("🗑️ حذف", key="del_btn"):
         if del_user in st.session_state.users_db:
             del st.session_state.users_db[del_user]
+            db_save_users(st.session_state.users_db)
             st.success(f"✅ تم حذف {del_user}")
             st.rerun()
 
@@ -1284,7 +1472,7 @@ def main():
         elif section == "💰 تحليل الرواتب":
             page = st.radio("📌", ["💰 لوحة الرواتب","📈 تحليل شهري/ربعي","🏷️ تحليل حسب الفئات","📊 سلم الرواتب","📥 تصدير الرواتب"], label_visibility="collapsed")
         elif section == "👥 Headcount":
-            page = st.radio("📌", ["👥 Headcount Planning","📊 تحليل الأداء"], label_visibility="collapsed")
+            page = st.radio("📌", ["👥 Headcount Report","📊 تحليل الأداء","📋 بيانات الموظفين","📥 تصدير Headcount"], label_visibility="collapsed")
         elif section == "⚖️ حاسبة المستحقات":
             page = "⚖️ حاسبة المستحقات"
         elif section == "🎯 التوظيف":
@@ -1697,16 +1885,107 @@ def main():
                 st.info("لم يتم العثور على ورقة Salary Scale في الملف المرفوع")
 
         elif page == "📥 تصدير الرواتب":
-            hdr("📥 تصدير تقارير الرواتب")
-            data = sal_snapshot if len(sal_snapshot)>0 else emp
+            hdr("📥 تصدير تقرير الرواتب","Excel مطابق لنموذج Mother of Dashboards")
+            data = sal_df if len(sal_df)>0 else (sal_snapshot if len(sal_snapshot)>0 else emp)
+            snap = sal_snapshot if len(sal_snapshot)>0 else data
             if len(data)==0: st.info("📁 ارفع ملف"); return
-            o = io.BytesIO()
-            with pd.ExcelWriter(o, engine='xlsxwriter') as w:
-                data.to_excel(w, sheet_name='البيانات', index=False)
-                w.sheets['البيانات'].right_to_left()
-            st.download_button("📥 تحميل Excel", data=o.getvalue(),
-                file_name=f"Salary_Report_{datetime.now().strftime('%Y%m%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary", use_container_width=True)
+
+            exp_format = st.radio("صيغة التصدير:", ["📊 Excel شامل","📄 CSV","📝 HTML"], horizontal=True, key="sal_exp_fmt")
+
+            if st.button("📥 إنشاء التقرير", type="primary", use_container_width=True):
+                if exp_format == "📊 Excel شامل":
+                    o = io.BytesIO()
+                    with pd.ExcelWriter(o, engine='xlsxwriter') as w:
+                        wb = w.book
+                        hdr_f = wb.add_format({'bold':True,'font_size':14,'bg_color':'#0F4C5C','font_color':'white','align':'center','border':1})
+                        num_f = wb.add_format({'num_format':'#,##0.00','border':1})
+
+                        # Sheet 1: Dashboard summary
+                        ws1 = wb.add_worksheet('Dashboard')
+                        ws1.set_column('A:Z', 18)
+                        ws1.merge_range('B2:F2', 'Mother of Dashboards: Salary Analysis', hdr_f)
+                        r = 4
+                        sal_col = next((c for c in ['الراتب الإجمالي','Gross Salary'] if has(snap,c)), None)
+                        dept_col = next((c for c in ['القسم','Department','القطاع'] if has(snap,c)), None)
+                        if sal_col:
+                            stats = [('Total Employees', snap.shape[0]), ('Total Monthly Payroll', f"{snap[sal_col].sum():,.2f}"),
+                                ('Average Salary', f"{snap[sal_col].mean():,.2f}"), ('Median Salary', f"{snap[sal_col].median():,.2f}"),
+                                ('Max Salary', f"{snap[sal_col].max():,.2f}"), ('Min Salary', f"{snap[sal_col].min():,.2f}")]
+                            for i, (lbl, val) in enumerate(stats):
+                                ws1.write(r+i, 1, lbl, wb.add_format({'bold':True,'border':1}))
+                                ws1.write(r+i, 2, str(val), wb.add_format({'border':1}))
+
+                        # Sheet 2: Analysis (monthly/quarterly)
+                        month_col = next((c for c in ['Salary Month','الشهر'] if has(data,c)), None)
+                        if sal_col and month_col:
+                            monthly = data.groupby(month_col)[sal_col].sum().reset_index()
+                            monthly.columns = ['Month','Total Gross Salary']
+                            monthly.to_excel(w, sheet_name='Analysis', index=False, startrow=1)
+
+                        # Sheet 3: Employee Salaries (full data)
+                        data.to_excel(w, sheet_name='Employee Salaries', index=False)
+
+                        # Sheet 4: Current Snapshot
+                        snap.to_excel(w, sheet_name='Current Snapshot', index=False)
+
+                        # Sheet 5: Salary Scale
+                        if 'Salary Scale' in all_sheets:
+                            all_sheets['Salary Scale'].to_excel(w, sheet_name='Salary Scale', index=False)
+                        else:
+                            # Default salary scale
+                            scale_data = [
+                                {'Grade':4,'Level':'Staff','Min':1800,'Mid':2200,'Max':2600},
+                                {'Grade':5,'Level':'Staff','Min':2200,'Mid':2800,'Max':3400},
+                                {'Grade':6,'Level':'Staff','Min':2800,'Mid':3500,'Max':4200},
+                                {'Grade':7,'Level':'Junior','Min':3500,'Mid':4300,'Max':5100},
+                                {'Grade':8,'Level':'Junior','Min':4300,'Mid':5300,'Max':6300},
+                                {'Grade':9,'Level':'Junior','Min':5300,'Mid':6600,'Max':7900},
+                                {'Grade':10,'Level':'Senior','Min':6600,'Mid':8200,'Max':9800},
+                                {'Grade':11,'Level':'Senior','Min':8200,'Mid':10200,'Max':12200},
+                                {'Grade':12,'Level':'Senior','Min':10200,'Mid':12800,'Max':15400},
+                                {'Grade':13,'Level':'Supervisor','Min':12800,'Mid':16000,'Max':19200},
+                                {'Grade':14,'Level':'Supervisor','Min':16000,'Mid':20000,'Max':24000},
+                                {'Grade':15,'Level':'Supervisor','Min':20000,'Mid':25000,'Max':30000},
+                                {'Grade':16,'Level':'Management','Min':25000,'Mid':32000,'Max':39000},
+                                {'Grade':17,'Level':'Management','Min':32000,'Mid':40000,'Max':48000},
+                                {'Grade':18,'Level':'Management','Min':40000,'Mid':50000,'Max':60000},
+                                {'Grade':19,'Level':'Senior Management','Min':50000,'Mid':65000,'Max':80000},
+                                {'Grade':20,'Level':'Senior Management','Min':65000,'Mid':95000,'Max':125000},
+                            ]
+                            pd.DataFrame(scale_data).to_excel(w, sheet_name='Salary Scale', index=False)
+
+                        # Sheet 6: Positions
+                        if 'Positions' in all_sheets:
+                            all_sheets['Positions'].to_excel(w, sheet_name='Positions', index=False)
+
+                        # Sheet 7: Department Summary
+                        if dept_col and sal_col:
+                            dept_summary = snap.groupby(dept_col).agg(
+                                Count=(sal_col, 'count'),
+                                Total=(sal_col, 'sum'),
+                                Average=(sal_col, 'mean'),
+                                Median=(sal_col, 'median'),
+                                Min=(sal_col, 'min'),
+                                Max=(sal_col, 'max'),
+                            ).reset_index()
+                            dept_summary.columns = [dept_col,'عدد','إجمالي','متوسط','وسيط','أقل','أعلى']
+                            dept_summary.to_excel(w, sheet_name='Dept Summary', index=False)
+
+                    st.download_button("📥 تحميل Mother of Dashboards Excel", data=o.getvalue(),
+                        file_name=f"Salary_Analysis_MotherOfDashboards_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary", use_container_width=True)
+
+                elif exp_format == "📄 CSV":
+                    csv_data = snap.to_csv(index=False).encode('utf-8-sig')
+                    st.download_button("📥 تحميل CSV", data=csv_data,
+                        file_name=f"Salary_Data_{datetime.now().strftime('%Y%m%d')}.csv",
+                        mime="text/csv", type="primary", use_container_width=True)
+
+                elif exp_format == "📝 HTML":
+                    html = f"<html dir='rtl'><head><meta charset='utf-8'><title>Salary Report</title><style>body{{font-family:Arial}}table{{border-collapse:collapse;width:100%}}th{{background:#0F4C5C;color:white;padding:8px;border:1px solid #ddd}}td{{padding:6px;border:1px solid #ddd}}</style></head><body><h1>تقرير تحليل الرواتب</h1><p>التاريخ: {datetime.now().strftime('%Y-%m-%d')}</p>{snap.to_html(index=False)}</body></html>"
+                    st.download_button("📥 تحميل HTML", data=html.encode('utf-8'),
+                        file_name=f"Salary_Report_{datetime.now().strftime('%Y%m%d')}.html",
+                        mime="text/html", type="primary", use_container_width=True)
 
 
     # =========================================
@@ -1714,77 +1993,370 @@ def main():
     # =========================================
     elif section == "👥 Headcount":
 
-        if page == "👥 Headcount Planning":
-            hdr("👥 Headcount Planning","تخطيط القوى العاملة")
+        if page == "👥 Headcount Report":
+            hdr("👥 HR Headcount Report","تقرير القوى العاملة الشهري - مطابق لنموذج Headcount 2025-2026")
 
             data = sal_snapshot if len(sal_snapshot)>0 else emp
             total = len(data)
 
-            st.markdown("### 📊 الوضع الحالي")
-            dept_col = 'القسم' if has(data,'القسم') else ('القطاع' if has(data,'القطاع') else None)
+            # Detect columns
+            dept_col = next((c for c in ['Department','القسم','القطاع'] if has(data,c)), None)
+            nat_col = next((c for c in ['Nationality','الجنسية','Nationality Group'] if has(data,c)), None)
+            status_col = next((c for c in ['Status','الحالة'] if has(data,c)), None)
+            join_col = next((c for c in ['Join Date','Hiring Date','تاريخ الالتحاق','Join_Date'] if has(data,c)), None)
+            end_col = next((c for c in ['End Date','End_Date','تاريخ الانتهاء'] if has(data,c)), None)
+            loc_col = next((c for c in ['Location','الموقع','المدينة'] if has(data,c)), None)
+            type_col = next((c for c in ['Employment Type','نوع التوظيف'] if has(data,c)), None)
+            name_en = next((c for c in ['Full Name (EN)','الاسم','Name','الاسم بالانجليزي'] if has(data,c)), None)
+            name_ar = next((c for c in ['Full Name (AR)','الاسم بالعربي'] if has(data,c)), None)
 
-            if total > 0 and dept_col:
-                hc = data[dept_col].value_counts().reset_index()
-                hc.columns = [dept_col, 'الحالي']
-
-                # Nationality breakdown per dept
-                if has(data,'الجنسية'):
-                    sa_per_dept = data[data['الجنسية'].isin(['Saudi','سعودي'])].groupby(dept_col).size().reset_index(name='سعودي')
-                    non_sa = data[~data['الجنسية'].isin(['Saudi','سعودي'])].groupby(dept_col).size().reset_index(name='غير سعودي')
-                    hc = hc.merge(sa_per_dept, on=dept_col, how='left').merge(non_sa, on=dept_col, how='left').fillna(0)
-                    hc['سعودي'] = hc['سعودي'].astype(int)
-                    hc['غير سعودي'] = hc['غير سعودي'].astype(int)
-                    hc['نسبة السعودة'] = (hc['سعودي'] / hc['الحالي'] * 100).round(1)
-
-                # Level breakdown
-                if has(data,'المستوى'):
-                    for lvl in data['المستوى'].unique():
-                        hc[lvl] = data[data['المستوى']==lvl].groupby(dept_col).size().reindex(hc[dept_col]).fillna(0).astype(int).values
-
-                st.dataframe(hc, use_container_width=True, hide_index=True)
-
-                # Gender breakdown
-                if has(data,'الجنس'):
-                    st.markdown("### 👫 التوزيع حسب الجنس")
-                    gd = pd.crosstab(data[dept_col], data['الجنس'])
-                    st.dataframe(gd, use_container_width=True)
-
-                # Headcount planning tool
-                st.markdown("---")
-                st.markdown("### 📋 تخطيط Headcount المستقبلي")
-                growth_pct = st.slider("📈 نسبة النمو المستهدفة %", 0, 50, 15)
-
-                plan = hc[[dept_col,'الحالي']].copy()
-                plan['المستهدف'] = (plan['الحالي'] * (1 + growth_pct/100)).apply(math.ceil)
-                plan['الفرق'] = plan['المستهدف'] - plan['الحالي']
-                if has(data,'الراتب الإجمالي'):
-                    avg_by_dept = data.groupby(dept_col)['الراتب الإجمالي'].mean()
-                    plan['التكلفة الشهرية المتوقعة'] = plan.apply(lambda r: int(r['الفرق'] * avg_by_dept.get(r[dept_col], 0)), axis=1)
-                    plan['التكلفة السنوية'] = plan['التكلفة الشهرية المتوقعة'] * 12
-
-                st.dataframe(plan, use_container_width=True, hide_index=True)
-
-                # Totals
-                cols = st.columns(4)
-                with cols[0]: st.metric("👥 الحالي", total)
-                with cols[1]: st.metric("🎯 المستهدف", plan['المستهدف'].sum())
-                with cols[2]: st.metric("📊 التعيينات المطلوبة", plan['الفرق'].sum())
-                with cols[3]:
-                    if 'التكلفة السنوية' in plan.columns:
-                        st.metric("💰 التكلفة السنوية", f"{plan['التكلفة السنوية'].sum():,.0f}")
-            else:
-                st.info("📁 ارفع ملف بيانات الموظفين لبناء Headcount")
+            if total == 0 or not dept_col:
+                st.info("📁 ارفع ملف بيانات الموظفين (مثل Headcount_2025_2026.xlsx)")
                 st.markdown("### 📋 أو أدخل البيانات يدوياً")
-                num_depts = st.number_input("عدد الأقسام", 1, 20, 5)
+                num_depts = st.number_input("عدد الأقسام", 1, 30, 10)
                 manual_data = []
                 for i in range(num_depts):
-                    c1,c2,c3 = st.columns(3)
-                    with c1: dept = st.text_input(f"اسم القسم {i+1}", f"قسم {i+1}", key=f"d_{i}")
-                    with c2: current = st.number_input(f"العدد الحالي", 0, 500, 10, key=f"c_{i}")
-                    with c3: target = st.number_input(f"المستهدف", 0, 500, 12, key=f"t_{i}")
-                    manual_data.append({"القسم":dept, "الحالي":current, "المستهدف":target, "الفرق":target-current})
+                    c1,c2,c3,c4 = st.columns(4)
+                    with c1: dept = st.text_input(f"القسم {i+1}", f"قسم {i+1}", key=f"hd_{i}")
+                    with c2: current = st.number_input("الحالي", 0, 500, 10, key=f"hc_{i}")
+                    with c3: sa = st.number_input("سعودي", 0, 500, 5, key=f"hs_{i}")
+                    with c4: target = st.number_input("المستهدف", 0, 500, 12, key=f"ht_{i}")
+                    manual_data.append({"القسم":dept, "الحالي":current, "سعودي":sa, "غير سعودي":current-sa, "المستهدف":target, "الفرق":target-current, "السعودة %":round(sa/max(current,1)*100,1)})
                 if manual_data:
-                    st.dataframe(pd.DataFrame(manual_data), use_container_width=True, hide_index=True)
+                    mdf = pd.DataFrame(manual_data)
+                    st.dataframe(mdf, use_container_width=True, hide_index=True)
+                    k1,k2,k3,k4 = st.columns(4)
+                    with k1: kpi("👥 الإجمالي", str(mdf['الحالي'].sum()))
+                    with k2: kpi("🎯 المستهدف", str(mdf['المستهدف'].sum()))
+                    with k3: kpi("📊 المطلوب", str(mdf['الفرق'].sum()))
+                    with k4: kpi("🇸🇦 السعودة", f"{round(mdf['سعودي'].sum()/max(mdf['الحالي'].sum(),1)*100,1)}%")
+                return
+
+            # Convert dates
+            if join_col:
+                data[join_col] = pd.to_datetime(data[join_col], errors='coerce')
+            if end_col:
+                data[end_col] = pd.to_datetime(data[end_col], errors='coerce')
+
+            # Determine active employees
+            if status_col:
+                active = data[data[status_col].isin(['Active','نشط','active'])]
+            elif end_col:
+                active = data[data[end_col].isna()]
+            else:
+                active = data
+
+            total_active = len(active)
+            total_all = len(data)
+
+            # ===== SECTION 0: KPI Summary =====
+            st.markdown("### 📊 ملخص القوى العاملة")
+            k1,k2,k3,k4,k5,k6 = st.columns(6)
+            with k1: kpi("👥 إجمالي السجلات", str(total_all))
+            with k2: kpi("✅ نشط حالياً", str(total_active))
+            with k3: kpi("❌ منتهي", str(total_all - total_active))
+            if nat_col:
+                saudi_vals = ['Saudi','سعودي','Saudi Arabian']
+                sa_count = len(active[active[nat_col].isin(saudi_vals)])
+                sa_pct = round(sa_count/max(total_active,1)*100,1)
+                with k4: kpi("🇸🇦 سعودي", str(sa_count))
+                with k5: kpi("🌍 غير سعودي", str(total_active - sa_count))
+                with k6: kpi("📊 نسبة السعودة", f"{sa_pct}%")
+            if dept_col:
+                n_depts = active[dept_col].nunique()
+            if loc_col:
+                n_locs = active[loc_col].nunique()
+
+            # ===== SECTION 1: Monthly Headcount by Department =====
+            if join_col and dept_col:
+                st.markdown("---")
+                st.markdown("### 📅 SECTION 1: Headcount الشهري حسب القسم")
+
+                # Generate monthly periods
+                yr_sel = st.selectbox("السنة:", [2024,2025,2026,2027], index=1, key="hc_yr")
+                months = pd.date_range(f'{yr_sel}-01-01', f'{yr_sel}-12-01', freq='MS')
+                if yr_sel == 2025:
+                    months = pd.date_range('2025-07-01', '2026-12-01', freq='MS')
+
+                depts = sorted(data[dept_col].dropna().unique())
+
+                # Calculate headcount per month per dept
+                hc_monthly = []
+                for dept in depts:
+                    dept_data = data[data[dept_col]==dept]
+                    row = {'القسم': dept}
+                    for m in months:
+                        m_end = m + pd.offsets.MonthEnd(0)
+                        joined = dept_data[dept_data[join_col] <= m_end] if join_col else dept_data
+                        if end_col:
+                            still_active = joined[(joined[end_col].isna()) | (joined[end_col] > m_end)]
+                        else:
+                            still_active = joined
+                        row[m.strftime('%b %Y')] = len(still_active)
+                    hc_monthly.append(row)
+
+                hc_df = pd.DataFrame(hc_monthly)
+                # Add total row
+                total_row = {'القسم': 'الإجمالي'}
+                for col in hc_df.columns[1:]:
+                    total_row[col] = hc_df[col].sum()
+                hc_df = pd.concat([hc_df, pd.DataFrame([total_row])], ignore_index=True)
+
+                st.dataframe(hc_df, use_container_width=True, hide_index=True)
+
+                # Chart
+                chart_data = hc_df[hc_df['القسم']!='الإجمالي'].set_index('القسم').T
+                fig = px.area(chart_data, title='Headcount الشهري حسب القسم',
+                    color_discrete_sequence=CL['dept'])
+                fig.update_layout(font=dict(family="Noto Sans Arabic"), height=450,
+                    xaxis_title="الشهر", yaxis_title="عدد الموظفين")
+                st.plotly_chart(fig, use_container_width=True)
+
+                # Total trend
+                totals = {col: hc_df[hc_df['القسم']=='الإجمالي'][col].values[0] for col in hc_df.columns[1:]}
+                fig2 = go.Figure()
+                fig2.add_trace(go.Scatter(x=list(totals.keys()), y=list(totals.values()),
+                    mode='lines+markers+text', text=list(totals.values()), textposition='top center',
+                    line=dict(color=CL['p'], width=3), marker=dict(size=10)))
+                fig2.update_layout(title='إجمالي Headcount الشهري', font=dict(family="Noto Sans Arabic"),
+                    height=350, xaxis_title="الشهر", yaxis_title="الإجمالي")
+                st.plotly_chart(fig2, use_container_width=True)
+
+            # ===== SECTION 2: Saudization by Month =====
+            if join_col and nat_col and dept_col:
+                st.markdown("---")
+                st.markdown("### 🇸🇦 SECTION 2: نسبة السعودة الشهرية")
+
+                saudi_vals = ['Saudi','سعودي','Saudi Arabian']
+                sa_monthly = []
+                nsa_monthly = []
+                pct_monthly = []
+                for m in months:
+                    m_end = m + pd.offsets.MonthEnd(0)
+                    joined = data[data[join_col] <= m_end]
+                    if end_col:
+                        active_m = joined[(joined[end_col].isna()) | (joined[end_col] > m_end)]
+                    else:
+                        active_m = joined
+                    sa = len(active_m[active_m[nat_col].isin(saudi_vals)])
+                    tot = len(active_m)
+                    sa_monthly.append(sa)
+                    nsa_monthly.append(tot - sa)
+                    pct_monthly.append(round(sa/max(tot,1)*100, 1))
+
+                sa_df = pd.DataFrame({
+                    'الشهر': [m.strftime('%b %Y') for m in months],
+                    'سعودي': sa_monthly, 'غير سعودي': nsa_monthly,
+                    'الإجمالي': [s+n for s,n in zip(sa_monthly, nsa_monthly)],
+                    'نسبة السعودة %': pct_monthly
+                })
+                st.dataframe(sa_df, use_container_width=True, hide_index=True)
+
+                fig3 = go.Figure()
+                fig3.add_trace(go.Bar(x=sa_df['الشهر'], y=sa_df['سعودي'], name='سعودي', marker_color='#27AE60'))
+                fig3.add_trace(go.Bar(x=sa_df['الشهر'], y=sa_df['غير سعودي'], name='غير سعودي', marker_color='#3498DB'))
+                fig3.add_trace(go.Scatter(x=sa_df['الشهر'], y=sa_df['نسبة السعودة %'], name='السعودة %',
+                    yaxis='y2', mode='lines+markers', line=dict(color='#E74C3C', width=2)))
+                fig3.update_layout(barmode='stack', title='السعودة الشهرية',
+                    yaxis2=dict(overlaying='y', side='right', title='%', range=[0,100]),
+                    font=dict(family="Noto Sans Arabic"), height=400)
+                st.plotly_chart(fig3, use_container_width=True)
+
+            # ===== SECTION 3: Hires & Terminations =====
+            if join_col:
+                st.markdown("---")
+                st.markdown("### 📈 SECTION 3: التوظيف والاستقالات الشهرية")
+
+                hire_term = []
+                for m in months:
+                    m_start = m
+                    m_end = m + pd.offsets.MonthEnd(0)
+                    hires = len(data[(data[join_col] >= m_start) & (data[join_col] <= m_end)])
+                    terms = 0
+                    if end_col:
+                        terms = len(data[(data[end_col] >= m_start) & (data[end_col] <= m_end)])
+                    hire_term.append({
+                        'الشهر': m.strftime('%b %Y'),
+                        'تعيينات جديدة': hires,
+                        'إنهاء خدمة': terms,
+                        'صافي التغيير': hires - terms
+                    })
+
+                ht_df = pd.DataFrame(hire_term)
+                st.dataframe(ht_df, use_container_width=True, hide_index=True)
+
+                fig4 = go.Figure()
+                fig4.add_trace(go.Bar(x=ht_df['الشهر'], y=ht_df['تعيينات جديدة'], name='تعيينات', marker_color='#27AE60'))
+                fig4.add_trace(go.Bar(x=ht_df['الشهر'], y=[-t for t in ht_df['إنهاء خدمة']], name='إنهاء', marker_color='#E74C3C'))
+                fig4.add_trace(go.Scatter(x=ht_df['الشهر'], y=ht_df['صافي التغيير'], name='صافي التغيير',
+                    mode='lines+markers', line=dict(color=CL['p'], width=2)))
+                fig4.update_layout(barmode='relative', title='التوظيف مقابل الاستقالات',
+                    font=dict(family="Noto Sans Arabic"), height=400)
+                st.plotly_chart(fig4, use_container_width=True)
+
+            # ===== SECTION 4: KPIs =====
+            st.markdown("---")
+            st.markdown("### 🎯 مؤشرات الأداء الرئيسية (KPIs)")
+
+            kpi_data = {}
+            if 'totals' in dir() or join_col:
+                try:
+                    vals = list(totals.values()) if 'totals' in dir() else [total_active]
+                    kpi_data['أعلى Headcount'] = max(vals)
+                    kpi_data['أقل Headcount'] = min(vals)
+                    if len(vals) > 1:
+                        kpi_data['نمو الفترة %'] = round((vals[-1] - vals[0]) / max(vals[0],1) * 100, 1)
+                except: pass
+            if nat_col:
+                kpi_data['متوسط السعودة %'] = round(sum(pct_monthly)/max(len(pct_monthly),1), 1) if 'pct_monthly' in dir() else sa_pct
+            if 'ht_df' in dir() and len(ht_df) > 0:
+                total_hc_avg = sum([t.get('الإجمالي', total_active) for t in [{}]]) or total_active
+                if ht_df['إنهاء خدمة'].sum() > 0:
+                    kpi_data['معدل الدوران الشهري %'] = round(ht_df['إنهاء خدمة'].mean() / max(total_active,1) * 100, 2)
+                kpi_data['إجمالي التعيينات'] = ht_df['تعيينات جديدة'].sum()
+                kpi_data['إجمالي الاستقالات'] = ht_df['إنهاء خدمة'].sum()
+
+            if kpi_data:
+                cols = st.columns(min(len(kpi_data), 4))
+                for i, (k, v) in enumerate(kpi_data.items()):
+                    with cols[i % len(cols)]: kpi(k, str(v))
+
+            # Distribution charts
+            if dept_col:
+                st.markdown("---")
+                c1, c2 = st.columns(2)
+                with c1:
+                    dept_counts = active[dept_col].value_counts().reset_index()
+                    dept_counts.columns = [dept_col, 'العدد']
+                    fig = px.pie(dept_counts, values='العدد', names=dept_col, title='توزيع الموظفين حسب القسم',
+                        hole=.35, color_discrete_sequence=CL['dept'])
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
+                    st.plotly_chart(fig, use_container_width=True)
+                with c2:
+                    if loc_col:
+                        loc_counts = active[loc_col].value_counts().reset_index()
+                        loc_counts.columns = [loc_col, 'العدد']
+                        fig = px.pie(loc_counts, values='العدد', names=loc_col, title='توزيع الموظفين حسب الموقع',
+                            hole=.35, color_discrete_sequence=['#E36414','#264653','#2A9D8F','#E9C46A','#F4A261'])
+                        fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
+                        st.plotly_chart(fig, use_container_width=True)
+                    elif nat_col:
+                        nat_counts = active[nat_col].value_counts().head(10).reset_index()
+                        nat_counts.columns = [nat_col, 'العدد']
+                        fig = px.bar(nat_counts, x='العدد', y=nat_col, orientation='h', title='أكثر 10 جنسيات',
+                            color_discrete_sequence=[CL['a']])
+                        fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
+                        st.plotly_chart(fig, use_container_width=True)
+
+        elif page == "📋 بيانات الموظفين":
+            hdr("📋 سجل بيانات الموظفين","Employee Data Registry - عرض وتصفية")
+            data = sal_snapshot if len(sal_snapshot)>0 else emp
+            if len(data) == 0:
+                st.info("📁 ارفع ملف بيانات الموظفين")
+                return
+            dept_col = next((c for c in ['Department','القسم','القطاع'] if has(data,c)), None)
+            status_col = next((c for c in ['Status','الحالة'] if has(data,c)), None)
+            nat_col = next((c for c in ['Nationality','الجنسية'] if has(data,c)), None)
+
+            # Filters
+            fc1, fc2, fc3 = st.columns(3)
+            with fc1:
+                if dept_col:
+                    dept_f = st.selectbox("القسم:", ["الكل"] + sorted(data[dept_col].dropna().unique().tolist()), key="hc_df")
+            with fc2:
+                if status_col:
+                    stat_f = st.selectbox("الحالة:", ["الكل"] + sorted(data[status_col].dropna().unique().tolist()), key="hc_sf")
+            with fc3:
+                if nat_col:
+                    nat_f = st.selectbox("الجنسية:", ["الكل"] + sorted(data[nat_col].dropna().unique().tolist()), key="hc_nf")
+
+            filtered = data.copy()
+            if dept_col and dept_f != "الكل": filtered = filtered[filtered[dept_col]==dept_f]
+            if status_col and stat_f != "الكل": filtered = filtered[filtered[status_col]==stat_f]
+            if nat_col and nat_f != "الكل": filtered = filtered[filtered[nat_col]==nat_f]
+
+            st.success(f"📊 {len(filtered)} سجل من أصل {len(data)}")
+            st.dataframe(filtered, use_container_width=True, hide_index=True)
+
+        elif page == "📥 تصدير Headcount":
+            hdr("📥 تصدير تقرير Headcount","تصدير Excel مطابق لنموذج HR Headcount Report")
+            data = sal_snapshot if len(sal_snapshot)>0 else emp
+            if len(data) == 0:
+                st.info("📁 ارفع ملف بيانات الموظفين أولاً")
+                return
+
+            dept_col = next((c for c in ['Department','القسم','القطاع'] if has(data,c)), None)
+            nat_col = next((c for c in ['Nationality','الجنسية'] if has(data,c)), None)
+            join_col = next((c for c in ['Join Date','Hiring Date','تاريخ الالتحاق'] if has(data,c)), None)
+            end_col = next((c for c in ['End Date','End_Date','تاريخ الانتهاء'] if has(data,c)), None)
+            status_col = next((c for c in ['Status','الحالة'] if has(data,c)), None)
+
+            yr_sel = st.selectbox("السنة:", [2024,2025,2026], index=1, key="exp_yr")
+            if st.button("📥 إنشاء تقرير Headcount Excel", type="primary", use_container_width=True):
+                ox = io.BytesIO()
+                with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
+                    # Sheet 1: Employee Data
+                    data.to_excel(w, sheet_name='Emp Data Sheet', index=False)
+
+                    # Sheet 2: Monthly Headcount
+                    if join_col and dept_col:
+                        data[join_col] = pd.to_datetime(data[join_col], errors='coerce')
+                        if end_col: data[end_col] = pd.to_datetime(data[end_col], errors='coerce')
+                        months = pd.date_range(f'{yr_sel}-01-01', f'{yr_sel}-12-01', freq='MS')
+                        depts = sorted(data[dept_col].dropna().unique())
+
+                        hc_rows = []
+                        for dept in depts:
+                            dd = data[data[dept_col]==dept]
+                            row = {'Department': dept}
+                            for m in months:
+                                m_end = m + pd.offsets.MonthEnd(0)
+                                joined = dd[dd[join_col] <= m_end]
+                                if end_col:
+                                    act = joined[(joined[end_col].isna()) | (joined[end_col] > m_end)]
+                                else:
+                                    act = joined
+                                row[m.strftime('%b-%Y')] = len(act)
+                            hc_rows.append(row)
+                        hc_export = pd.DataFrame(hc_rows)
+                        total_r = {'Department': 'TOTAL'}
+                        for c in hc_export.columns[1:]: total_r[c] = hc_export[c].sum()
+                        hc_export = pd.concat([hc_export, pd.DataFrame([total_r])], ignore_index=True)
+                        hc_export.to_excel(w, sheet_name='HR Headcount Report', index=False)
+
+                        # Sheet 3: Saudization
+                        if nat_col:
+                            saudi_vals = ['Saudi','سعودي','Saudi Arabian']
+                            sa_rows = []
+                            for m in months:
+                                m_end = m + pd.offsets.MonthEnd(0)
+                                joined = data[data[join_col] <= m_end]
+                                if end_col: act = joined[(joined[end_col].isna()) | (joined[end_col] > m_end)]
+                                else: act = joined
+                                sa = len(act[act[nat_col].isin(saudi_vals)])
+                                tot = len(act)
+                                sa_rows.append({'Month': m.strftime('%b-%Y'), 'Saudi': sa, 'Non-Saudi': tot-sa,
+                                    'Total': tot, 'Saudization %': round(sa/max(tot,1)*100,1)})
+                            pd.DataFrame(sa_rows).to_excel(w, sheet_name='Saudization', index=False)
+
+                        # Sheet 4: Hires & Terminations
+                        ht_rows = []
+                        for m in months:
+                            m_start = m; m_end = m + pd.offsets.MonthEnd(0)
+                            h = len(data[(data[join_col] >= m_start) & (data[join_col] <= m_end)])
+                            t = len(data[(data[end_col] >= m_start) & (data[end_col] <= m_end)]) if end_col else 0
+                            ht_rows.append({'Month': m.strftime('%b-%Y'), 'New Hires': h, 'Terminations': t, 'Net Change': h-t})
+                        pd.DataFrame(ht_rows).to_excel(w, sheet_name='Hires & Terminations', index=False)
+
+                    # Format workbook
+                    for sname in w.sheets:
+                        ws = w.sheets[sname]
+                        ws.set_column('A:Z', 15)
+
+                st.download_button("📥 تحميل Headcount Report", data=ox.getvalue(),
+                    file_name=f"HR_Headcount_Report_{yr_sel}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    type="primary", use_container_width=True)
 
         elif page == "📊 تحليل الأداء":
             hdr("📊 تحليل الأداء","تحليل إنتاجية وأداء الموظفين")
@@ -2484,17 +3056,148 @@ def main():
                 st.markdown("---")
 
         elif page == "📥 تصدير التدريب":
-            hdr("📥 تصدير تقارير التدريب")
-            o = io.BytesIO()
-            with pd.ExcelWriter(o, engine='xlsxwriter') as w:
-                pd.DataFrame(st.session_state.budget_data).to_excel(w, sheet_name='الميزانية', index=False)
-                all_p = []
-                for m, ps in PROVIDERS.items():
-                    for p in ps: all_p.append({"السوق":m,"الجهة":p['name'],"التخصص":p['spec'],"النوع":p['type']})
-                pd.DataFrame(all_p).to_excel(w, sheet_name='جهات التدريب', index=False)
-            st.download_button("📥 تحميل", data=o.getvalue(),
-                file_name=f"Training_{datetime.now().strftime('%Y%m%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary", use_container_width=True)
+            hdr("📥 تصدير ميزانية التدريب","Excel مطابق لنموذج Resal Training Budget")
+
+            budget_df = pd.DataFrame(st.session_state.budget_data)
+            total_budget = budget_df['budget'].sum()
+            fy = st.selectbox("السنة المالية:", [2025,2026,2027], index=1, key="trn_fy")
+
+            if st.button("📥 إنشاء ملف ميزانية التدريب", type="primary", use_container_width=True):
+                ox = io.BytesIO()
+                with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
+                    wb = w.book
+
+                    # Header formats
+                    hdr_fmt = wb.add_format({'bold':True,'font_size':14,'bg_color':'#0F4C5C','font_color':'white','align':'center','valign':'vcenter','border':1})
+                    sub_fmt = wb.add_format({'bold':True,'font_size':11,'bg_color':'#E36414','font_color':'white','align':'center','border':1})
+                    col_fmt = wb.add_format({'bold':True,'bg_color':'#264653','font_color':'white','align':'center','border':1,'text_wrap':True})
+                    num_fmt = wb.add_format({'num_format':'#,##0','align':'center','border':1})
+                    pct_fmt = wb.add_format({'num_format':'0.0%','align':'center','border':1})
+                    txt_fmt = wb.add_format({'align':'right','border':1,'text_wrap':True})
+                    tot_fmt = wb.add_format({'bold':True,'bg_color':'#F0F0F0','num_format':'#,##0','align':'center','border':1})
+
+                    # ===== Sheet 1: Executive Summary =====
+                    ws1 = wb.add_worksheet('Executive Summary')
+                    ws1.set_column('A:A', 5)
+                    ws1.set_column('B:B', 35)
+                    ws1.set_column('C:G', 15)
+                    ws1.merge_range('B1:G1', f'resal - Training Budget Allocation FY {fy}', hdr_fmt)
+                    ws1.merge_range('B3:G3', 'Infrastructure for Non-Cash Value | Training Budget Allocation Plan', sub_fmt)
+                    ws1.merge_range('B5:G5', 'BUDGET ALLOCATION BY DEPARTMENT', wb.add_format({'bold':True,'font_size':12,'align':'center'}))
+
+                    headers = ['Department','Budget (SAR)','Allocation %','Priority','Strategic Fit','Category']
+                    for i, h in enumerate(headers):
+                        ws1.write(5, i+1, h, col_fmt)
+
+                    for j, (_, r) in enumerate(budget_df.iterrows()):
+                        ws1.write(6+j, 1, r['dept'], txt_fmt)
+                        ws1.write(6+j, 2, r['budget'], num_fmt)
+                        ws1.write(6+j, 3, r['pct']/100, pct_fmt)
+                        ws1.write(6+j, 4, r['priority'], txt_fmt)
+                        ws1.write(6+j, 5, 'Direct' if r['cat'] in ['محرك إيرادات','ممكّن نمو'] else 'Support', txt_fmt)
+                        ws1.write(6+j, 6, r['cat'], txt_fmt)
+
+                    tr = 6 + len(budget_df)
+                    ws1.write(tr, 1, 'TOTAL', wb.add_format({'bold':True,'border':1}))
+                    ws1.write(tr, 2, total_budget, tot_fmt)
+                    ws1.write(tr, 3, 1.0, wb.add_format({'bold':True,'num_format':'0%','align':'center','border':1}))
+
+                    # Strategic split
+                    tr += 2
+                    ws1.merge_range(tr, 1, tr, 6, 'STRATEGIC BUDGET SPLIT', sub_fmt)
+                    rev_b = budget_df[budget_df['cat']=='محرك إيرادات']['budget'].sum()
+                    grow_b = budget_df[budget_df['cat']=='ممكّن نمو']['budget'].sum()
+                    inf_b = budget_df[budget_df['cat']=='بنية تحتية']['budget'].sum()
+                    for i, (lbl, val) in enumerate([
+                        ('Revenue-Generating Departments', rev_b),
+                        ('Growth Enabler Departments', grow_b),
+                        ('Infrastructure Departments', inf_b)]):
+                        ws1.write(tr+1+i, 1, lbl, txt_fmt)
+                        ws1.write(tr+1+i, 2, val, num_fmt)
+                        ws1.write(tr+1+i, 3, val/total_budget, pct_fmt)
+
+                    # ===== Sheet 2: Detailed Programs =====
+                    ws2 = wb.add_worksheet('Detailed Programs')
+                    ws2.set_column('A:A', 5)
+                    ws2.set_column('B:B', 50)
+                    ws2.set_column('C:C', 15)
+                    ws2.set_column('D:E', 12)
+                    ws2.set_column('F:F', 50)
+                    ws2.merge_range('B1:F1', 'DETAILED TRAINING PROGRAMS BY DEPARTMENT', hdr_fmt)
+                    row = 2
+                    for dept, programs in TRAINING_PROGRAMS.items():
+                        ws2.merge_range(row, 1, row, 5, dept, sub_fmt)
+                        row += 1
+                        for i, h in enumerate(['Training Program','Budget (SAR)','Source','Timing','Expected Impact']):
+                            ws2.write(row, i+1, h, col_fmt)
+                        row += 1
+                        for p in programs:
+                            ws2.write(row, 1, p['program'], txt_fmt)
+                            ws2.write(row, 2, p['budget'], num_fmt)
+                            ws2.write(row, 3, p['source'], txt_fmt)
+                            ws2.write(row, 4, p['timing'], txt_fmt)
+                            ws2.write(row, 5, p['impact'], txt_fmt)
+                            row += 1
+                        ws2.write(row, 1, 'Subtotal', wb.add_format({'bold':True,'border':1}))
+                        ws2.write(row, 2, sum(p['budget'] for p in programs), tot_fmt)
+                        row += 2
+
+                    # ===== Sheet 3: Quarterly Plan =====
+                    ws3 = wb.add_worksheet('Quarterly Plan')
+                    ws3.set_column('A:A', 5)
+                    ws3.set_column('B:B', 35)
+                    ws3.set_column('C:G', 15)
+                    ws3.merge_range('B1:G1', f'QUARTERLY TRAINING BUDGET PLAN FY {fy}', hdr_fmt)
+                    for i, h in enumerate(['Department','Q1 Jan-Mar','Q2 Apr-Jun','Q3 Jul-Sep','Q4 Oct-Dec','Annual Total']):
+                        ws3.write(2, i+1, h, col_fmt)
+                    for j, (_, r) in enumerate(budget_df.iterrows()):
+                        ws3.write(3+j, 1, r['dept'], txt_fmt)
+                        for qi, (q, p) in enumerate(Q_SPLIT.items()):
+                            ws3.write(3+j, 2+qi, int(r['budget']*p), num_fmt)
+                        ws3.write(3+j, 6, r['budget'], num_fmt)
+                    tr = 3 + len(budget_df)
+                    ws3.write(tr, 1, 'TOTAL', wb.add_format({'bold':True,'border':1}))
+                    for qi, (q, p) in enumerate(Q_SPLIT.items()):
+                        ws3.write(tr, 2+qi, int(total_budget*p), tot_fmt)
+                    ws3.write(tr, 6, total_budget, tot_fmt)
+
+                    # ===== Sheet 4: Charts Data =====
+                    chart_rows = [[r['dept'], r['budget']] for _, r in budget_df.iterrows()]
+                    cdf = pd.DataFrame(chart_rows, columns=['Department','Budget'])
+                    cdf.to_excel(w, sheet_name='Charts & Analytics', index=False, startrow=1)
+
+                    # ===== Sheet 5: ROI & KPIs =====
+                    ws5 = wb.add_worksheet('ROI & KPIs')
+                    ws5.set_column('A:A', 5)
+                    ws5.set_column('B:C', 50)
+                    ws5.merge_range('B1:C1', 'EXPECTED ROI & KEY PERFORMANCE INDICATORS', hdr_fmt)
+                    ws5.write(3, 1, 'Training ROI Indicators', sub_fmt)
+                    for i, ind in enumerate(ROI_INDICATORS):
+                        ws5.write(4+i, 1, f'{i+1}.', txt_fmt)
+                        ws5.write(4+i, 2, ind, txt_fmt)
+                    r = 5 + len(ROI_INDICATORS)
+                    ws5.write(r, 1, 'Training KPIs', sub_fmt)
+                    for i, kp in enumerate(TRAINING_KPIS):
+                        ws5.write(r+1+i, 1, f'{i+1}.', txt_fmt)
+                        ws5.write(r+1+i, 2, kp, txt_fmt)
+                    r2 = r + 2 + len(TRAINING_KPIS)
+                    ws5.write(r2, 1, f'Total Budget: SAR {total_budget:,}', txt_fmt)
+                    ws5.write(r2+2, 1, 'Prepared by: Human Resources Department | resal', txt_fmt)
+
+                st.download_button("📥 تحميل ميزانية التدريب الكاملة", data=ox.getvalue(),
+                    file_name=f"Resal_Training_Budget_{fy}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    type="primary", use_container_width=True)
+
+            # Also show programs summary
+            st.markdown("---")
+            st.markdown("### 📋 ملخص البرامج التدريبية")
+            all_programs = []
+            for dept, progs in TRAINING_PROGRAMS.items():
+                for p in progs:
+                    all_programs.append({"القسم": dept, "البرنامج": p['program'], "الميزانية": p['budget'], "المصدر": p['source'], "التوقيت": p['timing']})
+            st.dataframe(pd.DataFrame(all_programs), use_container_width=True, hide_index=True)
+            st.caption(f"📊 إجمالي: {len(all_programs)} برنامج تدريبي | {sum(p['budget'] for p in all_programs)} ريال")
 
 
     # =========================================
@@ -4182,4 +4885,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
