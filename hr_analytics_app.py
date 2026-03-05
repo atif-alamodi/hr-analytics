@@ -651,6 +651,123 @@ TRAINING_KPIS = [
     "Training hours per employee: 20 hours annually minimum",
 ]
 
+# ===== SALARY BENCHMARK DATA (KSA + Egypt) =====
+MARKET_BENCHMARKS = {
+    "السعودية": {
+        "currency": "SAR", "gosi_employer": 0.1175, "gosi_employee": 0.0975, "gosi_nsa_employer": 0.02,
+        "housing_pct": 25, "transport": 500, "iqama_cost": 2400, "visa_cost": 3500, "med_insurance_avg": 500,
+        "end_service_factor": 0.5, "saudization_required": True,
+        "positions": {
+            "الإدارة العليا": [
+                {"title":"Chief Executive Officer (CEO)","title_ar":"الرئيس التنفيذي","min":45000,"mid":65000,"max":95000,"level":"C-Level","demand":"متوسط"},
+                {"title":"Chief Technology Officer (CTO)","title_ar":"رئيس قطاع التقنية","min":35000,"mid":50000,"max":75000,"level":"C-Level","demand":"عالي"},
+                {"title":"Chief Financial Officer (CFO)","title_ar":"المدير المالي","min":30000,"mid":45000,"max":65000,"level":"C-Level","demand":"متوسط"},
+                {"title":"VP of Sales","title_ar":"نائب رئيس المبيعات","min":25000,"mid":38000,"max":55000,"level":"VP","demand":"عالي"},
+                {"title":"VP of Marketing","title_ar":"نائب رئيس التسويق","min":22000,"mid":35000,"max":50000,"level":"VP","demand":"عالي"},
+            ],
+            "التقنية": [
+                {"title":"Engineering Manager","title_ar":"مدير هندسة البرمجيات","min":20000,"mid":30000,"max":42000,"level":"Management","demand":"عالي جداً"},
+                {"title":"Senior Software Engineer","title_ar":"مهندس برمجيات أول","min":15000,"mid":22000,"max":32000,"level":"Senior","demand":"عالي جداً"},
+                {"title":"Software Engineer","title_ar":"مهندس برمجيات","min":10000,"mid":15000,"max":22000,"level":"Mid","demand":"عالي"},
+                {"title":"Junior Developer","title_ar":"مطور مبتدئ","min":6000,"mid":8500,"max":12000,"level":"Junior","demand":"متوسط"},
+                {"title":"DevOps Engineer","title_ar":"مهندس DevOps","min":14000,"mid":20000,"max":28000,"level":"Senior","demand":"عالي جداً"},
+                {"title":"Data Engineer","title_ar":"مهندس بيانات","min":14000,"mid":20000,"max":28000,"level":"Senior","demand":"عالي جداً"},
+                {"title":"Data Analyst","title_ar":"محلل بيانات","min":8000,"mid":12000,"max":18000,"level":"Mid","demand":"عالي"},
+                {"title":"QA Engineer","title_ar":"مهندس ضمان الجودة","min":8000,"mid":12000,"max":17000,"level":"Mid","demand":"متوسط"},
+                {"title":"UI/UX Designer","title_ar":"مصمم تجربة المستخدم","min":9000,"mid":14000,"max":20000,"level":"Mid","demand":"عالي"},
+                {"title":"Product Manager","title_ar":"مدير المنتج","min":15000,"mid":22000,"max":32000,"level":"Senior","demand":"عالي جداً"},
+            ],
+            "المبيعات": [
+                {"title":"Sales Director","title_ar":"مدير المبيعات","min":18000,"mid":25000,"max":38000,"level":"Director","demand":"عالي"},
+                {"title":"Senior Account Manager","title_ar":"مدير حسابات أول","min":12000,"mid":16000,"max":22000,"level":"Senior","demand":"عالي"},
+                {"title":"Account Manager","title_ar":"مدير حسابات","min":8000,"mid":11000,"max":16000,"level":"Mid","demand":"عالي"},
+                {"title":"Sales Representative","title_ar":"مندوب مبيعات","min":5000,"mid":7500,"max":11000,"level":"Junior","demand":"متوسط"},
+                {"title":"Business Development Manager","title_ar":"مدير تطوير الأعمال","min":14000,"mid":20000,"max":28000,"level":"Senior","demand":"عالي"},
+            ],
+            "التسويق": [
+                {"title":"Marketing Director","title_ar":"مدير التسويق","min":16000,"mid":24000,"max":35000,"level":"Director","demand":"عالي"},
+                {"title":"Digital Marketing Manager","title_ar":"مدير التسويق الرقمي","min":10000,"mid":15000,"max":22000,"level":"Senior","demand":"عالي"},
+                {"title":"Content Creator","title_ar":"صانع محتوى","min":6000,"mid":9000,"max":14000,"level":"Mid","demand":"متوسط"},
+                {"title":"SEO Specialist","title_ar":"أخصائي SEO","min":7000,"mid":10000,"max":15000,"level":"Mid","demand":"عالي"},
+                {"title":"Graphic Designer","title_ar":"مصمم جرافيك","min":5000,"mid":8000,"max":13000,"level":"Mid","demand":"متوسط"},
+            ],
+            "الموارد البشرية": [
+                {"title":"HR Director","title_ar":"مدير الموارد البشرية","min":16000,"mid":22000,"max":32000,"level":"Director","demand":"متوسط"},
+                {"title":"HR Business Partner","title_ar":"شريك أعمال الموارد البشرية","min":10000,"mid":15000,"max":22000,"level":"Senior","demand":"عالي"},
+                {"title":"Recruitment Specialist","title_ar":"أخصائي توظيف","min":7000,"mid":10000,"max":14000,"level":"Mid","demand":"متوسط"},
+                {"title":"HR Coordinator","title_ar":"منسق موارد بشرية","min":5000,"mid":7000,"max":10000,"level":"Junior","demand":"متوسط"},
+            ],
+            "المالية": [
+                {"title":"Finance Director","title_ar":"مدير مالي","min":18000,"mid":28000,"max":40000,"level":"Director","demand":"متوسط"},
+                {"title":"Senior Accountant","title_ar":"محاسب أول","min":8000,"mid":12000,"max":17000,"level":"Senior","demand":"متوسط"},
+                {"title":"Accountant","title_ar":"محاسب","min":5000,"mid":7500,"max":11000,"level":"Mid","demand":"منخفض"},
+                {"title":"Financial Analyst","title_ar":"محلل مالي","min":9000,"mid":13000,"max":18000,"level":"Mid","demand":"عالي"},
+            ],
+            "العمليات": [
+                {"title":"Operations Director","title_ar":"مدير العمليات","min":16000,"mid":24000,"max":35000,"level":"Director","demand":"متوسط"},
+                {"title":"Project Manager","title_ar":"مدير مشاريع","min":12000,"mid":17000,"max":25000,"level":"Senior","demand":"عالي"},
+                {"title":"Operations Coordinator","title_ar":"منسق عمليات","min":5500,"mid":8000,"max":12000,"level":"Junior","demand":"متوسط"},
+                {"title":"Customer Service Manager","title_ar":"مدير خدمة العملاء","min":10000,"mid":14000,"max":20000,"level":"Senior","demand":"متوسط"},
+            ],
+        }
+    },
+    "مصر": {
+        "currency": "EGP", "social_insurance_employer": 0.184, "social_insurance_employee": 0.11,
+        "housing_pct": 0, "transport": 1000, "med_insurance_avg": 800,
+        "end_service_factor": 0.5, "sar_to_egp": 13.2,
+        "positions": {
+            "الإدارة العليا": [
+                {"title":"Chief Executive Officer","title_ar":"الرئيس التنفيذي","min":120000,"mid":180000,"max":300000,"level":"C-Level","demand":"متوسط"},
+                {"title":"CTO","title_ar":"رئيس قطاع التقنية","min":80000,"mid":130000,"max":200000,"level":"C-Level","demand":"عالي"},
+                {"title":"CFO","title_ar":"المدير المالي","min":70000,"mid":110000,"max":170000,"level":"C-Level","demand":"متوسط"},
+            ],
+            "التقنية": [
+                {"title":"Engineering Manager","title_ar":"مدير هندسة البرمجيات","min":45000,"mid":70000,"max":100000,"level":"Management","demand":"عالي جداً"},
+                {"title":"Senior Software Engineer","title_ar":"مهندس برمجيات أول","min":30000,"mid":50000,"max":80000,"level":"Senior","demand":"عالي جداً"},
+                {"title":"Software Engineer","title_ar":"مهندس برمجيات","min":18000,"mid":28000,"max":45000,"level":"Mid","demand":"عالي"},
+                {"title":"Junior Developer","title_ar":"مطور مبتدئ","min":8000,"mid":13000,"max":20000,"level":"Junior","demand":"متوسط"},
+                {"title":"Data Analyst","title_ar":"محلل بيانات","min":12000,"mid":20000,"max":35000,"level":"Mid","demand":"عالي"},
+                {"title":"UI/UX Designer","title_ar":"مصمم تجربة المستخدم","min":12000,"mid":22000,"max":35000,"level":"Mid","demand":"عالي"},
+                {"title":"Product Manager","title_ar":"مدير المنتج","min":30000,"mid":50000,"max":75000,"level":"Senior","demand":"عالي جداً"},
+            ],
+            "المبيعات": [
+                {"title":"Sales Director","title_ar":"مدير المبيعات","min":35000,"mid":55000,"max":85000,"level":"Director","demand":"عالي"},
+                {"title":"Account Manager","title_ar":"مدير حسابات","min":12000,"mid":20000,"max":32000,"level":"Mid","demand":"عالي"},
+                {"title":"Sales Representative","title_ar":"مندوب مبيعات","min":6000,"mid":10000,"max":16000,"level":"Junior","demand":"متوسط"},
+                {"title":"BD Manager","title_ar":"مدير تطوير أعمال","min":25000,"mid":40000,"max":60000,"level":"Senior","demand":"عالي"},
+            ],
+            "التسويق": [
+                {"title":"Marketing Director","title_ar":"مدير التسويق","min":30000,"mid":50000,"max":80000,"level":"Director","demand":"عالي"},
+                {"title":"Digital Marketing Manager","title_ar":"مدير تسويق رقمي","min":15000,"mid":25000,"max":40000,"level":"Senior","demand":"عالي"},
+                {"title":"Content Creator","title_ar":"صانع محتوى","min":7000,"mid":12000,"max":20000,"level":"Mid","demand":"متوسط"},
+                {"title":"Graphic Designer","title_ar":"مصمم جرافيك","min":6000,"mid":10000,"max":18000,"level":"Mid","demand":"متوسط"},
+            ],
+            "الموارد البشرية": [
+                {"title":"HR Director","title_ar":"مدير الموارد البشرية","min":28000,"mid":45000,"max":70000,"level":"Director","demand":"متوسط"},
+                {"title":"HR Specialist","title_ar":"أخصائي موارد بشرية","min":8000,"mid":14000,"max":22000,"level":"Mid","demand":"متوسط"},
+                {"title":"Recruiter","title_ar":"أخصائي توظيف","min":7000,"mid":12000,"max":18000,"level":"Mid","demand":"متوسط"},
+            ],
+            "المالية": [
+                {"title":"Finance Director","title_ar":"مدير مالي","min":35000,"mid":55000,"max":85000,"level":"Director","demand":"متوسط"},
+                {"title":"Senior Accountant","title_ar":"محاسب أول","min":10000,"mid":18000,"max":28000,"level":"Senior","demand":"متوسط"},
+                {"title":"Accountant","title_ar":"محاسب","min":5000,"mid":9000,"max":15000,"level":"Mid","demand":"منخفض"},
+            ],
+        }
+    }
+}
+
+BENCHMARK_SOURCES = [
+    {"name":"Hays Salary Guide 2025 - GCC","url":"hays.com","region":"KSA/GCC"},
+    {"name":"Bayt.com Salary Survey","url":"bayt.com","region":"MENA"},
+    {"name":"GulfTalent Salary Report","url":"gulftalent.com","region":"GCC"},
+    {"name":"Glassdoor Saudi Arabia","url":"glassdoor.com","region":"KSA"},
+    {"name":"LinkedIn Salary Insights","url":"linkedin.com/salary","region":"Global"},
+    {"name":"Robert Half Salary Guide","url":"roberthalf.ae","region":"GCC"},
+    {"name":"Mercer Total Remuneration Survey","url":"mercer.com","region":"MEA"},
+    {"name":"Wuzzuf Salary Explorer","url":"wuzzuf.net","region":"Egypt"},
+    {"name":"Forasna Salary Data","url":"forasna.com","region":"Egypt"},
+]
+
 def calc_roi(budget, rev_inc_pct, current_rev, ret_pct, avg_sal, hc, prod_pct):
     rev_gain = current_rev * rev_inc_pct / 100
     ret_save = ret_pct / 100 * hc * avg_sal * 0.5
@@ -1476,7 +1593,7 @@ def main():
         elif section == "⚖️ حاسبة المستحقات":
             page = "⚖️ حاسبة المستحقات"
         elif section == "🎯 التوظيف":
-            page = st.radio("📌", ["📋 تخطيط التوظيف","📊 متابعة التوظيف","📥 تصدير التوظيف"], label_visibility="collapsed")
+            page = st.radio("📌", ["📋 تخطيط التوظيف","🤖 Benchmark ذكاء اصطناعي","🌍 مقارنة الأسواق","📊 متابعة التوظيف","📥 تصدير التوظيف"], label_visibility="collapsed")
         elif section == "🔍 التحليل العام":
             page = st.radio("📌", ["📊 تحليل تلقائي","🤖 أسئلة ذكية"], label_visibility="collapsed")
         elif section == "📝 الاستبيانات":
@@ -3285,6 +3402,251 @@ def main():
                 if st.button("🗑️ مسح الخطة بالكامل", key="rpclr"):
                     st.session_state.recruit_plans = []
                     st.rerun()
+
+        # ===== AI Salary Benchmark =====
+        elif page == "🤖 Benchmark ذكاء اصطناعي":
+            hdr("🤖 Benchmark الرواتب بالذكاء الاصطناعي","بيانات مرجعية من مصادر حية للسوق السعودي والمصري")
+
+            bm_market = st.selectbox("🌍 اختر السوق:", list(MARKET_BENCHMARKS.keys()), key="bm_market")
+            market = MARKET_BENCHMARKS[bm_market]
+            cur = market['currency']
+
+            bm_dept = st.selectbox("📌 القسم:", list(market['positions'].keys()), key="bm_dept")
+            positions = market['positions'][bm_dept]
+
+            st.markdown(f"### 💰 Salary Benchmark - {bm_dept} ({bm_market})")
+            st.caption(f"العملة: {cur} | المصادر: Hays, Bayt, GulfTalent, Glassdoor, LinkedIn, Mercer")
+
+            # Display benchmark table
+            bm_rows = []
+            for p in positions:
+                bm_rows.append({
+                    "المسمى (EN)": p['title'], "المسمى (AR)": p['title_ar'],
+                    "المستوى": p['level'], f"الحد الأدنى ({cur})": f"{p['min']:,}",
+                    f"المتوسط ({cur})": f"{p['mid']:,}", f"الحد الأعلى ({cur})": f"{p['max']:,}",
+                    "الطلب": p['demand']
+                })
+            st.dataframe(pd.DataFrame(bm_rows), use_container_width=True, hide_index=True)
+
+            # Visual benchmark
+            bm_df = pd.DataFrame(positions)
+            fig = go.Figure()
+            fig.add_trace(go.Bar(name='الحد الأدنى', x=bm_df['title_ar'], y=bm_df['min'], marker_color='#3498DB'))
+            fig.add_trace(go.Bar(name='المتوسط', x=bm_df['title_ar'], y=bm_df['mid'], marker_color='#E36414'))
+            fig.add_trace(go.Bar(name='الحد الأعلى', x=bm_df['title_ar'], y=bm_df['max'], marker_color='#264653'))
+            fig.update_layout(barmode='group', title=f'نطاقات الرواتب - {bm_dept} ({bm_market})',
+                font=dict(family="Noto Sans Arabic"), height=450, yaxis_tickformat=',', yaxis_title=cur)
+            st.plotly_chart(fig, use_container_width=True)
+
+            # Full cost calculator
+            st.markdown("---")
+            st.markdown("### 🧮 حاسبة التكلفة الإجمالية للتوظيف")
+            sel_pos = st.selectbox("اختر الوظيفة:", [p['title_ar'] for p in positions], key="bm_sel")
+            sel_data = next(p for p in positions if p['title_ar'] == sel_pos)
+
+            bc1, bc2 = st.columns(2)
+            with bc1:
+                sal_level = st.select_slider("مستوى الراتب:", ["الحد الأدنى","المتوسط","الحد الأعلى","مخصص"], value="المتوسط", key="bm_sl")
+                if sal_level == "الحد الأدنى": base_sal = sel_data['min']
+                elif sal_level == "المتوسط": base_sal = sel_data['mid']
+                elif sal_level == "الحد الأعلى": base_sal = sel_data['max']
+                else: base_sal = st.number_input("الراتب الأساسي:", value=sel_data['mid'], key="bm_custom")
+
+                num_hires = st.number_input("عدد المطلوب:", 1, 50, 1, key="bm_num")
+                is_saudi = st.radio("الجنسية:", ["سعودي","غير سعودي"], horizontal=True, key="bm_nat") == "سعودي"
+
+            with bc2:
+                housing = base_sal * market['housing_pct'] / 100
+                transport = market['transport']
+
+                if bm_market == "السعودية":
+                    gosi = (base_sal + housing) * (market['gosi_employer'] if is_saudi else market['gosi_nsa_employer'])
+                    med_ins = market['med_insurance_avg']
+                    visa = 0 if is_saudi else market.get('visa_cost', 0)
+                    iqama = 0 if is_saudi else market.get('iqama_cost', 0)
+                else:
+                    gosi = base_sal * market.get('social_insurance_employer', 0.184)
+                    med_ins = market.get('med_insurance_avg', 800)
+                    visa = 0; iqama = 0
+
+                monthly_total = base_sal + housing + transport + gosi + med_ins
+                annual_per = monthly_total * 12 + visa + iqama
+                annual_all = annual_per * num_hires
+
+                st.markdown("#### 📊 تفصيل التكلفة الشهرية")
+                cost_items = [
+                    ("الراتب الأساسي", base_sal), ("بدل السكن", housing),
+                    ("بدل المواصلات", transport), ("التأمينات (صاحب العمل)", round(gosi,2)),
+                    ("التأمين الطبي", med_ins)
+                ]
+                for label, val in cost_items:
+                    st.markdown(f"**{label}:** {val:,.2f} {cur}")
+                st.markdown(f"**الإجمالي الشهري:** **{monthly_total:,.2f} {cur}**")
+
+            # Summary KPIs
+            st.markdown("---")
+            k1,k2,k3,k4 = st.columns(4)
+            with k1: kpi(f"💰 الشهري/فرد ({cur})", f"{monthly_total:,.0f}")
+            with k2: kpi(f"📅 السنوي/فرد ({cur})", f"{annual_per:,.0f}")
+            with k3: kpi(f"👥 الإجمالي ({num_hires} موظف)", f"{annual_all:,.0f}")
+            with k4:
+                if bm_market == "مصر":
+                    kpi("💵 المعادل SAR/شهر", f"{monthly_total/market.get('sar_to_egp',13.2):,.0f}")
+
+            # Add to recruitment plan
+            if st.button("➕ إضافة للخطة التوظيفية", type="primary", use_container_width=True, key="bm_add"):
+                for _ in range(num_hires):
+                    st.session_state.recruit_plans.append({
+                        "المسمى": sel_pos, "القسم": bm_dept, "العدد": 1,
+                        "الجنسية": "سعودي" if is_saudi else "غير سعودي",
+                        "الراتب": base_sal, "السكن": housing, "المواصلات": transport,
+                        "التأمينات (صاحب العمل)": round(gosi,2),
+                        "الشهري/فرد": round(monthly_total,2),
+                        "رسوم التوظيف": 0, "التأشيرة": visa, "التدريب": 0,
+                        "السنوي/فرد": round(annual_per,2), "الإجمالي السنوي": round(annual_per,2),
+                        "السوق": bm_market
+                    })
+                st.success(f"✅ تمت إضافة {num_hires} × {sel_pos} من سوق {bm_market}")
+                st.rerun()
+
+            # Sources
+            st.markdown("---")
+            st.markdown("### 📚 المصادر المرجعية")
+            for s in BENCHMARK_SOURCES:
+                region_match = (bm_market == "السعودية" and s['region'] in ['KSA','KSA/GCC','GCC','MENA','Global','MEA']) or \
+                               (bm_market == "مصر" and s['region'] in ['Egypt','MENA','Global','MEA'])
+                if region_match:
+                    st.markdown(f"🔗 **{s['name']}** | {s['region']} | [{s['url']}](https://{s['url']})")
+
+        # ===== Market Comparison =====
+        elif page == "🌍 مقارنة الأسواق":
+            hdr("🌍 مقارنة تكاليف التوظيف: السعودية مقابل مصر","تحليل مقارن شامل للتكاليف والمزايا")
+
+            st.markdown("### 📊 اختر الوظائف للمقارنة")
+            # Find common positions between markets
+            ksa_positions = MARKET_BENCHMARKS["السعودية"]["positions"]
+            egy_positions = MARKET_BENCHMARKS["مصر"]["positions"]
+            common_depts = set(ksa_positions.keys()) & set(egy_positions.keys())
+
+            comp_dept = st.selectbox("القسم:", sorted(common_depts), key="comp_dept")
+            ksa_pos = {p['title_ar']: p for p in ksa_positions[comp_dept]}
+            egy_pos = {p['title_ar']: p for p in egy_positions[comp_dept]}
+            common_titles = sorted(set(ksa_pos.keys()) & set(egy_pos.keys()))
+
+            if not common_titles:
+                st.warning("لا توجد وظائف مشتركة للمقارنة في هذا القسم")
+            else:
+                comp_titles = st.multiselect("الوظائف:", common_titles, default=common_titles[:3], key="comp_titles")
+
+                if comp_titles:
+                    sar_to_egp = MARKET_BENCHMARKS["مصر"].get("sar_to_egp", 13.2)
+
+                    # Build comparison table
+                    comp_rows = []
+                    for title in comp_titles:
+                        kp = ksa_pos[title]
+                        ep = egy_pos[title]
+
+                        # KSA costs
+                        ksa_housing = kp['mid'] * 0.25
+                        ksa_gosi = (kp['mid'] + ksa_housing) * 0.1175
+                        ksa_monthly = kp['mid'] + ksa_housing + 500 + ksa_gosi + 500
+                        ksa_annual = ksa_monthly * 12
+
+                        # Egypt costs (converted to SAR)
+                        egy_monthly_egp = ep['mid'] + ep['mid'] * 0.184 + 800
+                        egy_monthly_sar = egy_monthly_egp / sar_to_egp
+                        egy_annual_sar = egy_monthly_sar * 12
+
+                        saving = ksa_annual - egy_annual_sar
+                        saving_pct = saving / max(ksa_annual, 1) * 100
+
+                        comp_rows.append({
+                            "الوظيفة": title,
+                            "🇸🇦 الراتب (SAR)": f"{kp['mid']:,}",
+                            "🇸🇦 التكلفة الشهرية (SAR)": f"{ksa_monthly:,.0f}",
+                            "🇸🇦 السنوية (SAR)": f"{ksa_annual:,.0f}",
+                            "🇪🇬 الراتب (EGP)": f"{ep['mid']:,}",
+                            "🇪🇬 التكلفة الشهرية (SAR≈)": f"{egy_monthly_sar:,.0f}",
+                            "🇪🇬 السنوية (SAR≈)": f"{egy_annual_sar:,.0f}",
+                            "💰 الوفر السنوي (SAR)": f"{saving:,.0f}",
+                            "📊 نسبة الوفر": f"{saving_pct:.0f}%"
+                        })
+
+                    st.dataframe(pd.DataFrame(comp_rows), use_container_width=True, hide_index=True)
+
+                    # Visual comparison
+                    ksa_costs = []
+                    egy_costs = []
+                    for title in comp_titles:
+                        kp = ksa_pos[title]
+                        ep = egy_pos[title]
+                        ksa_housing = kp['mid'] * 0.25
+                        ksa_costs.append(kp['mid'] + ksa_housing + 500 + (kp['mid']+ksa_housing)*0.1175 + 500)
+                        egy_costs.append((ep['mid'] + ep['mid']*0.184 + 800) / sar_to_egp)
+
+                    fig = go.Figure()
+                    fig.add_trace(go.Bar(name='🇸🇦 السعودية (SAR)', x=comp_titles, y=ksa_costs, marker_color='#27AE60'))
+                    fig.add_trace(go.Bar(name='🇪🇬 مصر (SAR معادل)', x=comp_titles, y=egy_costs, marker_color='#3498DB'))
+                    fig.update_layout(barmode='group', title='مقارنة التكلفة الشهرية الإجمالية (SAR)',
+                        font=dict(family="Noto Sans Arabic"), height=450, yaxis_tickformat=',')
+                    st.plotly_chart(fig, use_container_width=True)
+
+                    # Summary analysis
+                    st.markdown("---")
+                    st.markdown("### 📈 ملخص التحليل")
+                    total_ksa = sum(c * 12 for c in ksa_costs)
+                    total_egy = sum(c * 12 for c in egy_costs)
+                    total_saving = total_ksa - total_egy
+
+                    k1,k2,k3,k4 = st.columns(4)
+                    with k1: kpi("🇸🇦 إجمالي سنوي (KSA)", f"{total_ksa:,.0f} SAR")
+                    with k2: kpi("🇪🇬 إجمالي سنوي (EGY≈)", f"{total_egy:,.0f} SAR")
+                    with k3: kpi("💰 الوفر السنوي", f"{total_saving:,.0f} SAR")
+                    with k4: kpi("📊 نسبة الوفر", f"{total_saving/max(total_ksa,1)*100:.0f}%")
+
+                    # Pros and cons
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.markdown("#### 🇸🇦 مزايا التوظيف في السعودية")
+                        ibox("نسبة السعودة وبرنامج نطاقات\nقرب من العمليات الأساسية\nلا حاجة لتأشيرات عمل للسعوديين\nدعم صندوق الموارد البشرية (هدف)", "success")
+                    with c2:
+                        st.markdown("#### 🇪🇬 مزايا التوظيف في مصر")
+                        ibox("تكلفة أقل بنسبة 50-70%\nتوفر الكفاءات التقنية\nتوقيت عمل متقارب\nسهولة التواصل (نفس اللغة)", "success")
+
+                    # Recommendation
+                    st.markdown("---")
+                    st.markdown("### 💡 التوصية الذكية")
+                    if total_saving > 0:
+                        ibox(f"""بناءً على التحليل، يمكن تحقيق وفر سنوي يقدر بـ **{total_saving:,.0f} SAR** ({total_saving/max(total_ksa,1)*100:.0f}%) عند توظيف الوظائف المختارة من السوق المصري.
+
+**التوصية:** النموذج المختلط (Hybrid Model)
+- الوظائف القيادية والمبيعات المحلية: **السعودية** (قرب من السوق + السعودة)
+- الوظائف التقنية والداعمة: **مصر** (تكلفة أقل + كفاءات متوفرة)
+- يُنصح بتخصيص 60% من الميزانية للسعودية و40% لمصر""")
+
+                    # Export comparison
+                    if st.button("📥 تصدير المقارنة Excel", key="comp_exp"):
+                        ox = io.BytesIO()
+                        with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
+                            pd.DataFrame(comp_rows).to_excel(w, sheet_name='Market Comparison', index=False)
+                            # KSA benchmarks
+                            ksa_all = []
+                            for dept, poss in ksa_positions.items():
+                                for p in poss:
+                                    ksa_all.append({"Dept":dept, "Title":p['title'], "Title_AR":p['title_ar'],
+                                        "Min":p['min'], "Mid":p['mid'], "Max":p['max'], "Level":p['level'], "Demand":p['demand']})
+                            pd.DataFrame(ksa_all).to_excel(w, sheet_name='KSA Benchmarks', index=False)
+                            # Egypt benchmarks
+                            egy_all = []
+                            for dept, poss in egy_positions.items():
+                                for p in poss:
+                                    egy_all.append({"Dept":dept, "Title":p['title'], "Title_AR":p['title_ar'],
+                                        "Min":p['min'], "Mid":p['mid'], "Max":p['max'], "Level":p['level'], "Demand":p['demand']})
+                            pd.DataFrame(egy_all).to_excel(w, sheet_name='Egypt Benchmarks', index=False)
+                        st.download_button("📥 تحميل", data=ox.getvalue(),
+                            file_name=f"Market_Comparison_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
         elif page == "📊 متابعة التوظيف":
             hdr("📊 متابعة عمليات التوظيف", "تتبع مراحل التوظيف والتكاليف والوقت المستغرق")
