@@ -6,3 +6,6 @@ xlsxwriter
 openpyxl
 fpdf2
 python-docx
+psycopg2-binary
+arabic-reshaper
+python-bidi
