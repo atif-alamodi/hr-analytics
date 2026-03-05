@@ -9,4 +9,3 @@ python-docx
 psycopg2-binary
 arabic-reshaper
 python-bidi
-kaleido
