@@ -3066,32 +3066,90 @@ def main():
         # ========== 5. التعويض عن الإنهاء غير المشروع ==========
         st.markdown("---")
         st.markdown("### 🚫 5. التعويض عن الإنهاء لغير سبب مشروع (المادة 77)")
+        ibox("""**نص المادة 77:** ما لم يتضمن العقد تعويضاً محدداً مقابل إنهائه من أحد الطرفين لسبب غير مشروع:
+1. أجر 15 يوماً عن كل سنة خدمة (غير محدد المدة)
+2. أجر المدة الباقية من العقد (محدد المدة)
+3. **لا يقل التعويض في كلا الحالتين عن أجر شهرين**""")
+
         contract_type = st.radio("نوع العقد:", ["عقد محدد المدة","عقد غير محدد المدة"], key="ctype")
-        if contract_type == "عقد محدد المدة":
-            st.markdown("**المدة المتبقية من العقد:**")
-            uc1, uc2 = st.columns(2)
-            with uc1: ct_from = st.date_input("من:", value=date.today(), key="ctf")
-            with uc2: ct_to = st.date_input("إلى:", value=date.today(), key="ctt")
-            remaining_days = (ct_to - ct_from).days
-            comp = daily_sal * remaining_days
-            min_comp = gross_sal * 2
-            unfair_amount = max(comp, min_comp)
-            if remaining_days > 0:
-                note77 = "(الحد الأدنى: شهرين)" if comp < min_comp else "(أجر المدة المتبقية)"
-                st.success(f"المتبقي: {remaining_days} يوم | **التعويض: {unfair_amount:,.2f} ريال** {note77}")
-                results_summary.append(("تعويض إنهاء غير مشروع", unfair_amount))
-        else:
-            uc1, uc2 = st.columns(2)
-            with uc1: uct_start = st.date_input("بداية العمل:", value=date(2018,1,1), key="ucts")
-            with uc2: uct_end = st.date_input("تاريخ الإنهاء:", value=date.today(), key="ucte")
-            svc_yrs = (uct_end - uct_start).days / 365.25
-            comp = (daily_sal * 15) * svc_yrs
-            min_comp = gross_sal * 2
-            unfair_amount = max(comp, min_comp)
-            if svc_yrs > 0:
-                note77 = "(الحد الأدنى: شهرين)" if comp < min_comp else "(15 يوم/سنة)"
-                st.success(f"الخدمة: {svc_yrs:.2f} سنة | **التعويض: {unfair_amount:,.2f} ريال** {note77}")
-                results_summary.append(("تعويض إنهاء غير مشروع", unfair_amount))
+
+        comp_method = st.radio("طريقة حساب التعويض:", [
+            "① أجر أساسي شهر واحد (اتفاقي)",
+            "② راتبين إجماليين كاملين (اتفاقي)",
+            "③ الرواتب حتى نهاية العقد / 15 يوم لكل سنة (م.77 تلقائي)",
+            "④ مبلغ مخصص (يدوي)"
+        ], key="comp_method", index=2)
+
+        unfair_amount = 0
+        note77 = ""
+
+        if "①" in comp_method:
+            unfair_amount = basic_sal
+            note77 = "تعويض اتفاقي: أجر أساسي شهر واحد"
+
+        elif "②" in comp_method:
+            unfair_amount = gross_sal * 2
+            note77 = "تعويض اتفاقي: راتبين إجماليين كاملين"
+
+        elif "③" in comp_method:
+            if contract_type == "عقد محدد المدة":
+                st.markdown("**المدة المتبقية من العقد:**")
+                uc1, uc2 = st.columns(2)
+                with uc1: ct_from = st.date_input("تاريخ الإنهاء:", value=date.today(), key="ctf")
+                with uc2: ct_to = st.date_input("تاريخ انتهاء العقد:", value=date.today(), key="ctt")
+                remaining_days = (ct_to - ct_from).days
+                remaining_months = remaining_days / 30.0
+
+                if remaining_days > 0:
+                    comp_remaining = daily_sal * remaining_days
+                    min_comp = gross_sal * 2
+
+                    # المادة 77: لا يقل عن شهرين
+                    if comp_remaining < min_comp:
+                        unfair_amount = min_comp
+                        note77 = f"المتبقي: {remaining_days} يوم ({remaining_months:.1f} شهر) = {comp_remaining:,.2f} ريال. لكنها أقل من الحد الأدنى (شهرين)، لذا التعويض = **{min_comp:,.2f} ريال** (أجر شهرين كاملين)"
+                    else:
+                        unfair_amount = comp_remaining
+                        note77 = f"المتبقي: {remaining_days} يوم ({remaining_months:.1f} شهر) | التعويض = أجر المدة المتبقية"
+                else:
+                    st.warning("تاريخ انتهاء العقد يجب أن يكون بعد تاريخ الإنهاء")
+
+            else:
+                # عقد غير محدد المدة
+                st.markdown("**بيانات الخدمة:**")
+                ibox("""**العقد غير محدد المدة (المادة 55):** يتحول العقد المحدد المدة إلى غير محدد المدة في الحالات التالية:
+- إذا استمر الطرفان في تنفيذه بعد انتهاء مدته
+- إذا تجدد العقد لثلاث مرات متتالية
+- إذا بلغت مدة العقد الأصلية مع التجديدات أربع سنوات (أيهما أقل)
+
+**التعويض:** 15 يوم أجر عن كل سنة خدمة، بحد أدنى شهرين""")
+
+                uc1, uc2 = st.columns(2)
+                with uc1: uct_start = st.date_input("بداية العمل:", value=date(2018,1,1), key="ucts")
+                with uc2: uct_end = st.date_input("تاريخ الإنهاء:", value=date.today(), key="ucte")
+                svc_yrs = (uct_end - uct_start).days / 365.25
+
+                if svc_yrs > 0:
+                    # 15 يوم عن كل سنة
+                    comp_15days = (daily_sal * 15) * svc_yrs
+                    min_comp = gross_sal * 2
+
+                    if comp_15days < min_comp:
+                        unfair_amount = min_comp
+                        note77 = f"الخدمة: {svc_yrs:.2f} سنة | 15 يوم/سنة = {comp_15days:,.2f} ريال. لكنها أقل من الحد الأدنى، لذا التعويض = **{min_comp:,.2f} ريال** (أجر شهرين)"
+                    else:
+                        unfair_amount = comp_15days
+                        note77 = f"الخدمة: {svc_yrs:.2f} سنة | التعويض = 15 يوم × {svc_yrs:.2f} سنة"
+
+        elif "④" in comp_method:
+            unfair_amount = st.number_input("أدخل مبلغ التعويض يدوياً (ريال):", min_value=0.0, value=0.0, format="%.2f", key="custom_comp")
+            note77 = "مبلغ تعويض مخصص (يدوي)"
+
+        if unfair_amount > 0:
+            st.success(f"**التعويض عن الفسخ غير المشروع: {unfair_amount:,.2f} ريال**")
+            if note77:
+                st.caption(f"📌 {note77}")
+            results_summary.append(("تعويض إنهاء غير مشروع (م.77)", unfair_amount))
 
         # ========== 6. أيام الإجازة المستحقة ==========
         st.markdown("---")
