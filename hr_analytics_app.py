@@ -1778,7 +1778,7 @@ def main():
         elif section == "👥 إدارة المستخدمين":
             page = "👥 إدارة المستخدمين"
         else:
-            page = st.radio("📌", ["📚 ميزانية التدريب","💹 ROI التدريب","📋 الاحتياجات التدريبية","🏫 جهات التدريب","📥 تصدير التدريب"], label_visibility="collapsed")
+            page = st.radio("📌", ["📚 ميزانية التدريب","💹 ROI التدريب","📋 خطة ADDIE","🏫 جهات التدريب","📥 تصدير التدريب"], label_visibility="collapsed")
 
         # Logout button
         st.markdown("---")
@@ -3835,8 +3835,8 @@ def main():
                 fig.update_layout(title='العوائد مقابل التكلفة', font=dict(family="Noto Sans Arabic"), height=380, yaxis_tickformat=',')
                 st.plotly_chart(fig, use_container_width=True)
 
-        elif page == "📋 الاحتياجات التدريبية":
-            hdr("📋 تحليل الاحتياجات التدريبية","مع مواءمة تلقائية مع جهات التدريب")
+        elif page == "📋 خطة ADDIE":
+            hdr("📋 خطة التدريب وفق نموذج ADDIE","Analysis → Design → Development → Implementation → Evaluation")
 
             # Skills-to-provider mapping
             SKILL_PROVIDER_MAP = {
@@ -3856,64 +3856,280 @@ def main():
                 "OKRs": ["بكه للتعليم","Coursera for Business","LinkedIn Learning"],
             }
 
-            cats = {"المبيعات":["بيع استشاري","CRM","تفاوض"],"التسويق":["تسويق رقمي","SEO","Growth Hacking"],
-                    "التقنية":["Python/SQL","Power BI","AI"],"المالية":["IFRS","نمذجة مالية"],"الموارد البشرية":["استقطاب","أداء","OKRs"]}
-            depts = st.multiselect("📌 الأقسام", list(cats.keys()), default=list(cats.keys())[:3])
-            needs = []
-            for d in depts:
-                with st.expander(f"📌 {d}", expanded=True):
-                    skills = st.multiselect(f"المهارات", cats[d], default=cats[d][:2], key=f"s_{d}")
-                    for s in skills:
-                        c1,c2 = st.columns(2)
-                        with c1: lv = st.select_slider(f"الحالي: {s}", ["مبتدئ","أساسي","متوسط","متقدم","خبير"], value="أساسي", key=f"l_{d}_{s}")
-                        with c2: tg = st.select_slider(f"المستهدف: {s}", ["مبتدئ","أساسي","متوسط","متقدم","خبير"], value="متقدم", key=f"t_{d}_{s}")
-                        levels = ["مبتدئ","أساسي","متوسط","متقدم","خبير"]
-                        gap = levels.index(tg) - levels.index(lv)
-                        providers = SKILL_PROVIDER_MAP.get(s, ["Coursera for Business","LinkedIn Learning"])
-                        needs.append({"القسم":d, "المهارة":s, "الحالي":lv, "المستهدف":tg, "الفجوة":gap,
-                            "الأولوية": "حرج" if gap >= 3 else ("عالي" if gap >= 2 else "متوسط"),
-                            "جهات التدريب المقترحة": " | ".join(providers[:3])})
+            # ADDIE Tabs
+            addie_tabs = st.tabs(["🔍 1. Analysis (تحليل)","🎨 2. Design (تصميم)","🔧 3. Development (تطوير)","🚀 4. Implementation (تنفيذ)","📊 5. Evaluation (تقييم)"])
 
-            if needs:
-                ndf = pd.DataFrame(needs)
-                st.markdown("### 📊 خريطة الفجوات والمواءمة")
-                st.dataframe(ndf, use_container_width=True, hide_index=True)
+            # Initialize ADDIE state
+            if 'addie_plan' not in st.session_state:
+                st.session_state.addie_plan = {'needs':[],'programs':[],'status':'Analysis'}
 
-                nc1, nc2 = st.columns(2)
-                with nc1:
-                    fig = px.bar(ndf, x='المهارة', y='الفجوة', color='القسم', title='خريطة الفجوات', color_discrete_sequence=CL['dept'])
-                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380)
-                    st.plotly_chart(fig, use_container_width=True)
-                with nc2:
-                    fig = px.bar(ndf, x='المهارة', y='الفجوة', color='الأولوية', title='الأولويات',
-                        color_discrete_map={'حرج':'#E74C3C','عالي':'#E36414','متوسط':'#F39C12'})
-                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380)
-                    st.plotly_chart(fig, use_container_width=True)
+            # ===== PHASE 1: ANALYSIS =====
+            with addie_tabs[0]:
+                st.markdown("### 🔍 المرحلة 1: تحليل الاحتياجات التدريبية (Needs Analysis)")
+                ibox("""**نموذج ADDIE - مرحلة التحليل:** تحديد فجوات الأداء والمهارات بين الوضع الحالي والمستهدف.
+تشمل: تحليل المنظمة (Organizational Analysis) + تحليل المهام (Task Analysis) + تحليل الأفراد (Person Analysis)""")
 
-                # Auto-matched providers detail
-                st.markdown("---")
-                st.markdown("### 🏫 المواءمة التلقائية مع جهات التدريب")
-                for _, row in ndf.iterrows():
-                    if row['الفجوة'] > 0:
-                        with st.expander(f"📌 {row['المهارة']} ({row['القسم']}) - فجوة: {row['الفجوة']} - {row['الأولوية']}"):
-                            st.markdown(f"**المستوى الحالي:** {row['الحالي']} → **المستهدف:** {row['المستهدف']}")
-                            st.markdown("**جهات التدريب المقترحة:**")
-                            matched = SKILL_PROVIDER_MAP.get(row['المهارة'], [])
-                            for prov_name in matched:
-                                # Find provider details
-                                for market_name, market_provs in PROVIDERS.items():
-                                    for mp in market_provs:
-                                        if mp['name'] == prov_name:
-                                            st.markdown(f"- 🏫 **{mp['name']}** | {mp['spec']} | {mp['type']} | {market_name} | [{mp['url']}](https://{mp['url']})")
+                # Organizational Analysis
+                st.markdown("#### 🏢 1.1 تحليل المنظمة (Organizational Analysis)")
+                oa1, oa2 = st.columns(2)
+                with oa1:
+                    org_goals = st.text_area("الأهداف الاستراتيجية للشركة:", placeholder="مثال: زيادة المبيعات 30%، التوسع في السوق المصري", key="addie_goals", height=80)
+                    org_challenges = st.text_area("التحديات الرئيسية:", placeholder="مثال: نقص الكفاءات التقنية، ارتفاع الدوران الوظيفي", key="addie_challenges", height=80)
+                with oa2:
+                    org_budget = st.number_input("ميزانية التدريب المتاحة (ريال):", value=70000, step=5000, key="addie_budget")
+                    org_timeline = st.selectbox("الإطار الزمني:", ["Q1 (يناير-مارس)","Q2 (أبريل-يونيو)","Q3 (يوليو-سبتمبر)","Q4 (أكتوبر-ديسمبر)","السنة كاملة"], key="addie_timeline")
 
-                # Export needs analysis
-                if st.button("📥 تصدير تحليل الاحتياجات", type="primary", key="exp_needs"):
-                    ox = io.BytesIO()
-                    with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
-                        ndf.to_excel(w, sheet_name='الاحتياجات التدريبية', index=False)
-                    st.download_button("📥 تحميل", data=ox.getvalue(),
-                        file_name=f"Training_Needs_{datetime.now().strftime('%Y%m%d')}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                # Task & Person Analysis
+                st.markdown("#### 📋 1.2 تحليل المهام والأفراد (Task & Person Analysis)")
+                cats = {"المبيعات":["بيع استشاري","CRM","تفاوض"],"التسويق":["تسويق رقمي","SEO","Growth Hacking"],
+                        "التقنية":["Python/SQL","Power BI","AI"],"المالية":["IFRS","نمذجة مالية"],"الموارد البشرية":["استقطاب","أداء","OKRs"]}
+                depts = st.multiselect("📌 الأقسام المستهدفة", list(cats.keys()), default=list(cats.keys())[:3], key="addie_depts")
+                needs = []
+                for d in depts:
+                    with st.expander(f"📌 {d}", expanded=True):
+                        skills = st.multiselect(f"المهارات المطلوبة", cats[d], default=cats[d][:2], key=f"as_{d}")
+                        for s in skills:
+                            c1,c2,c3 = st.columns(3)
+                            with c1: lv = st.select_slider(f"الحالي: {s}", ["مبتدئ","أساسي","متوسط","متقدم","خبير"], value="أساسي", key=f"al_{d}_{s}")
+                            with c2: tg = st.select_slider(f"المستهدف: {s}", ["مبتدئ","أساسي","متوسط","متقدم","خبير"], value="متقدم", key=f"at_{d}_{s}")
+                            with c3: n_ppl = st.number_input(f"عدد المتدربين:", 1, 50, 5, key=f"an_{d}_{s}")
+                            levels = ["مبتدئ","أساسي","متوسط","متقدم","خبير"]
+                            gap = levels.index(tg) - levels.index(lv)
+                            providers = SKILL_PROVIDER_MAP.get(s, ["Coursera for Business","LinkedIn Learning"])
+                            needs.append({"القسم":d, "المهارة":s, "الحالي":lv, "المستهدف":tg, "الفجوة":gap,
+                                "المتدربين": n_ppl,
+                                "الأولوية": "حرج" if gap >= 3 else ("عالي" if gap >= 2 else "متوسط"),
+                                "جهات التدريب": " | ".join(providers[:3])})
+
+                if needs:
+                    st.session_state.addie_plan['needs'] = needs
+                    ndf = pd.DataFrame(needs)
+                    st.markdown("#### 📊 1.3 خريطة الفجوات")
+                    st.dataframe(ndf, use_container_width=True, hide_index=True)
+
+                    nc1, nc2 = st.columns(2)
+                    with nc1:
+                        fig = px.bar(ndf, x='المهارة', y='الفجوة', color='القسم', title='فجوات المهارات حسب القسم', color_discrete_sequence=CL['dept'])
+                        fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380)
+                        st.plotly_chart(fig, use_container_width=True)
+                    with nc2:
+                        fig = px.scatter(ndf, x='الفجوة', y='المتدربين', size='المتدربين', color='الأولوية',
+                            title='مصفوفة الأولويات (الفجوة × العدد)',
+                            color_discrete_map={'حرج':'#E74C3C','عالي':'#E36414','متوسط':'#F39C12'})
+                        fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380)
+                        st.plotly_chart(fig, use_container_width=True)
+
+            # ===== PHASE 2: DESIGN =====
+            with addie_tabs[1]:
+                st.markdown("### 🎨 المرحلة 2: تصميم البرنامج التدريبي (Instructional Design)")
+                ibox("""**نموذج ADDIE - مرحلة التصميم:** تحديد أهداف التعلم، المحتوى، الأساليب، والتقييم.
+تشمل: أهداف SMART + اختيار أساليب التدريب + تصميم المحتوى + معايير النجاح""")
+
+                needs = st.session_state.addie_plan.get('needs', [])
+                if not needs:
+                    st.info("أكمل مرحلة التحليل أولاً")
+                else:
+                    programs = []
+                    for i, need in enumerate(needs):
+                        if need['الفجوة'] > 0:
+                            with st.expander(f"🎯 {need['المهارة']} ({need['القسم']}) - أولوية: {need['الأولوية']}", expanded=i<3):
+                                dc1, dc2 = st.columns(2)
+                                with dc1:
+                                    obj = st.text_input(f"هدف التعلم (SMART):",
+                                        value=f"تطوير مهارة {need['المهارة']} من {need['الحالي']} إلى {need['المستهدف']}",
+                                        key=f"dobj_{i}")
+                                    method = st.selectbox("أسلوب التدريب:", [
+                                        "Instructor-Led Training (ILT)",
+                                        "Virtual Instructor-Led (VILT)",
+                                        "E-Learning / Online",
+                                        "Blended Learning (مدمج)",
+                                        "On-the-Job Training (OJT)",
+                                        "Coaching & Mentoring",
+                                        "Workshop / ورشة عمل",
+                                        "Self-Paced Learning",
+                                    ], key=f"dmethod_{i}")
+                                with dc2:
+                                    duration = st.selectbox("المدة:", ["يوم واحد","يومين","3 أيام","أسبوع","أسبوعين","شهر","3 أشهر"], key=f"ddur_{i}")
+                                    timing = st.selectbox("التوقيت:", ["Q1","Q2","Q3","Q4"], key=f"dtiming_{i}")
+                                    provider = st.selectbox("الجهة:", need['جهات التدريب'].split(' | ') + ["أخرى"], key=f"dprov_{i}")
+                                    est_cost = st.number_input("التكلفة التقديرية (ريال):", value=3000, step=500, key=f"dcost_{i}")
+
+                                programs.append({
+                                    "المهارة": need['المهارة'], "القسم": need['القسم'],
+                                    "الهدف": obj, "الأسلوب": method, "المدة": duration,
+                                    "التوقيت": timing, "الجهة": provider, "التكلفة": est_cost,
+                                    "المتدربين": need['المتدربين'], "الأولوية": need['الأولوية']
+                                })
+
+                    if programs:
+                        st.session_state.addie_plan['programs'] = programs
+                        st.markdown("#### 📊 ملخص التصميم")
+                        prog_df = pd.DataFrame(programs)
+                        st.dataframe(prog_df[['المهارة','القسم','الأسلوب','المدة','التوقيت','الجهة','التكلفة','المتدربين']], use_container_width=True, hide_index=True)
+                        st.success(f"💰 إجمالي التكلفة التقديرية: {sum(p['التكلفة'] for p in programs):,} ريال | 👥 إجمالي المتدربين: {sum(p['المتدربين'] for p in programs)}")
+
+            # ===== PHASE 3: DEVELOPMENT =====
+            with addie_tabs[2]:
+                st.markdown("### 🔧 المرحلة 3: تطوير المحتوى التدريبي (Content Development)")
+                ibox("""**نموذج ADDIE - مرحلة التطوير:** إعداد المواد التدريبية والموارد.
+تشمل: إعداد المحتوى + تطوير المواد + إنتاج الوسائط + مراجعة الجودة""")
+
+                programs = st.session_state.addie_plan.get('programs', [])
+                if not programs:
+                    st.info("أكمل مرحلة التصميم أولاً")
+                else:
+                    st.markdown("#### 📝 Checklist تطوير المحتوى")
+                    dev_checklist = {
+                        "إعداد المحتوى": ["تحديد المراجع والمصادر العلمية","كتابة الأهداف التعليمية التفصيلية","إعداد خطة الجلسات (Session Plan)","تصميم أنشطة التعلم التفاعلية"],
+                        "المواد التدريبية": ["دليل المدرب (Facilitator Guide)","دليل المتدرب (Participant Workbook)","عروض تقديمية (PowerPoint/Slides)","حالات دراسية (Case Studies)","تمارين وأنشطة عملية"],
+                        "الوسائط": ["فيديوهات تعليمية","إنفوجرافيك ملخصات","اختبارات ذاتية (Self-Assessment)","محتوى E-Learning (SCORM)"],
+                        "ضمان الجودة": ["مراجعة المحتوى من خبير المجال (SME)","اختبار تجريبي (Pilot Test)","جمع ملاحظات وتحسين","اعتماد نهائي من الإدارة"],
+                    }
+                    for section, items in dev_checklist.items():
+                        st.markdown(f"**{section}:**")
+                        for item in items:
+                            st.checkbox(item, key=f"dev_{section}_{item}")
+
+                    # Resource allocation
+                    st.markdown("---")
+                    st.markdown("#### 📊 توزيع الموارد حسب البرنامج")
+                    for i, prog in enumerate(programs):
+                        with st.expander(f"📌 {prog['المهارة']} ({prog['القسم']})"):
+                            st.markdown(f"**الأسلوب:** {prog['الأسلوب']} | **الجهة:** {prog['الجهة']} | **المدة:** {prog['المدة']}")
+                            rc1, rc2 = st.columns(2)
+                            with rc1:
+                                content_ready = st.slider("جاهزية المحتوى %:", 0, 100, 0, key=f"dev_ready_{i}")
+                            with rc2:
+                                dev_notes = st.text_input("ملاحظات:", key=f"dev_notes_{i}")
+
+            # ===== PHASE 4: IMPLEMENTATION =====
+            with addie_tabs[3]:
+                st.markdown("### 🚀 المرحلة 4: التنفيذ (Implementation)")
+                ibox("""**نموذج ADDIE - مرحلة التنفيذ:** تقديم البرنامج التدريبي للمتدربين.
+تشمل: الجدولة + التنسيق اللوجستي + تنفيذ التدريب + المتابعة اليومية""")
+
+                programs = st.session_state.addie_plan.get('programs', [])
+                if not programs:
+                    st.info("أكمل المراحل السابقة أولاً")
+                else:
+                    st.markdown("#### 📅 الجدول الزمني للتنفيذ")
+                    impl_data = []
+                    for p in programs:
+                        q_map = {"Q1":"يناير-مارس","Q2":"أبريل-يونيو","Q3":"يوليو-سبتمبر","Q4":"أكتوبر-ديسمبر"}
+                        impl_data.append({
+                            "البرنامج": p['المهارة'], "القسم": p['القسم'], "الجهة": p['الجهة'],
+                            "الأسلوب": p['الأسلوب'], "المدة": p['المدة'],
+                            "الفترة": q_map.get(p['التوقيت'],''), "المتدربين": p['المتدربين'],
+                            "الحالة": "مجدول"
+                        })
+                    impl_df = pd.DataFrame(impl_data)
+                    edited_impl = st.data_editor(impl_df, column_config={
+                        'الحالة': st.column_config.SelectboxColumn('الحالة', options=['مجدول','جاري','مكتمل','مؤجل','ملغي'])
+                    }, use_container_width=True, hide_index=True, key="impl_editor")
+
+                    # Implementation checklist
+                    st.markdown("#### ✅ Checklist التنفيذ")
+                    impl_checks = [
+                        "تأكيد الحجوزات والقاعات/المنصات","إرسال دعوات للمتدربين","تجهيز المواد والأدوات",
+                        "تأكيد حضور المدرب","توفير الدعم التقني","جمع توقيعات الحضور",
+                        "متابعة يومية للبرنامج","تصوير وتوثيق الجلسات"
+                    ]
+                    for ic in impl_checks:
+                        st.checkbox(ic, key=f"impl_{ic}")
+
+                    # Gantt-like visualization
+                    q_start = {'Q1':1,'Q2':4,'Q3':7,'Q4':10}
+                    q_end = {'Q1':3,'Q2':6,'Q3':9,'Q4':12}
+                    gantt_data = []
+                    for p in programs:
+                        s_month = q_start.get(p['التوقيت'], 1)
+                        e_month = q_end.get(p['التوقيت'], 3)
+                        gantt_data.append({"Task":p['المهارة'], "Start":f"2026-{s_month:02d}-01",
+                            "Finish":f"2026-{e_month:02d}-28", "القسم":p['القسم']})
+                    if gantt_data:
+                        fig = px.timeline(pd.DataFrame(gantt_data),
+                            x_start="Start", x_end="Finish", y="Task", color="القسم",
+                            title="📅 الجدول الزمني (Gantt Chart)", color_discrete_sequence=CL['dept'])
+                        fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350)
+                        st.plotly_chart(fig, use_container_width=True)
+
+            # ===== PHASE 5: EVALUATION =====
+            with addie_tabs[4]:
+                st.markdown("### 📊 المرحلة 5: التقييم (Evaluation) - Kirkpatrick's 4 Levels")
+                ibox("""**نموذج ADDIE + Kirkpatrick - مرحلة التقييم:**
+**Level 1 - Reaction:** رضا المتدربين عن البرنامج
+**Level 2 - Learning:** مدى اكتساب المعرفة والمهارات
+**Level 3 - Behavior:** تطبيق المهارات في بيئة العمل
+**Level 4 - Results:** الأثر على نتائج الأعمال (KPIs)
+**Level 5 - ROI (Phillips):** العائد المالي من الاستثمار في التدريب""")
+
+                programs = st.session_state.addie_plan.get('programs', [])
+                if not programs:
+                    st.info("أكمل المراحل السابقة أولاً")
+                else:
+                    for i, prog in enumerate(programs):
+                        with st.expander(f"📊 تقييم: {prog['المهارة']} ({prog['القسم']})", expanded=i==0):
+                            ev1, ev2 = st.columns(2)
+                            with ev1:
+                                st.markdown("**Level 1: Reaction (رد الفعل)**")
+                                l1_satisfaction = st.slider("رضا المتدربين (1-5):", 1.0, 5.0, 4.0, 0.1, key=f"ev1_{i}")
+                                l1_relevance = st.slider("ملاءمة المحتوى (1-5):", 1.0, 5.0, 4.0, 0.1, key=f"ev1r_{i}")
+
+                                st.markdown("**Level 2: Learning (التعلم)**")
+                                l2_pre = st.number_input("نتيجة الاختبار القبلي %:", 0, 100, 40, key=f"ev2pre_{i}")
+                                l2_post = st.number_input("نتيجة الاختبار البعدي %:", 0, 100, 75, key=f"ev2post_{i}")
+
+                            with ev2:
+                                st.markdown("**Level 3: Behavior (السلوك)**")
+                                l3_apply = st.slider("نسبة تطبيق المهارات في العمل %:", 0, 100, 60, key=f"ev3_{i}")
+                                l3_timeline = st.selectbox("فترة القياس:", ["30 يوم","60 يوم","90 يوم"], key=f"ev3t_{i}")
+
+                                st.markdown("**Level 4: Results (النتائج)**")
+                                l4_kpi = st.text_input("KPI المستهدف:", placeholder="مثال: زيادة المبيعات 15%", key=f"ev4_{i}")
+                                l4_achieved = st.slider("نسبة تحقيق KPI %:", 0, 100, 50, key=f"ev4a_{i}")
+
+                            # Results summary
+                            learning_gain = l2_post - l2_pre
+                            st.markdown("**📊 ملخص التقييم:**")
+                            ek1,ek2,ek3,ek4 = st.columns(4)
+                            with ek1: kpi("⭐ الرضا", f"{l1_satisfaction}/5")
+                            with ek2: kpi("📈 التعلم", f"+{learning_gain}%")
+                            with ek3: kpi("🔄 التطبيق", f"{l3_apply}%")
+                            with ek4: kpi("🎯 النتائج", f"{l4_achieved}%")
+
+                    # Overall ADDIE Summary
+                    st.markdown("---")
+                    st.markdown("### 📊 ملخص خطة ADDIE الشاملة")
+                    total_programs = len(programs)
+                    total_cost = sum(p['التكلفة'] for p in programs)
+                    total_trainees = sum(p['المتدربين'] for p in programs)
+
+                    sk1,sk2,sk3,sk4 = st.columns(4)
+                    with sk1: kpi("📚 البرامج", str(total_programs))
+                    with sk2: kpi("👥 المتدربين", str(total_trainees))
+                    with sk3: kpi("💰 التكلفة", f"{total_cost:,}")
+                    with sk4: kpi("💵 للفرد", f"{total_cost//max(total_trainees,1):,}")
+
+                    # Export full ADDIE plan
+                    if st.button("📥 تصدير خطة ADDIE الكاملة", type="primary", use_container_width=True, key="exp_addie"):
+                        ox = io.BytesIO()
+                        with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
+                            if needs: pd.DataFrame(needs).to_excel(w, sheet_name='1-Analysis', index=False)
+                            if programs:
+                                pd.DataFrame(programs).to_excel(w, sheet_name='2-Design', index=False)
+                                pd.DataFrame(programs).to_excel(w, sheet_name='4-Implementation', index=False)
+                            # Summary
+                            summary = pd.DataFrame([
+                                {"المرحلة":"Analysis","الحالة":"مكتمل","التفاصيل":f"{len(needs)} فجوة محددة"},
+                                {"المرحلة":"Design","الحالة":"مكتمل","التفاصيل":f"{len(programs)} برنامج مصمم"},
+                                {"المرحلة":"Development","الحالة":"جاري","التفاصيل":"إعداد المحتوى"},
+                                {"المرحلة":"Implementation","الحالة":"مجدول","التفاصيل":f"{total_trainees} متدرب"},
+                                {"المرحلة":"Evaluation","الحالة":"مخطط","التفاصيل":"Kirkpatrick 4 Levels"},
+                            ])
+                            summary.to_excel(w, sheet_name='ADDIE Summary', index=False)
+                        st.download_button("📥 تحميل", data=ox.getvalue(),
+                            file_name=f"ADDIE_Training_Plan_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
         elif page == "🏫 جهات التدريب":
             hdr("🏫 دليل جهات التدريب")
