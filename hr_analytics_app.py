@@ -2211,7 +2211,7 @@ def main():
 
         if len(sal_df)==0 and n==0:
             hdr("💰 تحليل الرواتب")
-            st.info("📁 ارفع ملف الرواتب (مثل Mother of Dashboards) من القائمة الجانبية")
+            st.info("📁 ارفع ملف الرواتب (من القائمة الجانبية) من القائمة الجانبية")
             return
 
         data = sal_df if len(sal_df)>0 else emp
@@ -2223,79 +2223,201 @@ def main():
         dept_col_tr = next((c for c in snap.columns if any(x in c.lower() for x in ['dept','قسم','department','القطاع'])), None)
 
         if page == "💰 لوحة الرواتب":
-            hdr("💰 لوحة تحليل الرواتب","تحليل شامل لتكاليف الرواتب والبدلات")
+            hdr("💰 لوحة تحليل الرواتب والتعويضات","تحليل شامل لتكاليف الرواتب والبدلات والاستقطاعات")
 
-            total_emp = snap['الاسم'].nunique() if has(snap,'الاسم') else len(snap)
-            k1,k2,k3,k4,k5 = st.columns(5)
-            with k1: st.metric("👥 الموظفين", total_emp)
-            with k2: st.metric("💰 إجمالي شهري", f"{snap['الراتب الإجمالي'].sum():,.0f}" if has(snap,'الراتب الإجمالي') else '-')
-            with k3: st.metric("📊 المتوسط", f"{snap['الراتب الإجمالي'].mean():,.0f}" if has(snap,'الراتب الإجمالي') else '-')
-            with k4: st.metric("📈 الأعلى", f"{snap['الراتب الإجمالي'].max():,.0f}" if has(snap,'الراتب الإجمالي') else '-')
-            with k5: st.metric("📉 الأقل", f"{snap['الراتب الإجمالي'].min():,.0f}" if has(snap,'الراتب الإجمالي') else '-')
+            if len(snap) == 0:
+                st.info("📁 ارفع ملف الرواتب من القائمة الجانبية"); return
 
+            # Auto-detect all salary columns
+            sal_col = next((c for c in ['الراتب الإجمالي','Gross Salary','إجمالي الراتب'] if has(snap,c)), None)
+            basic_col = next((c for c in ['الراتب الأساسي','Basic Salary','Basic'] if has(snap,c)), None)
+            net_col = next((c for c in ['صافي الراتب','Net Salary','Net'] if has(snap,c)), None)
+            dept_col = next((c for c in ['القسم','Department','القطاع','Division'] if has(snap,c)), None)
+            nat_col = next((c for c in ['الجنسية','Nationality'] if has(snap,c)), None)
+            gender_col = next((c for c in ['الجنس','Gender'] if has(snap,c)), None)
+            name_col = next((c for c in ['الاسم','Employee Name','Name'] if has(snap,c)), None)
+            total_emp = snap[name_col].nunique() if name_col else len(snap)
+
+            # ===== ROW 1: Executive KPIs =====
+            k1,k2,k3,k4,k5,k6 = st.columns(6)
+            with k1: kpi("👥 الموظفين", f"{total_emp:,}")
+            with k2: kpi("💵 إجمالي الرواتب", f"{snap[sal_col].sum():,.0f}" if sal_col else "-")
+            with k3: kpi("📊 المتوسط", f"{snap[sal_col].mean():,.0f}" if sal_col else "-")
+            with k4: kpi("📈 الأعلى", f"{snap[sal_col].max():,.0f}" if sal_col else "-")
+            with k5: kpi("📉 الأقل", f"{snap[sal_col].min():,.0f}" if sal_col else "-")
+            with k6: kpi("📐 الوسيط", f"{snap[sal_col].median():,.0f}" if sal_col else "-")
+
+            # ===== ROW 2: Salary Components Breakdown =====
             st.markdown("---")
-
-            # Salary components breakdown
-            sal_components = ['الراتب الأساسي','بدل السكن','بدل النقل','بدل خاص','بدل معيشة','بدل جوال']
+            sal_components = ['الراتب الأساسي','بدل السكن','بدل النقل','بدل خاص','بدل معيشة','بدل جوال','بدلات أخرى']
             available_components = [c for c in sal_components if has(snap,c)]
 
             if available_components:
-                st.markdown("### 📊 تركيبة الراتب")
+                st.markdown("### 📊 تركيبة الراتب (Salary Components)")
                 comp_data = {c: snap[c].sum() for c in available_components}
                 comp_df = pd.DataFrame(list(comp_data.items()), columns=['المكون','الإجمالي'])
-                c1,c2 = st.columns(2)
-                with c1:
-                    fig = px.pie(comp_df, values='الإجمالي', names='المكون', title='توزيع مكونات الراتب', hole=.35, color_discrete_sequence=CL['sal'])
-                    fig.update_layout(font=dict(family="Noto Sans Arabic"),height=380); st.plotly_chart(fig,use_container_width=True)
-                with c2:
-                    fig = px.bar(comp_df.sort_values('الإجمالي',ascending=True), x='الإجمالي', y='المكون', orientation='h', color='المكون', color_discrete_sequence=CL['dept'], title='مكونات الراتب بالقيمة')
-                    fig.update_layout(font=dict(family="Noto Sans Arabic"),height=380,showlegend=False,xaxis_tickformat=','); st.plotly_chart(fig,use_container_width=True)
+                comp_df['النسبة'] = (comp_df['الإجمالي'] / comp_df['الإجمالي'].sum() * 100).round(1)
+                comp_df['المتوسط/موظف'] = (comp_df['الإجمالي'] / max(total_emp,1)).round(0)
 
-            # By Department/Division
-            dept_col = 'القسم' if has(snap,'القسم') else ('القطاع' if has(snap,'القطاع') else None)
-            if dept_col and has(snap,'الراتب الإجمالي'):
-                st.markdown(f"### 🏢 الرواتب حسب {dept_col}")
                 c1,c2 = st.columns(2)
                 with c1:
-                    ds = snap.groupby(dept_col)['الراتب الإجمالي'].sum().reset_index().sort_values('الراتب الإجمالي',ascending=True)
-                    fig = px.bar(ds, x='الراتب الإجمالي', y=dept_col, orientation='h', title=f'إجمالي الرواتب حسب {dept_col}', color='الراتب الإجمالي', color_continuous_scale='teal')
-                    fig.update_layout(font=dict(family="Noto Sans Arabic"),height=400,xaxis_tickformat=','); st.plotly_chart(fig,use_container_width=True)
+                    fig = px.pie(comp_df, values='الإجمالي', names='المكون', title='توزيع مكونات الراتب', hole=.4, color_discrete_sequence=CL['sal'])
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380)
+                    st.plotly_chart(fig, use_container_width=True)
                 with c2:
-                    ds2 = snap.groupby(dept_col)['الراتب الإجمالي'].mean().reset_index().sort_values('الراتب الإجمالي',ascending=True)
-                    fig = px.bar(ds2, x='الراتب الإجمالي', y=dept_col, orientation='h', title=f'متوسط الراتب حسب {dept_col}', color='الراتب الإجمالي', color_continuous_scale='oranges')
-                    fig.update_layout(font=dict(family="Noto Sans Arabic"),height=400,xaxis_tickformat=','); st.plotly_chart(fig,use_container_width=True)
+                    fig = px.bar(comp_df.sort_values('الإجمالي'), x='الإجمالي', y='المكون', orientation='h',
+                        color='المكون', color_discrete_sequence=CL['dept'], title='مكونات الراتب بالقيمة',
+                        text=comp_df.sort_values('الإجمالي')['النسبة'].apply(lambda x: f'{x}%'))
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380, showlegend=False, xaxis_tickformat=',')
+                    st.plotly_chart(fig, use_container_width=True)
 
-            # By Nationality
-            if has(snap,'الجنسية') and has(snap,'الراتب الإجمالي'):
-                st.markdown("### 🌍 الرواتب حسب الجنسية")
-                c1,c2 = st.columns(2)
-                with c1:
-                    ns = snap.groupby('الجنسية').agg({'الراتب الإجمالي':['mean','count']}).reset_index()
-                    ns.columns = ['الجنسية','المتوسط','العدد']
-                    fig = px.bar(ns, x='الجنسية', y='المتوسط', color='العدد', title='متوسط الراتب حسب الجنسية', text='العدد', color_continuous_scale='teal')
-                    fig.update_layout(font=dict(family="Noto Sans Arabic"),height=380,yaxis_tickformat=','); st.plotly_chart(fig,use_container_width=True)
-                with c2:
-                    if has(snap,'الجنس'):
-                        gs = snap.groupby('الجنس')['الراتب الإجمالي'].mean().reset_index()
-                        fig = px.bar(gs, x='الجنس', y='الراتب الإجمالي', title='متوسط الراتب حسب الجنس', color='الجنس', color_discrete_sequence=[CL['p'],CL['a']])
-                        fig.update_layout(font=dict(family="Noto Sans Arabic"),height=380,yaxis_tickformat=','); st.plotly_chart(fig,use_container_width=True)
+                st.dataframe(comp_df, use_container_width=True, hide_index=True)
 
-            # Salary distribution
-            if has(snap,'الراتب الإجمالي'):
-                st.markdown("### 📊 توزيع الرواتب")
+            # ===== ROW 3: Department Analysis =====
+            if dept_col and sal_col:
+                st.markdown(f"### 🏢 التحليل حسب {dept_col}")
+                dept_stats = snap.groupby(dept_col).agg(
+                    العدد=(sal_col, 'count'), الإجمالي=(sal_col, 'sum'),
+                    المتوسط=(sal_col, 'mean'), الوسيط=(sal_col, 'median'),
+                    الأقل=(sal_col, 'min'), الأعلى=(sal_col, 'max')
+                ).sort_values('العدد', ascending=False).reset_index()
+                dept_stats['نسبة التكلفة %'] = (dept_stats['الإجمالي'] / dept_stats['الإجمالي'].sum() * 100).round(1)
+                dept_stats['نسبة العدد %'] = (dept_stats['العدد'] / dept_stats['العدد'].sum() * 100).round(1)
+                for c in ['الإجمالي','المتوسط','الوسيط','الأقل','الأعلى']:
+                    dept_stats[c] = dept_stats[c].round(0)
+
                 c1,c2 = st.columns(2)
                 with c1:
-                    fig = px.histogram(snap, x='الراتب الإجمالي', nbins=20, title='توزيع الرواتب الإجمالية', color_discrete_sequence=[CL['p']])
-                    fig.update_layout(font=dict(family="Noto Sans Arabic"),height=350); st.plotly_chart(fig,use_container_width=True)
+                    fig = px.bar(dept_stats.sort_values('الإجمالي'), x='الإجمالي', y=dept_col, orientation='h',
+                        title=f'إجمالي التكلفة حسب {dept_col}', color='الإجمالي', color_continuous_scale='teal')
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=420, xaxis_tickformat=',', coloraxis_showscale=False)
+                    st.plotly_chart(fig, use_container_width=True)
                 with c2:
-                    if has(snap,'شريحة الراتب'):
-                        sr = snap['شريحة الراتب'].value_counts().reset_index(); sr.columns=['الشريحة','العدد']
-                        fig = px.bar(sr, x='الشريحة', y='العدد', title='توزيع شرائح الرواتب', color='الشريحة', color_discrete_sequence=CL['dept'])
-                        fig.update_layout(font=dict(family="Noto Sans Arabic"),height=350); st.plotly_chart(fig,use_container_width=True)
+                    fig = px.bar(dept_stats.sort_values('المتوسط'), x='المتوسط', y=dept_col, orientation='h',
+                        title=f'متوسط الراتب حسب {dept_col}', color='المتوسط', color_continuous_scale='oranges')
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=420, xaxis_tickformat=',', coloraxis_showscale=False)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                # Headcount vs Cost scatter
+                c3,c4 = st.columns(2)
+                with c3:
+                    fig = px.scatter(dept_stats, x='نسبة العدد %', y='نسبة التكلفة %', size='العدد',
+                        color=dept_col, title='نسبة العدد مقابل التكلفة', color_discrete_sequence=CL['dept'],
+                        hover_data=['المتوسط'])
+                    fig.add_trace(go.Scatter(x=[0,60],y=[0,60],mode='lines',line=dict(dash='dash',color='gray'),showlegend=False))
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
+                    st.plotly_chart(fig, use_container_width=True)
+                with c4:
+                    fig = px.box(snap, x=dept_col, y=sal_col, title=f'نطاق الرواتب حسب {dept_col}',
+                        color_discrete_sequence=['#E9C46A'])
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400, xaxis_tickangle=-45)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                st.dataframe(dept_stats, use_container_width=True, hide_index=True)
+
+            # ===== ROW 4: Nationality & Saudization =====
+            if nat_col and sal_col:
+                st.markdown("### 🌍 الرواتب حسب الجنسية والسعودة")
+                nat_stats = snap.groupby(nat_col).agg(
+                    العدد=(sal_col,'count'), المتوسط=(sal_col,'mean'), الإجمالي=(sal_col,'sum')
+                ).sort_values('العدد', ascending=False).reset_index()
+                nat_stats['النسبة %'] = (nat_stats['العدد'] / nat_stats['العدد'].sum() * 100).round(1)
+
+                c1,c2 = st.columns(2)
+                with c1:
+                    fig = px.pie(nat_stats, values='العدد', names=nat_col, title='توزيع الجنسيات', hole=0.4,
+                        color_discrete_sequence=px.colors.qualitative.Set2)
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380)
+                    st.plotly_chart(fig, use_container_width=True)
+                with c2:
+                    fig = px.bar(nat_stats, x=nat_col, y='المتوسط', title='متوسط الراتب حسب الجنسية',
+                        color='العدد', text='العدد', color_continuous_scale='teal')
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380, yaxis_tickformat=',', coloraxis_showscale=False)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                # Saudization KPIs
+                saudi_vals = ['Saudi','سعودي','Saudi Arabian','سعودية']
+                sa_count = len(snap[snap[nat_col].isin(saudi_vals)])
+                sa_pct = round(sa_count / max(total_emp,1) * 100, 1)
+                sa_cost = snap[snap[nat_col].isin(saudi_vals)][sal_col].sum() if sal_col else 0
+                non_sa_cost = snap[~snap[nat_col].isin(saudi_vals)][sal_col].sum() if sal_col else 0
+
+                sk1,sk2,sk3,sk4 = st.columns(4)
+                with sk1: kpi("🇸🇦 سعوديين", str(sa_count))
+                with sk2: kpi("🌍 غير سعوديين", str(total_emp - sa_count))
+                with sk3: kpi("📊 نسبة السعودة", f"{sa_pct}%")
+                with sk4: kpi("💰 تكلفة السعوديين", f"{sa_cost:,.0f}")
+
+            # ===== ROW 5: Gender + Distribution =====
+            c5,c6 = st.columns(2)
+            with c5:
+                if gender_col and sal_col:
+                    gs = snap.groupby(gender_col).agg(العدد=(sal_col,'count'), المتوسط=(sal_col,'mean')).reset_index()
+                    fig = px.bar(gs, x=gender_col, y='المتوسط', title='متوسط الراتب حسب الجنس',
+                        color=gender_col, text='العدد', color_discrete_map={'Male':'#3498DB','Female':'#E91E8F','ذكر':'#3498DB','أنثى':'#E91E8F'})
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380, yaxis_tickformat=',')
+                    st.plotly_chart(fig, use_container_width=True)
+            with c6:
+                if sal_col:
+                    fig = px.histogram(snap, x=sal_col, nbins=25, title='توزيع الرواتب الإجمالية',
+                        color_discrete_sequence=[CL['p']])
+                    fig.add_vline(x=snap[sal_col].mean(), line_dash="dash", line_color="red",
+                        annotation_text=f"المتوسط: {snap[sal_col].mean():,.0f}")
+                    fig.add_vline(x=snap[sal_col].median(), line_dash="dot", line_color="blue",
+                        annotation_text=f"الوسيط: {snap[sal_col].median():,.0f}")
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380)
+                    st.plotly_chart(fig, use_container_width=True)
+
+            # ===== ROW 6: Deductions & Net =====
+            deduction_cols = [c for c in snap.columns if any(x in c.lower() for x in ['خصم','استقطاع','deduction','gosi','تأمين'])]
+            if deduction_cols and sal_col:
+                st.markdown("### 📉 الاستقطاعات والصافي")
+                ded_data = {c: snap[c].sum() for c in deduction_cols}
+                ded_df = pd.DataFrame(list(ded_data.items()), columns=['الاستقطاع','الإجمالي'])
+                c1,c2 = st.columns(2)
+                with c1:
+                    fig = px.pie(ded_df, values='الإجمالي', names='الاستقطاع', title='توزيع الاستقطاعات', hole=0.4,
+                        color_discrete_sequence=['#E74C3C','#C0392B','#A93226','#922B21'])
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350)
+                    st.plotly_chart(fig, use_container_width=True)
+                with c2:
+                    if net_col:
+                        gross_total = snap[sal_col].sum()
+                        net_total = snap[net_col].sum()
+                        ded_total = gross_total - net_total
+                        gn_df = pd.DataFrame([
+                            {"البند":"الإجمالي","المبلغ":gross_total},
+                            {"البند":"الاستقطاعات","المبلغ":ded_total},
+                            {"البند":"الصافي","المبلغ":net_total}])
+                        fig = px.bar(gn_df, x='البند', y='المبلغ', title='الإجمالي vs الصافي',
+                            color='البند', color_discrete_map={'الإجمالي':'#2A9D8F','الاستقطاعات':'#E74C3C','الصافي':'#27AE60'})
+                        fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350, yaxis_tickformat=',', showlegend=False)
+                        st.plotly_chart(fig, use_container_width=True)
+
+            # ===== ROW 7: Top Earners =====
+            if sal_col and name_col:
+                st.markdown("### 🏆 أعلى 10 رواتب")
+                top10 = snap.nlargest(10, sal_col)[[name_col, dept_col or sal_col, sal_col]].reset_index(drop=True)
+                top10.index = range(1, len(top10)+1)
+                st.dataframe(top10, use_container_width=True)
+
+            # ===== ROW 8: Cost Efficiency =====
+            if sal_col and dept_col:
+                st.markdown("### ⚡ كفاءة التكلفة")
+                eff = snap.groupby(dept_col).agg(
+                    العدد=(sal_col,'count'), التكلفة_الشهرية=(sal_col,'sum')
+                ).reset_index()
+                eff['التكلفة/موظف'] = (eff['التكلفة_الشهرية'] / eff['العدد']).round(0)
+                eff['التكلفة_السنوية'] = eff['التكلفة_الشهرية'] * 12
+                fig = px.treemap(eff, path=[dept_col], values='التكلفة_الشهرية', color='التكلفة/موظف',
+                    title='خريطة تكلفة الأقسام (الحجم = التكلفة الشهرية، اللون = التكلفة/موظف)',
+                    color_continuous_scale='RdYlGn_r')
+                fig.update_layout(font=dict(family="Noto Sans Arabic"), height=420)
+                st.plotly_chart(fig, use_container_width=True)
 
         elif page == "📈 تحليل شهري/ربعي":
             hdr("📈 تحليل الرواتب الشهري والربعي")
-            if len(sal_df)==0: st.info("📁 ارفع ملف رواتب شهري (مثل Mother of Dashboards)"); return
+            if len(sal_df)==0: st.info("📁 ارفع ملف رواتب شهري (من القائمة الجانبية)"); return
 
             if has(sal_df,'سنة الراتب'):
                 year = st.selectbox("📅 السنة:", sorted(sal_df['سنة الراتب'].unique(), reverse=True))
@@ -2511,7 +2633,7 @@ def main():
             st.plotly_chart(fig, use_container_width=True)
 
         elif page == "📥 تصدير TR":
-            hdr("📥 تصدير تقرير الرواتب","Excel مطابق لنموذج Mother of Dashboards")
+            hdr("📥 تصدير تقرير الرواتب","Excel تقرير شامل للرواتب والتعويضات")
             data = sal_df if len(sal_df)>0 else (sal_snapshot if len(sal_snapshot)>0 else emp)
             snap = sal_snapshot if len(sal_snapshot)>0 else data
             if len(data)==0: st.info("📁 ارفع ملف"); return
@@ -2529,7 +2651,7 @@ def main():
                         # Sheet 1: Dashboard summary
                         ws1 = wb.add_worksheet('Dashboard')
                         ws1.set_column('A:Z', 18)
-                        ws1.merge_range('B2:F2', 'Mother of Dashboards: Salary Analysis', hdr_f)
+                        ws1.merge_range('B2:F2', 'Salary Analysis', hdr_f)
                         r = 4
                         sal_col = next((c for c in ['الراتب الإجمالي','Gross Salary'] if has(snap,c)), None)
                         dept_col = next((c for c in ['القسم','Department','القطاع'] if has(snap,c)), None)
@@ -2597,8 +2719,8 @@ def main():
                             dept_summary.columns = [dept_col,'عدد','إجمالي','متوسط','وسيط','أقل','أعلى']
                             dept_summary.to_excel(w, sheet_name='Dept Summary', index=False)
 
-                    st.download_button("📥 تحميل Mother of Dashboards Excel", data=o.getvalue(),
-                        file_name=f"Salary_Analysis_MotherOfDashboards_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    st.download_button("📥 تحميل تقرير الرواتب الشامل", data=o.getvalue(),
+                        file_name=f"Salary_Analysis_{datetime.now().strftime('%Y%m%d')}.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary", use_container_width=True)
 
                 elif exp_format == "📄 CSV":
