@@ -2209,18 +2209,13 @@ def main():
     # =========================================
     elif section == "🎁 Total Rewards":
 
-        if len(sal_df)==0 and n==0:
-            hdr("💰 تحليل الرواتب")
-            st.info("📁 ارفع ملف الرواتب (من القائمة الجانبية) من القائمة الجانبية")
-            return
-
         data = sal_df if len(sal_df)>0 else emp
-        snap = sal_snapshot if len(sal_snapshot)>0 else data
+        snap = sal_snapshot if len(sal_snapshot)>0 else (data if len(data)>0 else pd.DataFrame())
 
         # Auto-detect columns for Total Rewards
-        sal_col_tr = next((c for c in snap.select_dtypes('number').columns if any(x in c.lower() for x in ['gross','إجمالي','total sal','net'])), None)
-        basic_col_tr = next((c for c in snap.select_dtypes('number').columns if any(x in c.lower() for x in ['basic','أساسي','base'])), None)
-        dept_col_tr = next((c for c in snap.columns if any(x in c.lower() for x in ['dept','قسم','department','القطاع'])), None)
+        sal_col_tr = next((c for c in snap.select_dtypes('number').columns if any(x in c.lower() for x in ['gross','إجمالي','total sal','net'])), None) if len(snap)>0 else None
+        basic_col_tr = next((c for c in snap.select_dtypes('number').columns if any(x in c.lower() for x in ['basic','أساسي','base'])), None) if len(snap)>0 else None
+        dept_col_tr = next((c for c in snap.columns if any(x in c.lower() for x in ['dept','قسم','department','القطاع'])), None) if len(snap)>0 else None
 
         if page == "💰 لوحة الرواتب":
             hdr("💰 لوحة تحليل الرواتب والتعويضات","تحليل شامل لتكاليف الرواتب والبدلات والاستقطاعات")
