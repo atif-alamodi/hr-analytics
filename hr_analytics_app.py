@@ -6528,32 +6528,42 @@ function stopSpeak(){{speechSynthesis.cancel()}}
             except:
                 return ""
 
-        def call_claude_api(system_prompt, user_message, chat_history=None, model_type="general"):
-            """Enhanced Claude API call with RAG retrieval + learned context"""
+        def call_ai_api(system_prompt, user_message, chat_history=None, model_type="general", provider=None):
+            """Dual-provider AI call: Claude (Anthropic) or Llama (Groq) with RAG"""
             import urllib.request
-            api_key = st.session_state.get('claude_api_key', '')
-            if not api_key:
-                return None, "يرجى إدخال Claude API Key في إعدادات المنصة"
+
+            # Auto-select provider if not specified
+            if provider is None:
+                provider = st.session_state.get('ai_provider', 'auto')
+
+            claude_key = st.session_state.get('claude_api_key', '')
+            groq_key = st.session_state.get('groq_api_key', '')
+
+            # Auto mode: try Groq first (free), fallback to Claude
+            if provider == 'auto':
+                if groq_key: provider = 'groq'
+                elif claude_key: provider = 'claude'
+                else: return None, "يرجى إدخال API Key (Groq مجاني أو Claude)"
+
+            if provider == 'claude' and not claude_key:
+                return None, "يرجى إدخال Claude API Key"
+            if provider == 'groq' and not groq_key:
+                return None, "يرجى إدخال Groq API Key (مجاني من console.groq.com)"
 
             # RAG: Search knowledge base
             rag_context = search_knowledge_base(user_message)
             learned_context = get_learned_context(user_message, model_type)
 
-            # Enhance system prompt with RAG context
             enhanced_prompt = system_prompt
             if rag_context:
                 enhanced_prompt += f"\n\n**RELEVANT KNOWLEDGE BASE DOCUMENTS:**\n{rag_context[:6000]}"
             if learned_context:
                 enhanced_prompt += f"\n\n**LEARNED FROM PREVIOUS INTERACTIONS:**\n{learned_context[:2000]}"
-
-            # Add uploaded legal docs
             legal_context = st.session_state.get('legal_docs_context', '')
             if legal_context:
                 enhanced_prompt += f"\n\n**UPLOADED LEGAL REFERENCES:**\n{legal_context[:6000]}"
-
-            # Truncate system prompt if too long (max ~15000 chars)
             if len(enhanced_prompt) > 15000:
-                enhanced_prompt = enhanced_prompt[:15000] + "\n\n[Context truncated for length]"
+                enhanced_prompt = enhanced_prompt[:15000] + "\n[Context truncated]"
 
             messages = []
             if chat_history:
@@ -6561,102 +6571,154 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                     messages.append({"role": msg['role'], "content": msg['content']})
             messages.append({"role": "user", "content": user_message})
 
-            # Try with web search first, fallback without
-            for use_web in [True, False]:
-                payload_dict = {
-                    "model": "claude-3-5-sonnet-20241022",
-                    "max_tokens": 4000,
-                    "system": enhanced_prompt,
-                    "messages": messages,
-                }
-                if use_web:
-                    payload_dict["tools"] = [{"type": "web_search_20250305", "name": "web_search"}]
-                payload = json.dumps(payload_dict)
-
+            # ===== GROQ (Llama 3) =====
+            if provider == 'groq':
+                payload = json.dumps({
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [{"role": "system", "content": enhanced_prompt}] + messages,
+                    "max_tokens": 4000, "temperature": 0.3
+                })
                 try:
-                    req = urllib.request.Request(
-                        "https://api.anthropic.com/v1/messages",
+                    req = urllib.request.Request("https://api.groq.com/openai/v1/chat/completions",
                         data=payload.encode('utf-8'),
-                        headers={'Content-Type':'application/json','x-api-key':api_key,'anthropic-version':'2023-06-01'},
-                        method='POST'
-                    )
-                    with urllib.request.urlopen(req, timeout=90) as resp:
+                        headers={'Content-Type':'application/json','Authorization':f'Bearer {groq_key}'},
+                        method='POST')
+                    with urllib.request.urlopen(req, timeout=60) as resp:
                         result = json.loads(resp.read().decode())
-                        text_parts = []
-                        for block in result.get('content', []):
-                            if block.get('type') == 'text':
-                                text_parts.append(block.get('text', ''))
-                        text = "\n".join(text_parts)
-                        if text:
-                            save_qa_pair(user_message, text, model_type)
+                        text = result.get('choices', [{}])[0].get('message', {}).get('content', '')
+                        if text: save_qa_pair(user_message, text, model_type)
                         return text, None
                 except urllib.request.HTTPError as he:
-                    if use_web and he.code == 400:
-                        continue  # Retry without web search
-                    error_body = he.read().decode('utf-8', errors='ignore')
-                    try:
-                        err_json = json.loads(error_body)
-                        err_msg = err_json.get('error', {}).get('message', error_body[:200])
-                    except:
-                        err_msg = error_body[:200]
-                    if he.code == 401:
-                        return None, "❌ API Key غير صالح. تأكد من المفتاح في الإعدادات"
-                    elif he.code == 429:
-                        return None, "⚠️ تم تجاوز حد الاستخدام. انتظر دقيقة أو أضف رصيد في console.anthropic.com"
-                    else:
-                        return None, f"خطأ {he.code}: {err_msg}"
+                    err = he.read().decode('utf-8', errors='ignore')[:200]
+                    if he.code == 429:
+                        # Groq rate limit - fallback to Claude
+                        if claude_key:
+                            return call_ai_api(system_prompt, user_message, chat_history, model_type, 'claude')
+                        return None, f"⚠️ حد الاستخدام المجاني. انتظر دقيقة أو أضف Claude API Key"
+                    return None, f"خطأ Groq {he.code}: {err}"
                 except Exception as e:
-                    if use_web:
-                        continue
-                    return None, f"خطأ في الاتصال: {str(e)}"
-            return None, "خطأ غير متوقع"
+                    # Fallback to Claude
+                    if claude_key:
+                        return call_ai_api(system_prompt, user_message, chat_history, model_type, 'claude')
+                    return None, f"خطأ: {e}"
 
-        # API Key check + auto-load knowledge base
+            # ===== CLAUDE (Anthropic) =====
+            else:
+                for use_web in [True, False]:
+                    payload_dict = {
+                        "model": "claude-3-5-sonnet-20241022",
+                        "max_tokens": 4000, "system": enhanced_prompt, "messages": messages,
+                    }
+                    if use_web:
+                        payload_dict["tools"] = [{"type": "web_search_20250305", "name": "web_search"}]
+                    payload = json.dumps(payload_dict)
+                    try:
+                        req = urllib.request.Request("https://api.anthropic.com/v1/messages",
+                            data=payload.encode('utf-8'),
+                            headers={'Content-Type':'application/json','x-api-key':claude_key,'anthropic-version':'2023-06-01'},
+                            method='POST')
+                        with urllib.request.urlopen(req, timeout=90) as resp:
+                            result = json.loads(resp.read().decode())
+                            text_parts = [b.get('text','') for b in result.get('content',[]) if b.get('type')=='text']
+                            text = "\n".join(text_parts)
+                            if text: save_qa_pair(user_message, text, model_type)
+                            return text, None
+                    except urllib.request.HTTPError as he:
+                        if use_web and he.code == 400: continue
+                        err = he.read().decode('utf-8', errors='ignore')
+                        try: err_msg = json.loads(err).get('error',{}).get('message',err[:200])
+                        except: err_msg = err[:200]
+                        if he.code in [401, 429] and groq_key:
+                            return call_ai_api(system_prompt, user_message, chat_history, model_type, 'groq')
+                        if he.code == 429:
+                            return None, f"⚠️ انتهى رصيد Claude. أضف رصيد أو استخدم Groq (مجاني)"
+                        return None, f"خطأ {he.code}: {err_msg}"
+                    except Exception as e:
+                        if use_web: continue
+                        if groq_key:
+                            return call_ai_api(system_prompt, user_message, chat_history, model_type, 'groq')
+                        return None, f"خطأ: {e}"
+                return None, "خطأ غير متوقع"
+
+        # Backward compatibility
+        def call_claude_api(system_prompt, user_message, chat_history=None, model_type="general"):
+            return call_ai_api(system_prompt, user_message, chat_history, model_type)
+
+        # API Keys check + auto-load
         if 'claude_api_key' not in st.session_state:
-            try:
-                api_key = st.secrets.get("anthropic", {}).get("api_key", "")
-                st.session_state.claude_api_key = api_key
-            except:
-                st.session_state.claude_api_key = ""
-            # Also try loading from DB
+            try: st.session_state.claude_api_key = st.secrets.get("anthropic", {}).get("api_key", "")
+            except: st.session_state.claude_api_key = ""
             if not st.session_state.claude_api_key:
                 try:
-                    conn = get_conn()
-                    c = conn.cursor()
+                    conn = get_conn(); c = conn.cursor()
                     c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("claude_api_key",))
-                    row = c.fetchone()
-                    conn.close()
+                    row = c.fetchone(); conn.close()
                     if row: st.session_state.claude_api_key = row[0]
                 except: pass
+
+        if 'groq_api_key' not in st.session_state:
+            try: st.session_state.groq_api_key = st.secrets.get("groq", {}).get("api_key", "")
+            except: st.session_state.groq_api_key = ""
+            if not st.session_state.groq_api_key:
+                try:
+                    conn = get_conn(); c = conn.cursor()
+                    c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("groq_api_key",))
+                    row = c.fetchone(); conn.close()
+                    if row: st.session_state.groq_api_key = row[0]
+                except: pass
+
+        if 'ai_provider' not in st.session_state:
+            st.session_state.ai_provider = 'auto'
 
         # Auto-load RAG context on first visit
         if 'rag_auto_loaded' not in st.session_state:
             st.session_state.rag_auto_loaded = True
             try:
-                conn = get_conn()
-                c = conn.cursor()
-                c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_chunks",))
-                row = c.fetchone()
-                # Also load legal docs
+                conn = get_conn(); c = conn.cursor()
                 legal_ctx = ""
                 for dk in ["labor_law","labor_regulations","social_insurance","insurance_regulations","health_insurance","minister_decisions"]:
                     c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", (f"legal_doc_{dk}",))
                     r2 = c.fetchone()
                     if r2: legal_ctx += r2[0][:5000] + "\n"
                 conn.close()
-                if legal_ctx:
-                    st.session_state['legal_docs_context'] = legal_ctx
+                if legal_ctx: st.session_state['legal_docs_context'] = legal_ctx
             except: pass
 
-        if not st.session_state.claude_api_key:
-            st.warning("⚠️ يرجى إدخال Claude API Key")
-            api_input = st.text_input("🔑 Anthropic API Key:", type="password", key="api_key_input",
-                help="احصل على API Key من https://console.anthropic.com/")
-            if api_input:
-                st.session_state.claude_api_key = api_input
-                st.rerun()
-            st.info("💡 أضف API Key في Streamlit Secrets:\n```\n[anthropic]\napi_key = \"sk-ant-...\"\n```")
+        # Check if any key is available
+        has_claude = bool(st.session_state.get('claude_api_key'))
+        has_groq = bool(st.session_state.get('groq_api_key'))
+
+        if not has_claude and not has_groq:
+            st.warning("⚠️ يرجى إدخال API Key واحد على الأقل")
+            kc1, kc2 = st.columns(2)
+            with kc1:
+                st.markdown("### 🟢 Groq (مجاني)")
+                groq_input = st.text_input("🔑 Groq API Key:", type="password", key="groq_key_input",
+                    help="مجاني من https://console.groq.com/")
+                if groq_input:
+                    st.session_state.groq_api_key = groq_input
+                    st.rerun()
+                st.caption("مجاني تماماً + Llama 3.3 70B")
+            with kc2:
+                st.markdown("### 🔵 Claude (مدفوع)")
+                claude_input = st.text_input("🔑 Anthropic API Key:", type="password", key="claude_key_input",
+                    help="من https://console.anthropic.com/")
+                if claude_input:
+                    st.session_state.claude_api_key = claude_input
+                    st.rerun()
+                st.caption("أقوى وأدق، ~$3/مليون token")
+            st.info("💡 أضف في Streamlit Secrets:\n```\n[groq]\napi_key = \"gsk_...\"\n[anthropic]\napi_key = \"sk-ant-...\"\n```")
             return
+
+        # Provider selector in sidebar-like area
+        provider_label = "🟢 Llama (Groq مجاني)" if st.session_state.ai_provider == 'groq' else ("🔵 Claude (Anthropic)" if st.session_state.ai_provider == 'claude' else "🔄 تلقائي (Groq أولاً)")
+        available_providers = ["🔄 تلقائي"]
+        if has_groq: available_providers.append("🟢 Groq (Llama 3 مجاني)")
+        if has_claude: available_providers.append("🔵 Claude (Anthropic)")
+        sel_provider = st.radio("🤖 المحرك:", available_providers, horizontal=True, key="provider_sel")
+        if "Groq" in sel_provider: st.session_state.ai_provider = 'groq'
+        elif "Claude" in sel_provider: st.session_state.ai_provider = 'claude'
+        else: st.session_state.ai_provider = 'auto'
 
         # ===== MODEL 1: Labor Law Consultant =====
         if page == "⚖️ مستشار القضايا العمالية":
@@ -7130,23 +7192,38 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 
             # API Key management
             st.markdown("---")
-            st.markdown("### 🔑 إعدادات API")
-            current_key = st.session_state.get('claude_api_key', '')
-            masked = f"sk-ant-...{current_key[-8:]}" if len(current_key) > 10 else "غير مُعيّن"
-            st.caption(f"المفتاح الحالي: {masked}")
-
-            new_key = st.text_input("تحديث API Key:", type="password", key="new_api_key")
-            if st.button("💾 حفظ API Key", key="save_api"):
-                if new_key:
-                    st.session_state.claude_api_key = new_key
-                    try:
-                        conn = get_conn()
-                        c = conn.cursor()
-                        _upsert_config(c, "claude_api_key", new_key)
-                        conn.commit()
-                        conn.close()
-                    except: pass
-                    st.success("✅ تم حفظ API Key")
+            st.markdown("### 🔑 إعدادات API Keys")
+            kc1, kc2 = st.columns(2)
+            with kc1:
+                st.markdown("**🟢 Groq (مجاني)**")
+                cur_groq = st.session_state.get('groq_api_key','')
+                masked_g = f"gsk_...{cur_groq[-6:]}" if len(cur_groq)>8 else "غير مُعيّن"
+                st.caption(f"الحالي: {masked_g}")
+                new_groq = st.text_input("Groq API Key:", type="password", key="new_groq_key")
+                if st.button("💾 حفظ Groq Key", key="save_groq"):
+                    if new_groq:
+                        st.session_state.groq_api_key = new_groq
+                        try:
+                            conn = get_conn(); c = conn.cursor()
+                            _upsert_config(c, "groq_api_key", new_groq)
+                            conn.commit(); conn.close()
+                        except: pass
+                        st.success("✅ تم حفظ Groq API Key")
+            with kc2:
+                st.markdown("**🔵 Claude (مدفوع)**")
+                cur_claude = st.session_state.get('claude_api_key','')
+                masked_c = f"sk-ant-...{cur_claude[-8:]}" if len(cur_claude)>10 else "غير مُعيّن"
+                st.caption(f"الحالي: {masked_c}")
+                new_key = st.text_input("Claude API Key:", type="password", key="new_api_key")
+                if st.button("💾 حفظ Claude Key", key="save_api"):
+                    if new_key:
+                        st.session_state.claude_api_key = new_key
+                        try:
+                            conn = get_conn(); c = conn.cursor()
+                            _upsert_config(c, "claude_api_key", new_key)
+                            conn.commit(); conn.close()
+                        except: pass
+                        st.success("✅ تم حفظ Claude API Key")
 
 
     # =========================================
