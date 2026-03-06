@@ -1937,7 +1937,7 @@ def main():
     # =========================================
     if section == "📊 التحليلات العامة":
         if page == "🏠 نظرة عامة":
-            hdr("📊 نظرة عامة","ملخص شامل لبيانات القوى العاملة")
+            hdr("📊 لوحة التحليلات الشاملة","Dashboard احترافي بأسلوب Power BI")
             if n==0 and len(sal_df)==0:
                 st.info("📁 ارفع ملف بيانات الموظفين أو ملف الرواتب من القائمة الجانبية")
                 return
@@ -1945,50 +1945,215 @@ def main():
             data = sal_snapshot if len(sal_snapshot)>0 else emp
             total = len(data)
 
-            cols = st.columns(4)
-            with cols[0]: st.metric("👥 الموظفين", total)
-            with cols[1]:
-                dept_col = 'القسم' if has(data,'القسم') else ('القطاع' if has(data,'القطاع') else None)
-                st.metric("🏢 الأقسام/القطاعات", data[dept_col].nunique() if dept_col else '-')
-            with cols[2]:
-                if has(data,'الجنسية'):
-                    sa = data[data['الجنسية'].isin(['Saudi','سعودي','سعودية'])]
-                    st.metric("🇸🇦 السعودة", f"{round(len(sa)/max(total,1)*100,1)}%")
-                elif has(data,'الموقع'):
-                    sa = data[data['الموقع'].isin(['Jeddah','Riyadh','جدة','الرياض'])]
-                    st.metric("📍 في السعودية", f"{round(len(sa)/max(total,1)*100,1)}%")
-                else: st.metric("📋 الأوراق", len(all_sheets))
-            with cols[3]:
-                if has(data,'الراتب الإجمالي'): st.metric("💰 إجمالي الرواتب", f"{data['الراتب الإجمالي'].sum():,.0f}")
-                elif has(data,'الراتب الأساسي'): st.metric("💰 متوسط الراتب", f"{data['الراتب الأساسي'].mean():,.0f}")
-                elif has(data,'سنوات الخدمة'): st.metric("📅 متوسط الخدمة", f"{data['سنوات الخدمة'].mean():.1f}")
-                else: st.metric("📋 أعمدة", len(data.columns))
+            # Auto-detect columns
+            dept_col = next((c for c in data.columns if any(x in c.lower() for x in ['dept','department','قسم','القطاع'])), None)
+            nat_col = next((c for c in data.columns if any(x in c.lower() for x in ['nat','جنسية','nationality'])), None)
+            sal_col = next((c for c in data.select_dtypes('number').columns if any(x in c.lower() for x in ['gross','salary','net','راتب','إجمالي'])), None)
+            status_col = next((c for c in data.columns if any(x in c.lower() for x in ['status','حالة'])), None)
+            loc_col = next((c for c in data.columns if any(x in c.lower() for x in ['location','موقع','مدينة','city'])), None)
+            gender_col = next((c for c in data.columns if any(x in c.lower() for x in ['gender','جنس'])), None)
+            type_col = next((c for c in data.columns if any(x in c.lower() for x in ['employment type','نوع التوظيف','type'])), None)
+            level_col = next((c for c in data.columns if any(x in c.lower() for x in ['level','مستوى','grade','درجة'])), None)
+            age_col = next((c for c in data.columns if any(x in c.lower() for x in ['age','عمر','age group'])), None)
+            join_col = next((c for c in data.columns if any(x in c.lower() for x in ['join','hiring','التحاق','مباشرة'])), None)
 
-            if dept_col:
-                c1,c2 = st.columns(2)
-                with c1:
-                    dc = data[dept_col].value_counts().reset_index(); dc.columns=[dept_col,'العدد']
-                    fig = px.pie(dc, values='العدد', names=dept_col, title=f'توزيع الموظفين حسب {dept_col}', hole=.4, color_discrete_sequence=CL['dept'])
-                    fig.update_layout(font=dict(family="Noto Sans Arabic"),height=380); st.plotly_chart(fig,use_container_width=True)
-                with c2:
-                    if has(data,'الجنسية'):
-                        nc = data['الجنسية'].value_counts().reset_index(); nc.columns=['الجنسية','العدد']
-                        fig = px.pie(nc, values='العدد', names='الجنسية', title='توزيع الجنسيات', hole=.4, color_discrete_sequence=CL['sal'])
-                        fig.update_layout(font=dict(family="Noto Sans Arabic"),height=380); st.plotly_chart(fig,use_container_width=True)
-                    elif has(data,'الموقع'):
-                        lc = data['الموقع'].value_counts().reset_index(); lc.columns=['الموقع','العدد']
-                        fig = px.pie(lc, values='العدد', names='الموقع', title='التوزيع الجغرافي', hole=.4)
-                        fig.update_layout(font=dict(family="Noto Sans Arabic"),height=380); st.plotly_chart(fig,use_container_width=True)
+            # ===== ROW 1: KPIs =====
+            sa_count = 0; sa_pct = 0; active_count = total
+            if nat_col:
+                sa_count = len(data[data[nat_col].isin(['Saudi','سعودي','Saudi Arabian','سعودية'])])
+                sa_pct = round(sa_count/max(total,1)*100,1)
+            if status_col:
+                active_count = len(data[data[status_col].isin(['Active','نشط','active'])])
 
-        elif page == "📊 الأقسام":
-            hdr("📊 تحليل الأقسام")
-            data = sal_snapshot if len(sal_snapshot)>0 else emp
-            if len(data)==0: st.info("📁 ارفع ملف"); return
-            dept_col = 'القسم' if has(data,'القسم') else ('القطاع' if has(data,'القطاع') else None)
-            if dept_col:
-                dc = data[dept_col].value_counts().reset_index(); dc.columns=[dept_col,'العدد']
-                fig = px.bar(dc.sort_values('العدد'), x='العدد', y=dept_col, orientation='h', color='العدد', color_continuous_scale='teal', title=f'حجم كل {dept_col}')
-                fig.update_layout(font=dict(family="Noto Sans Arabic"),height=500); st.plotly_chart(fig,use_container_width=True)
+            k1,k2,k3,k4,k5,k6 = st.columns(6)
+            with k1: kpi("👥 إجمالي السجلات", f"{total:,}")
+            with k2: kpi("✅ نشط", f"{active_count:,}")
+            with k3: kpi("🏢 الأقسام", str(data[dept_col].nunique()) if dept_col else "-")
+            with k4: kpi("🇸🇦 السعودة", f"{sa_pct}%")
+            with k5: kpi("💰 متوسط الراتب", f"{data[sal_col].mean():,.0f}" if sal_col else "-")
+            with k6: kpi("💵 إجمالي الرواتب", f"{data[sal_col].sum():,.0f}" if sal_col else "-")
+
+            st.markdown("---")
+
+            # ===== ROW 2: Dept + Nationality =====
+            r2c1, r2c2 = st.columns(2)
+            with r2c1:
+                if dept_col:
+                    dc = data[dept_col].value_counts().head(15).reset_index()
+                    dc.columns = [dept_col, 'العدد']
+                    fig = px.bar(dc.sort_values('العدد'), x='العدد', y=dept_col, orientation='h',
+                        color='العدد', color_continuous_scale='teal', title='📊 Headcount حسب القسم')
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=420, showlegend=False, coloraxis_showscale=False)
+                    st.plotly_chart(fig, use_container_width=True)
+            with r2c2:
+                if nat_col:
+                    nc = data[nat_col].value_counts().head(10).reset_index()
+                    nc.columns = [nat_col, 'العدد']
+                    fig = px.pie(nc, values='العدد', names=nat_col, title='🌍 توزيع الجنسيات', hole=0.4,
+                        color_discrete_sequence=px.colors.qualitative.Set2)
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=420)
+                    st.plotly_chart(fig, use_container_width=True)
+
+            # ===== ROW 3: Status + Location =====
+            r3c1, r3c2 = st.columns(2)
+            with r3c1:
+                if status_col:
+                    sc = data[status_col].value_counts().reset_index()
+                    sc.columns = [status_col, 'العدد']
+                    fig = px.pie(sc, values='العدد', names=status_col, title='📋 حالة التوظيف', hole=0.5,
+                        color_discrete_sequence=['#27AE60','#E74C3C','#F39C12','#3498DB','#95A5A6'])
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380)
+                    st.plotly_chart(fig, use_container_width=True)
+                elif type_col:
+                    tc = data[type_col].value_counts().reset_index()
+                    tc.columns = [type_col, 'العدد']
+                    fig = px.pie(tc, values='العدد', names=type_col, title='📋 نوع التوظيف', hole=0.5,
+                        color_discrete_sequence=CL['dept'])
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380)
+                    st.plotly_chart(fig, use_container_width=True)
+            with r3c2:
+                if loc_col:
+                    lc = data[loc_col].value_counts().head(10).reset_index()
+                    lc.columns = [loc_col, 'العدد']
+                    fig = px.bar(lc, x=loc_col, y='العدد', title='📍 التوزيع الجغرافي', color='العدد',
+                        color_continuous_scale='oranges')
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380, showlegend=False, coloraxis_showscale=False)
+                    st.plotly_chart(fig, use_container_width=True)
+
+            # ===== ROW 4: Salary Distribution + Gender =====
+            r4c1, r4c2 = st.columns(2)
+            with r4c1:
+                if sal_col:
+                    fig = px.histogram(data, x=sal_col, nbins=25, title='💰 توزيع الرواتب',
+                        color_discrete_sequence=['#E36414'])
+                    fig.add_vline(x=data[sal_col].mean(), line_dash="dash", line_color="red",
+                        annotation_text=f"المتوسط: {data[sal_col].mean():,.0f}")
+                    fig.add_vline(x=data[sal_col].median(), line_dash="dot", line_color="blue",
+                        annotation_text=f"الوسيط: {data[sal_col].median():,.0f}")
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380)
+                    st.plotly_chart(fig, use_container_width=True)
+            with r4c2:
+                if gender_col:
+                    gc = data[gender_col].value_counts().reset_index()
+                    gc.columns = [gender_col, 'العدد']
+                    fig = px.pie(gc, values='العدد', names=gender_col, title='👫 التوزيع حسب الجنس', hole=0.5,
+                        color_discrete_map={'Male':'#3498DB','Female':'#E91E8F','ذكر':'#3498DB','أنثى':'#E91E8F'})
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380)
+                    st.plotly_chart(fig, use_container_width=True)
+                elif type_col and not (status_col):
+                    tc = data[type_col].value_counts().reset_index()
+                    tc.columns = [type_col, 'العدد']
+                    fig = px.bar(tc, x=type_col, y='العدد', title='📋 نوع التوظيف', color=type_col,
+                        color_discrete_sequence=CL['dept'])
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380, showlegend=False)
+                    st.plotly_chart(fig, use_container_width=True)
+
+            # ===== ROW 5: Salary by Department + Saudization by Dept =====
+            r5c1, r5c2 = st.columns(2)
+            with r5c1:
+                if sal_col and dept_col:
+                    top_depts = data[dept_col].value_counts().head(10).index
+                    fig = px.box(data[data[dept_col].isin(top_depts)], x=dept_col, y=sal_col,
+                        title='💰 نطاق الرواتب حسب القسم', color_discrete_sequence=['#E9C46A'])
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=420, xaxis_tickangle=-45)
+                    st.plotly_chart(fig, use_container_width=True)
+            with r5c2:
+                if nat_col and dept_col:
+                    saudi_vals = ['Saudi','سعودي','Saudi Arabian','سعودية']
+                    sa_dept = data.groupby(dept_col).apply(lambda x: round(len(x[x[nat_col].isin(saudi_vals)])/max(len(x),1)*100,1)).reset_index()
+                    sa_dept.columns = [dept_col, 'نسبة السعودة %']
+                    sa_dept = sa_dept.sort_values('نسبة السعودة %', ascending=True)
+                    fig = px.bar(sa_dept, x='نسبة السعودة %', y=dept_col, orientation='h',
+                        title='🇸🇦 نسبة السعودة حسب القسم', color='نسبة السعودة %',
+                        color_continuous_scale='RdYlGn', range_color=[0,100])
+                    fig.add_vline(x=50, line_dash="dash", line_color="red", annotation_text="الحد الأدنى 50%")
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=420, coloraxis_showscale=False)
+                    st.plotly_chart(fig, use_container_width=True)
+
+            # ===== ROW 6: Age/Level + Employment Type =====
+            r6c1, r6c2 = st.columns(2)
+            with r6c1:
+                if age_col:
+                    age_data = data[age_col].value_counts().sort_index().reset_index()
+                    age_data.columns = [age_col, 'العدد']
+                    fig = px.bar(age_data, x=age_col, y='العدد', title='📊 التوزيع العمري',
+                        color='العدد', color_continuous_scale='viridis')
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380, showlegend=False, coloraxis_showscale=False)
+                    st.plotly_chart(fig, use_container_width=True)
+                elif level_col:
+                    lv_data = data[level_col].value_counts().reset_index()
+                    lv_data.columns = [level_col, 'العدد']
+                    fig = px.funnel(lv_data, x='العدد', y=level_col, title='📊 التوزيع حسب المستوى الوظيفي',
+                        color_discrete_sequence=['#E36414'])
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380)
+                    st.plotly_chart(fig, use_container_width=True)
+            with r6c2:
+                if sal_col and nat_col:
+                    fig = px.violin(data, y=sal_col, x=nat_col if data[nat_col].nunique() <= 8 else None,
+                        title='📊 توزيع الرواتب (Violin)', color_discrete_sequence=['#2A9D8F'], box=True)
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380)
+                    st.plotly_chart(fig, use_container_width=True)
+                elif sal_col:
+                    fig = px.violin(data, y=sal_col, title='📊 توزيع الرواتب (Violin)',
+                        color_discrete_sequence=['#2A9D8F'], box=True, points='all')
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380)
+                    st.plotly_chart(fig, use_container_width=True)
+
+            # ===== ROW 7: Hiring Trend + Treemap =====
+            r7c1, r7c2 = st.columns(2)
+            with r7c1:
+                if join_col:
+                    data['_join_dt'] = pd.to_datetime(data[join_col], errors='coerce')
+                    valid = data.dropna(subset=['_join_dt'])
+                    if len(valid) > 0:
+                        valid['_join_month'] = valid['_join_dt'].dt.to_period('M').astype(str)
+                        monthly = valid.groupby('_join_month').size().reset_index(name='العدد')
+                        fig = px.area(monthly, x='_join_month', y='العدد', title='📈 اتجاه التوظيف الشهري',
+                            color_discrete_sequence=['#E36414'])
+                        fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380, xaxis_title="الشهر")
+                        st.plotly_chart(fig, use_container_width=True)
+            with r7c2:
+                if dept_col and nat_col:
+                    tree = data.groupby([dept_col, nat_col]).size().reset_index(name='العدد')
+                    tree = tree[tree['العدد'] > 0]
+                    fig = px.treemap(tree, path=[dept_col, nat_col], values='العدد',
+                        title='🗺️ خريطة شجرية: الأقسام × الجنسيات',
+                        color='العدد', color_continuous_scale='teal')
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=420)
+                    st.plotly_chart(fig, use_container_width=True)
+                elif dept_col and loc_col:
+                    tree = data.groupby([dept_col, loc_col]).size().reset_index(name='العدد')
+                    tree = tree[tree['العدد'] > 0]
+                    fig = px.treemap(tree, path=[dept_col, loc_col], values='العدد',
+                        title='🗺️ خريطة شجرية: الأقسام × المواقع',
+                        color='العدد', color_continuous_scale='oranges')
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=420)
+                    st.plotly_chart(fig, use_container_width=True)
+
+            # ===== ROW 8: Heatmap + Scatter =====
+            if sal_col and dept_col:
+                r8c1, r8c2 = st.columns(2)
+                with r8c1:
+                    if nat_col:
+                        hm = data.groupby([dept_col, nat_col]).size().unstack(fill_value=0)
+                        fig = px.imshow(hm, title='🔥 خريطة حرارية: الأقسام × الجنسيات',
+                            color_continuous_scale='YlOrRd', aspect='auto')
+                        fig.update_layout(font=dict(family="Noto Sans Arabic"), height=420)
+                        st.plotly_chart(fig, use_container_width=True)
+                with r8c2:
+                    dept_stats = data.groupby(dept_col).agg(
+                        count=(sal_col,'count'), avg_sal=(sal_col,'mean'), total=(sal_col,'sum')
+                    ).reset_index()
+                    dept_stats['cost_pct'] = dept_stats['total'] / dept_stats['total'].sum() * 100
+                    dept_stats['head_pct'] = dept_stats['count'] / dept_stats['count'].sum() * 100
+                    fig = px.scatter(dept_stats, x='head_pct', y='cost_pct', size='count', color=dept_col,
+                        title='⚖️ نسبة العدد مقابل التكلفة', hover_data=['avg_sal'],
+                        color_discrete_sequence=CL['dept'])
+                    fig.add_trace(go.Scatter(x=[0,50], y=[0,50], mode='lines',
+                        line=dict(dash='dash', color='gray'), name='خط التوازن', showlegend=False))
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=420,
+                        xaxis_title="% من العدد", yaxis_title="% من التكلفة")
+                    st.plotly_chart(fig, use_container_width=True)
 
         elif page == "🤖 المحلل الذكي":
             hdr("🤖 المحلل الذكي","يبحث في كل الأوراق")
@@ -5928,71 +6093,178 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                                 mime="text/html", use_container_width=True,
                                 help="افتح الملف في المتصفح وسيفتح نافذة الطباعة تلقائياً - اختر Save as PDF")
 
-                        # 3. Excel (multi-sheet with all data)
+                        # 3. Excel (multi-sheet with charts matching dashboard)
                         with ex3:
                             ox = io.BytesIO()
                             with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
                                 wb = w.book
                                 hdr_f = wb.add_format({'bold':True,'font_size':12,'bg_color':'#0F4C5C','font_color':'white','align':'center','border':1})
-                                num_f = wb.add_format({'num_format':'#,##0.00','border':1})
+                                sub_f = wb.add_format({'bold':True,'font_size':10,'bg_color':'#264653','font_color':'white','align':'center','border':1})
+                                num_f = wb.add_format({'num_format':'#,##0.00','border':1,'align':'center'})
+                                pct_f = wb.add_format({'num_format':'0.0%','border':1,'align':'center'})
+                                txt_f = wb.add_format({'border':1,'text_wrap':True})
 
-                                # Sheet 1: Executive Summary
-                                ws1 = wb.add_worksheet('Executive Summary')
-                                ws1.set_column('A:B', 30)
-                                ws1.merge_range('A1:B1', rpt_title, hdr_f)
-                                ws1.write('A2', 'Company', wb.add_format({'bold':True}))
-                                ws1.write('B2', rpt_company)
-                                ws1.write('A3', 'Period'); ws1.write('B3', rpt_period)
-                                ws1.write('A4', 'Generated'); ws1.write('B4', datetime.now().strftime('%Y-%m-%d %H:%M'))
-                                kpi_items = [('Total Records', n), ('Active Employees', active_count),
-                                    ('Departments', n_depts), ('Avg Salary', f"{avg_sal:,.0f}"),
-                                    ('Total Payroll', f"{total_payroll:,.0f}"), ('Saudization %', f"{sa_pct}%")]
+                                # ===== Sheet 1: Dashboard =====
+                                ws1 = wb.add_worksheet('Dashboard')
+                                ws1.set_column('A:A', 25); ws1.set_column('B:G', 18)
+                                ws1.set_tab_color('#E36414')
+                                ws1.merge_range('A1:F1', rpt_title, hdr_f)
+                                ws1.merge_range('A2:F2', f'{rpt_company} | {rpt_period} | {datetime.now().strftime("%Y-%m-%d")}', sub_f)
+
+                                # KPIs row
+                                kpi_items = [('Total Records', n), ('Active', active_count), ('Departments', n_depts),
+                                    ('Avg Salary', round(avg_sal)), ('Total Payroll', round(total_payroll)), ('Saudization', f"{sa_pct}%")]
                                 for i, (lbl, val) in enumerate(kpi_items):
-                                    ws1.write(5+i, 0, lbl, wb.add_format({'bold':True,'border':1}))
-                                    ws1.write(5+i, 1, str(val), wb.add_format({'border':1}))
+                                    ws1.write(3, i, lbl, wb.add_format({'bold':True,'bg_color':'#E9C46A','align':'center','border':1}))
+                                    ws1.write(4, i, str(val), wb.add_format({'bold':True,'font_size':14,'align':'center','border':1}))
 
-                                # Sheet 2: AI Insights
-                                ws2 = wb.add_worksheet('AI Insights')
-                                ws2.set_column('A:A', 80)
-                                ws2.write('A1', 'AI-Powered Insights', hdr_f)
+                                # Dept data for chart
+                                if dept_col:
+                                    dept_counts = emp[dept_col].value_counts().head(12)
+                                    ws1.write(6, 0, 'Department', sub_f); ws1.write(6, 1, 'Headcount', sub_f)
+                                    if sal_col: ws1.write(6, 2, 'Avg Salary', sub_f)
+                                    for j, (dept, cnt) in enumerate(dept_counts.items()):
+                                        ws1.write(7+j, 0, dept, txt_f)
+                                        ws1.write(7+j, 1, cnt, wb.add_format({'border':1,'align':'center'}))
+                                        if sal_col:
+                                            avg = emp[emp[dept_col]==dept][sal_col].mean()
+                                            ws1.write(7+j, 2, round(avg,0), num_f)
+
+                                    # Chart 1: Dept headcount bar
+                                    chart1 = wb.add_chart({'type':'bar'})
+                                    chart1.add_series({'name':'Headcount','categories':['Dashboard',7,0,6+len(dept_counts),0],
+                                        'values':['Dashboard',7,1,6+len(dept_counts),1],'fill':{'color':'#2A9D8F'}})
+                                    chart1.set_title({'name':'Headcount by Department'})
+                                    chart1.set_style(10); chart1.set_size({'width':520,'height':320})
+                                    chart1.set_legend({'none':True})
+                                    ws1.insert_chart('E7', chart1)
+
+                                    # Chart 2: Salary by dept
+                                    if sal_col:
+                                        chart2 = wb.add_chart({'type':'column'})
+                                        chart2.add_series({'name':'Avg Salary','categories':['Dashboard',7,0,6+len(dept_counts),0],
+                                            'values':['Dashboard',7,2,6+len(dept_counts),2],'fill':{'color':'#E36414'}})
+                                        chart2.set_title({'name':'Average Salary by Department'})
+                                        chart2.set_style(10); chart2.set_size({'width':520,'height':320})
+                                        chart2.set_legend({'none':True})
+                                        ws1.insert_chart('E24', chart2)
+
+                                # ===== Sheet 2: Charts Data =====
+                                ws2 = wb.add_worksheet('Charts')
+                                ws2.set_tab_color('#2A9D8F')
+                                col_offset = 0
+
+                                # Nationality data + pie chart
+                                if nat_col:
+                                    nat_counts = emp[nat_col].value_counts().head(10)
+                                    ws2.write(0, 0, 'Nationality', sub_f); ws2.write(0, 1, 'Count', sub_f); ws2.write(0, 2, '%', sub_f)
+                                    for j, (nat, cnt) in enumerate(nat_counts.items()):
+                                        ws2.write(1+j, 0, nat, txt_f)
+                                        ws2.write(1+j, 1, cnt, wb.add_format({'border':1,'align':'center'}))
+                                        ws2.write(1+j, 2, cnt/n, pct_f)
+                                    chart3 = wb.add_chart({'type':'pie'})
+                                    chart3.add_series({'name':'Nationality','categories':['Charts',1,0,len(nat_counts),0],
+                                        'values':['Charts',1,1,len(nat_counts),1],'data_labels':{'percentage':True}})
+                                    chart3.set_title({'name':'Nationality Distribution'})
+                                    chart3.set_size({'width':480,'height':320})
+                                    ws2.insert_chart('E1', chart3)
+
+                                # Status data + pie chart
+                                if status_col:
+                                    stat_counts = emp[status_col].value_counts()
+                                    r_start = len(nat_counts) + 3 if nat_col else 0
+                                    ws2.write(r_start, 0, 'Status', sub_f); ws2.write(r_start, 1, 'Count', sub_f)
+                                    for j, (st_name, cnt) in enumerate(stat_counts.items()):
+                                        ws2.write(r_start+1+j, 0, st_name, txt_f)
+                                        ws2.write(r_start+1+j, 1, cnt, wb.add_format({'border':1,'align':'center'}))
+                                    chart4 = wb.add_chart({'type':'pie'})
+                                    chart4.add_series({'name':'Status','categories':['Charts',r_start+1,0,r_start+len(stat_counts),0],
+                                        'values':['Charts',r_start+1,1,r_start+len(stat_counts),1],'data_labels':{'percentage':True}})
+                                    chart4.set_title({'name':'Employment Status'})
+                                    chart4.set_size({'width':480,'height':320})
+                                    ws2.insert_chart('E' + str(r_start + 1), chart4)
+
+                                # Location data + bar chart
+                                if loc_col:
+                                    loc_counts = emp[loc_col].value_counts().head(8)
+                                    r_start2 = (r_start + len(stat_counts) + 3) if status_col else (len(nat_counts) + 3 if nat_col else 0)
+                                    ws2.write(r_start2, 0, 'Location', sub_f); ws2.write(r_start2, 1, 'Count', sub_f)
+                                    for j, (loc, cnt) in enumerate(loc_counts.items()):
+                                        ws2.write(r_start2+1+j, 0, loc, txt_f)
+                                        ws2.write(r_start2+1+j, 1, cnt, wb.add_format({'border':1,'align':'center'}))
+                                    chart5 = wb.add_chart({'type':'column'})
+                                    chart5.add_series({'name':'Location','categories':['Charts',r_start2+1,0,r_start2+len(loc_counts),0],
+                                        'values':['Charts',r_start2+1,1,r_start2+len(loc_counts),1],'fill':{'color':'#E9C46A'}})
+                                    chart5.set_title({'name':'Distribution by Location'})
+                                    chart5.set_size({'width':480,'height':320}); chart5.set_legend({'none':True})
+                                    ws2.insert_chart('E' + str(r_start2 + 1), chart5)
+
+                                # Salary histogram data
+                                if sal_col:
+                                    ws3 = wb.add_worksheet('Salary Analysis')
+                                    ws3.set_tab_color('#E36414')
+                                    sal_stats = [('Average', emp[sal_col].mean()), ('Median', emp[sal_col].median()),
+                                        ('Min', emp[sal_col].min()), ('Max', emp[sal_col].max()),
+                                        ('Std Dev', emp[sal_col].std()), ('Total', emp[sal_col].sum())]
+                                    ws3.write(0, 0, 'Salary Statistics', hdr_f); ws3.merge_range('A1:B1', 'Salary Statistics', hdr_f)
+                                    for j, (lbl, val) in enumerate(sal_stats):
+                                        ws3.write(1+j, 0, lbl, wb.add_format({'bold':True,'border':1}))
+                                        ws3.write(1+j, 1, round(val,2), num_f)
+
+                                    # Salary bands for chart
+                                    bands = pd.cut(emp[sal_col], bins=8).value_counts().sort_index()
+                                    ws3.write(8, 0, 'Salary Band', sub_f); ws3.write(8, 1, 'Count', sub_f)
+                                    for j, (band, cnt) in enumerate(bands.items()):
+                                        ws3.write(9+j, 0, str(band), txt_f)
+                                        ws3.write(9+j, 1, cnt, wb.add_format({'border':1,'align':'center'}))
+                                    chart6 = wb.add_chart({'type':'column'})
+                                    chart6.add_series({'name':'Distribution','categories':['Salary Analysis',9,0,8+len(bands),0],
+                                        'values':['Salary Analysis',9,1,8+len(bands),1],'fill':{'color':'#E36414'}})
+                                    chart6.set_title({'name':'Salary Distribution'})
+                                    chart6.set_size({'width':600,'height':350}); chart6.set_legend({'none':True})
+                                    ws3.insert_chart('D1', chart6)
+
+                                    # Salary by dept box-like (min/avg/max)
+                                    if dept_col:
+                                        dept_sal = emp.groupby(dept_col)[sal_col].agg(['min','mean','max','count']).sort_values('count',ascending=False).head(10).reset_index()
+                                        r = 9 + len(bands) + 2
+                                        ws3.write(r, 0, 'Department', sub_f); ws3.write(r, 1, 'Min', sub_f)
+                                        ws3.write(r, 2, 'Avg', sub_f); ws3.write(r, 3, 'Max', sub_f)
+                                        for j, (_, row) in enumerate(dept_sal.iterrows()):
+                                            ws3.write(r+1+j, 0, row[dept_col], txt_f)
+                                            ws3.write(r+1+j, 1, round(row['min'],0), num_f)
+                                            ws3.write(r+1+j, 2, round(row['mean'],0), num_f)
+                                            ws3.write(r+1+j, 3, round(row['max'],0), num_f)
+                                        chart7 = wb.add_chart({'type':'column'})
+                                        for ci, (col_name, color) in enumerate([('Min','#3498DB'),('Avg','#E36414'),('Max','#27AE60')]):
+                                            chart7.add_series({'name':col_name,'categories':['Salary Analysis',r+1,0,r+len(dept_sal),0],
+                                                'values':['Salary Analysis',r+1,1+ci,r+len(dept_sal),1+ci],'fill':{'color':color}})
+                                        chart7.set_title({'name':'Salary Range by Department (Min/Avg/Max)'})
+                                        chart7.set_size({'width':600,'height':350})
+                                        ws3.insert_chart('D' + str(r+1), chart7)
+
+                                # ===== Sheet: AI Insights =====
+                                ws_ai = wb.add_worksheet('AI Insights')
+                                ws_ai.set_column('A:A', 90); ws_ai.set_tab_color('#264653')
+                                ws_ai.write('A1', 'AI-Powered Insights', hdr_f)
                                 for i, ins in enumerate(insights):
                                     clean = ins.replace('<strong>','').replace('</strong>','')
-                                    ws2.write(i+1, 0, clean)
+                                    ws_ai.write(i+2, 0, f"• {clean}", wb.add_format({'text_wrap':True,'font_size':11}))
 
-                                # Sheet 3: Department Analysis
-                                if dept_col:
-                                    dept_data = emp.groupby(dept_col).agg(
-                                        Count=(dept_col,'count'),
-                                        **({f'Avg Salary': (sal_col,'mean'), f'Total Salary': (sal_col,'sum'),
-                                            f'Min Salary': (sal_col,'min'), f'Max Salary': (sal_col,'max')} if sal_col else {})
-                                    ).sort_values('Count', ascending=False).reset_index()
-                                    dept_data['% of Total'] = (dept_data['Count'] / n * 100).round(1)
-                                    dept_data.to_excel(w, sheet_name='Dept Analysis', index=False)
-
-                                # Sheet 4: Full Data
+                                # ===== Sheet: Raw Data =====
                                 emp.to_excel(w, sheet_name='Raw Data', index=False)
 
-                                # Sheet 5: Nationality
-                                if nat_col:
-                                    nat_data = emp[nat_col].value_counts().reset_index()
-                                    nat_data.columns = ['Nationality','Count']
-                                    nat_data['%'] = (nat_data['Count'] / n * 100).round(1)
-                                    nat_data.to_excel(w, sheet_name='Nationality', index=False)
+                                # ===== Sheet: Dept Detail =====
+                                if dept_col:
+                                    dept_full = emp.groupby(dept_col).agg(
+                                        Count=(dept_col,'count'),
+                                        **({f'Avg Salary': (sal_col,'mean'), f'Total Salary': (sal_col,'sum'),
+                                            f'Min': (sal_col,'min'), f'Max': (sal_col,'max'), f'Median': (sal_col,'median')} if sal_col else {})
+                                    ).sort_values('Count', ascending=False).reset_index()
+                                    dept_full['%'] = (dept_full['Count'] / n * 100).round(1)
+                                    dept_full.to_excel(w, sheet_name='Dept Detail', index=False)
 
-                                # Sheet 6: Status
-                                if status_col:
-                                    stat_data = emp[status_col].value_counts().reset_index()
-                                    stat_data.columns = ['Status','Count']
-                                    stat_data.to_excel(w, sheet_name='Status', index=False)
-
-                                # Sheet 7: Salary Stats
-                                if num_cols:
-                                    desc = emp[num_cols].describe().T
-                                    desc.to_excel(w, sheet_name='Salary Statistics')
-
-                                # Format all sheets
-                                for sname in w.sheets:
-                                    w.sheets[sname].set_column('A:Z', 18)
+                                for sname in w.sheets: w.sheets[sname].set_column('A:Z', 18)
 
                             st.download_button("📊 Excel Report", data=ox.getvalue(),
                                 file_name=f"{rpt_title}_{datetime.now().strftime('%Y%m%d')}.xlsx",
@@ -7277,3 +7549,4 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
 
 if __name__ == "__main__":
     main()
+
