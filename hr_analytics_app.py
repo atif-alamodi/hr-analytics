@@ -843,7 +843,7 @@ ROLE_DESCRIPTIONS = {
 }
 
 ALL_SECTIONS = ["📊 التحليلات العامة","💰 تحليل الرواتب","👥 Headcount","⚖️ حاسبة المستحقات",
-    "📚 التدريب والتطوير","🎯 التوظيف","🚀 Onboarding","📜 العقود","🔍 التحليل العام","📝 الاستبيانات","🧠 اختبارات الشخصية","📤 التقارير والتصدير"]
+    "📚 التدريب والتطوير","🎯 التوظيف","🚀 Onboarding","📜 العقود","✈️ رحلات العمل","🔍 التحليل العام","📝 الاستبيانات","🧠 اختبارات الشخصية","📤 التقارير والتصدير"]
 
 # Email sending function
 def send_test_email(to_email, emp_name, tests, deadline, assigned_by, app_url=""):
@@ -1765,6 +1765,8 @@ def main():
             page = st.radio("📌", ["🚀 إنشاء Onboarding","📋 خطة 30/60/90","👥 متابعة الموظفين الجدد","📊 تحليلات Onboarding","🎬 عرض تقديمي AI","🏢 معلومات الشركة","📥 تصدير Onboarding"], label_visibility="collapsed")
         elif section == "📜 العقود":
             page = st.radio("📌", ["📜 إنشاء عقد","🔍 تحليل العقود","📋 العقود المحفوظة","📥 تصدير العقود"], label_visibility="collapsed")
+        elif section == "✈️ رحلات العمل":
+            page = st.radio("📌", ["✈️ تسجيل رحلة","📊 تحليل الرحلات","📥 تصدير الرحلات"], label_visibility="collapsed")
         elif section == "🔍 التحليل العام":
             page = st.radio("📌", ["📊 تحليل تلقائي","🤖 أسئلة ذكية"], label_visibility="collapsed")
         elif section == "📝 الاستبيانات":
@@ -2928,19 +2930,84 @@ def main():
     elif section == "⚖️ حاسبة المستحقات":
         hdr("⚖️ الحاسبة العمالية الشاملة","مطابقة لحاسبة وزارة العدل - نظام العمل السعودي")
 
+        # ===== Auto-fill from uploaded data =====
+        data_source = sal_snapshot if len(sal_snapshot)>0 else emp
+        auto_filled = False
+        auto_vals = {}
+
+        if len(data_source) > 0:
+            st.markdown("### 🔍 بحث عن موظف من البيانات المرفوعة")
+            search_method = st.radio("طريقة البحث:", ["يدوي (بدون بحث)","بحث بالاسم","بحث بالرقم الوظيفي"], horizontal=True, key="calc_search")
+
+            if search_method != "يدوي (بدون بحث)":
+                # Detect name and ID columns
+                name_col = next((c for c in data_source.columns if any(x in c.lower() for x in ['name','اسم','full name'])), None)
+                id_col = next((c for c in data_source.columns if any(x in c.lower() for x in ['emp id','employee id','رقم','id','code'])), None)
+                sal_basic_col = next((c for c in data_source.columns if any(x in c.lower() for x in ['basic','أساسي','base'])), None)
+                sal_housing_col = next((c for c in data_source.columns if any(x in c.lower() for x in ['housing','سكن','hous'])), None)
+                sal_transport_col = next((c for c in data_source.columns if any(x in c.lower() for x in ['transport','مواصلات','trans'])), None)
+                sal_other_col = next((c for c in data_source.columns if any(x in c.lower() for x in ['other','أخرى','allow'])), None)
+                sal_gross_col = next((c for c in data_source.columns if any(x in c.lower() for x in ['gross','إجمالي','total sal','net'])), None)
+                nat_col_c = next((c for c in data_source.columns if any(x in c.lower() for x in ['nat','جنسية','nationality'])), None)
+                dept_col_c = next((c for c in data_source.columns if any(x in c.lower() for x in ['dept','قسم','department'])), None)
+                title_col = next((c for c in data_source.columns if any(x in c.lower() for x in ['title','مسمى','position','وظيفة'])), None)
+                join_col_c = next((c for c in data_source.columns if any(x in c.lower() for x in ['join','hiring','التحاق','مباشرة','start'])), None)
+
+                found_emp = None
+                if search_method == "بحث بالاسم" and name_col:
+                    search_val = st.selectbox("اختر الموظف:", [""] + sorted(data_source[name_col].dropna().unique().tolist()), key="calc_name_sel")
+                    if search_val:
+                        found_emp = data_source[data_source[name_col] == search_val].iloc[0]
+                elif search_method == "بحث بالرقم الوظيفي" and id_col:
+                    search_val = st.text_input("أدخل الرقم الوظيفي:", key="calc_id_input")
+                    if search_val:
+                        matches = data_source[data_source[id_col].astype(str).str.contains(str(search_val), na=False)]
+                        if len(matches) > 0:
+                            found_emp = matches.iloc[0]
+                        else:
+                            st.warning("لم يتم العثور على موظف بهذا الرقم")
+                elif search_method == "بحث بالاسم" and not name_col:
+                    st.warning("لا يوجد عمود اسم في البيانات المرفوعة")
+                elif search_method == "بحث بالرقم الوظيفي" and not id_col:
+                    st.warning("لا يوجد عمود رقم وظيفي في البيانات المرفوعة")
+
+                if found_emp is not None:
+                    auto_filled = True
+                    auto_vals['name'] = str(found_emp[name_col]) if name_col else ""
+                    auto_vals['id'] = str(found_emp[id_col]) if id_col else ""
+                    auto_vals['basic'] = float(found_emp[sal_basic_col]) if sal_basic_col and pd.notna(found_emp.get(sal_basic_col)) else 5000.0
+                    auto_vals['housing'] = float(found_emp[sal_housing_col]) if sal_housing_col and pd.notna(found_emp.get(sal_housing_col)) else 0.0
+                    auto_vals['transport'] = float(found_emp[sal_transport_col]) if sal_transport_col and pd.notna(found_emp.get(sal_transport_col)) else 0.0
+                    auto_vals['other'] = float(found_emp[sal_other_col]) if sal_other_col and pd.notna(found_emp.get(sal_other_col)) else 0.0
+                    auto_vals['nat'] = str(found_emp[nat_col_c]) if nat_col_c else ""
+                    auto_vals['dept'] = str(found_emp[dept_col_c]) if dept_col_c else ""
+                    auto_vals['title'] = str(found_emp[title_col]) if title_col else ""
+                    auto_vals['join'] = found_emp[join_col_c] if join_col_c else None
+                    auto_vals['gross'] = float(found_emp[sal_gross_col]) if sal_gross_col and pd.notna(found_emp.get(sal_gross_col)) else 0.0
+                    st.success(f"✅ تم العثور على: {auto_vals['name']} | {auto_vals.get('dept','')} | {auto_vals.get('title','')}")
+
         # ===== بيانات الموظف =====
+        st.markdown("---")
         st.markdown("### 👤 بيانات الموظف")
         e1, e2, e3 = st.columns([2,1,1])
-        with e1: emp_name = st.text_input("اسم الموظف:", key="empn")
-        with e2: emp_id = st.text_input("رقم الموظف:", key="empid")
-        with e3: worker_type = st.radio("الجنسية:", ["سعودي","غير سعودي"], horizontal=True, key="wt")
+        with e1: emp_name = st.text_input("اسم الموظف:", value=auto_vals.get('name','') if auto_filled else "", key="empn")
+        with e2: emp_id = st.text_input("رقم الموظف:", value=auto_vals.get('id','') if auto_filled else "", key="empid")
+        with e3:
+            nat_default = 0 if (auto_filled and auto_vals.get('nat','') in ['Saudi','سعودي','Saudi Arabian','سعودية']) else (1 if auto_filled else 0)
+            worker_type = st.radio("الجنسية:", ["سعودي","غير سعودي"], horizontal=True, key="wt", index=nat_default)
+
+        # Extra info for report
+        emp_dept = auto_vals.get('dept','') if auto_filled else ""
+        emp_title = auto_vals.get('title','') if auto_filled else ""
 
         st.markdown("### 💵 تفاصيل الأجر")
+        if auto_filled and auto_vals.get('gross',0) > 0 and auto_vals.get('basic',0) == 5000.0:
+            st.caption("💡 تم استيراد الراتب الإجمالي. يمكنك تعديل التفاصيل يدوياً.")
         s1, s2, s3, s4 = st.columns(4)
-        with s1: basic_sal = st.number_input("الأجر الأساسي:", min_value=0.0, max_value=500000.0, value=5000.0, step=0.01, format="%.2f", key="bsal")
-        with s2: housing = st.number_input("بدل السكن:", min_value=0.0, max_value=500000.0, value=1250.0, step=0.01, format="%.2f", key="hous")
-        with s3: transport = st.number_input("بدل المواصلات:", min_value=0.0, max_value=100000.0, value=500.0, step=0.01, format="%.2f", key="trns")
-        with s4: other_allow = st.number_input("بدلات أخرى:", min_value=0.0, max_value=500000.0, value=0.0, step=0.01, format="%.2f", key="otha")
+        with s1: basic_sal = st.number_input("الأجر الأساسي:", min_value=0.0, max_value=500000.0, value=auto_vals.get('basic',5000.0) if auto_filled else 5000.0, step=0.01, format="%.2f", key="bsal")
+        with s2: housing = st.number_input("بدل السكن:", min_value=0.0, max_value=500000.0, value=auto_vals.get('housing',1250.0) if auto_filled else 1250.0, step=0.01, format="%.2f", key="hous")
+        with s3: transport = st.number_input("بدل المواصلات:", min_value=0.0, max_value=100000.0, value=auto_vals.get('transport',500.0) if auto_filled else 500.0, step=0.01, format="%.2f", key="trns")
+        with s4: other_allow = st.number_input("بدلات أخرى:", min_value=0.0, max_value=500000.0, value=auto_vals.get('other',0.0) if auto_filled else 0.0, step=0.01, format="%.2f", key="otha")
 
         # GOSI calculation - Saudi only
         is_saudi = worker_type == "سعودي"
@@ -3234,30 +3301,83 @@ def main():
 
             # ===== EXPORT =====
             st.markdown("### 📥 تصدير التقرير")
+            rpt_lang = st.radio("🌐 لغة التقرير:", ["English","العربية","English + العربية"], horizontal=True, key="rpt_lang")
+
+            # Translation maps
+            L = {}
+            if "العربية" in rpt_lang and "English" not in rpt_lang:
+                L = {"title":"بيان تسوية مستحقات نهاية الخدمة","emp_info":"بيانات الموظف",
+                    "emp_name":"اسم الموظف","emp_id":"الرقم الوظيفي","dept":"القسم","job":"المسمى الوظيفي",
+                    "join_date":"تاريخ الالتحاق","last_day":"آخر يوم عمل","svc_years":"سنوات الخدمة","svc_days":"أيام الخدمة",
+                    "leave_bal":"رصيد الإجازات (أيام)","total_sal":"إجمالي الراتب الشهري",
+                    "sal_breakdown":"تفصيل الراتب الشهري","num":"م","item":"البند","amount":"المبلغ (ريال)","pct":"النسبة",
+                    "basic":"الراتب الأساسي","housing":"بدل السكن","transport":"بدل المواصلات","other":"بدلات أخرى",
+                    "gross_total":"إجمالي الراتب","benefits":"تفصيل المستحقات والبدلات",
+                    "calc_method":"طريقة الحساب","details":"التفاصيل","legal":"السند النظامي",
+                    "net_total":"صافي المستحقات النهائية","legal_basis":"الأساس النظامي (نظام العمل السعودي)",
+                    "currency":"ريال","settlement":"تاريخ التسوية","prepared":"الإعداد","hr_dept":"إدارة الموارد البشرية",
+                    "eos":"مكافأة نهاية الخدمة","leave_cash":"بدل إجازة","delayed":"أجور متأخرة",
+                    "overtime":"عمل إضافي","unfair":"تعويض فسخ غير مشروع","absence":"حسم غياب وتأخر",
+                    "art84":"م.84: مكافأة نهاية الخدمة - نصف راتب عن كل سنة من الخمس الأولى، وراتب كامل عن كل سنة بعدها",
+                    "art85":"م.85: الاستقالة - ثلث المكافأة (2-5 سنوات)، ثلثان (5-10)، كاملة (10+)",
+                    "art77":"م.77: الفسخ غير المشروع - 15 يوم/سنة (غير محدد) أو المدة المتبقية (محدد)، بحد أدنى شهرين",
+                    "art109":"م.109: بدل الإجازة - تعويض نقدي عن رصيد الإجازات غير المستخدمة",
+                    "art88":"م.88: يجب تصفية جميع المستحقات خلال 7 أيام من انتهاء العقد"}
+            else:
+                L = {"title":"End of Service Benefits Settlement Statement","emp_info":"Employee Information",
+                    "emp_name":"Employee Name","emp_id":"Employee ID","dept":"Department","job":"Job Title",
+                    "join_date":"Joining Date","last_day":"Last Working Day","svc_years":"Service (Years)","svc_days":"Service (Days)",
+                    "leave_bal":"Leave Balance (Days)","total_sal":"Total Monthly Salary",
+                    "sal_breakdown":"Monthly Salary Breakdown","num":"#","item":"Item","amount":"Amount (SAR)","pct":"Percentage",
+                    "basic":"Basic Salary","housing":"Housing Allowance","transport":"Transportation Allowance","other":"Other Allowances",
+                    "gross_total":"Total Gross Salary","benefits":"Benefits & Entitlements Detail",
+                    "calc_method":"Calculation Method","details":"Details","legal":"Legal Basis",
+                    "net_total":"NET TOTAL ENTITLEMENTS","legal_basis":"Legal Basis (Saudi Labor Law)",
+                    "currency":"SAR","settlement":"Settlement Date","prepared":"Prepared by","hr_dept":"Human Resources Department",
+                    "eos":"End of Service Award","leave_cash":"Leave Encashment","delayed":"Delayed Wages",
+                    "overtime":"Overtime Pay","unfair":"Unfair Termination Compensation","absence":"Absence Deduction",
+                    "art84":"Art. 84: End of Service Award - Half salary per year for first 5 years, full salary per year thereafter",
+                    "art85":"Art. 85: Resignation - 1/3 of award (2-5 yrs), 2/3 (5-10 yrs), full (10+ yrs)",
+                    "art77":"Art. 77: Unfair Termination - 15 days/year (indefinite) or remaining term (fixed), min 2 months",
+                    "art109":"Art. 109: Leave Encashment - Cash compensation for unused annual leave balance",
+                    "art88":"Art. 88: Employer must settle all dues within 7 days of contract termination"}
+
+            # If bilingual, add Arabic in parentheses
+            if "English + العربية" in rpt_lang:
+                AR = {"title":"بيان تسوية مستحقات نهاية الخدمة","emp_info":"بيانات الموظف",
+                    "emp_name":"اسم الموظف","emp_id":"الرقم الوظيفي","dept":"القسم","job":"المسمى الوظيفي",
+                    "join_date":"تاريخ الالتحاق","last_day":"آخر يوم عمل","svc_years":"سنوات الخدمة","svc_days":"أيام الخدمة",
+                    "leave_bal":"رصيد الإجازات","total_sal":"إجمالي الراتب",
+                    "sal_breakdown":"تفصيل الراتب","basic":"الراتب الأساسي","housing":"بدل السكن",
+                    "transport":"بدل المواصلات","other":"بدلات أخرى","gross_total":"إجمالي الراتب",
+                    "benefits":"تفصيل المستحقات","net_total":"صافي المستحقات النهائية","legal_basis":"الأساس النظامي"}
+                for k in AR:
+                    if k in L:
+                        L[k] = f"{L[k]} / {AR[k]}"
+
             export_rows = [
-                {"البند": "اسم الموظف", "القيمة": emp_name or "-"},
-                {"البند": "رقم الموظف", "القيمة": emp_id or "-"},
-                {"البند": "الجنسية", "القيمة": worker_type},
-                {"البند": "الأجر الأساسي", "القيمة": f"{basic_sal:,.2f}"},
-                {"البند": "بدل السكن", "القيمة": f"{housing:,.2f}"},
-                {"البند": "بدل المواصلات", "القيمة": f"{transport:,.2f}"},
-                {"البند": "بدلات أخرى", "القيمة": f"{other_allow:,.2f}"},
-                {"البند": "إجمالي الأجر", "القيمة": f"{gross_sal:,.2f}"},
-                {"البند": f"خصم التأمينات ({gosi_pct}%)", "القيمة": f"{gosi_deduction:,.2f}"},
-                {"البند": "صافي الأجر", "القيمة": f"{total_sal:,.2f}"},
-                {"البند": "---", "القيمة": "---"}]
+                {"Item": L['emp_name'], "Value": emp_name or "-"},
+                {"Item": L['emp_id'], "Value": emp_id or "-"},
+                {"Item": L.get('dept','Department'), "Value": emp_dept or "-"},
+                {"Item": L.get('job','Job Title'), "Value": emp_title or "-"},
+                {"Item": L['basic'], "Value": f"{basic_sal:,.2f}"},
+                {"Item": L['housing'], "Value": f"{housing:,.2f}"},
+                {"Item": L['transport'], "Value": f"{transport:,.2f}"},
+                {"Item": L['other'], "Value": f"{other_allow:,.2f}"},
+                {"Item": L['gross_total'], "Value": f"{gross_sal:,.2f}"},
+                {"Item": "---", "Value": "---"}]
             for label, amount in results_summary:
                 is_ded = "خصم" in label or "حسم" in label
-                export_rows.append({"البند": label, "القيمة": f"{'-' if is_ded else ''}{amount:,.2f}"})
-            export_rows.append({"البند": "---", "القيمة": "---"})
-            export_rows.append({"البند": "صافي المستحقات النهائية", "القيمة": f"{grand_total:,.2f}"})
+                export_rows.append({"Item": label, "Value": f"{'-' if is_ded else ''}{amount:,.2f}"})
+            export_rows.append({"Item": "---", "Value": "---"})
+            export_rows.append({"Item": L['net_total'], "Value": f"{grand_total:,.2f}"})
 
             # ===== PROFESSIONAL EXCEL (matching MOJ template) =====
             ox = io.BytesIO()
             wb_exp = openpyxl.Workbook()
             ws_exp = wb_exp.active
-            ws_exp.title = "المستحقات"
-            ws_exp.sheet_view.rightToLeft = True
+            ws_exp.title = "تسوية المستحقات" if "العربية" in rpt_lang and "English" not in rpt_lang else "EOS Settlement"
+            ws_exp.sheet_view.rightToLeft = False
 
             from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
             from openpyxl.utils import get_column_letter
@@ -3314,70 +3434,82 @@ def main():
                 if fill: c.fill = fill
 
             # === ROW 1: Title ===
-            write_merged(r, 1, 6, "بيان تسوية مستحقات نهاية الخدمة", white_font, dark_blue)
+            write_merged(r, 1, 6, L['title'], white_font, dark_blue)
             ws_exp.row_dimensions[r].height = 35
             r += 1
 
             # === ROW 2: Employee Info Header ===
-            write_merged(r, 1, 6, "بيانات الموظف", white_font12, med_blue)
+            write_merged(r, 1, 6, L['emp_info'], white_font12, med_blue)
             r += 1
 
             # === ROW 3: Name & ID ===
             bg = light1
-            write_cell(r, 1, "اسم الموظف", bold11, bg, left)
+            write_cell(r, 1, L['emp_name'], bold11, bg, left)
             ws_exp.merge_cells(start_row=r, start_column=2, end_row=r, end_column=3)
             write_cell(r, 2, emp_name or "-", normal11, bg, center)
             ws_exp.cell(r,3).fill=bg; ws_exp.cell(r,3).border=thin_border
-            write_cell(r, 4, "رقم الموظف", bold11, bg, left)
+            write_cell(r, 4, L['emp_id'], bold11, bg, left)
             ws_exp.merge_cells(start_row=r, start_column=5, end_row=r, end_column=6)
             write_cell(r, 5, emp_id or "-", normal11, bg, center)
             ws_exp.cell(r,6).fill=bg; ws_exp.cell(r,6).border=thin_border
             r += 1
 
-            # === ROW 4: Dates ===
+            # === ROW 4: Dept & Title ===
             bg = light2
+            write_cell(r, 1, L['dept'], bold11, bg, left)
+            ws_exp.merge_cells(start_row=r, start_column=2, end_row=r, end_column=3)
+            write_cell(r, 2, emp_dept or "-", normal11, bg, center)
+            ws_exp.cell(r,3).fill=bg; ws_exp.cell(r,3).border=thin_border
+            write_cell(r, 4, L['job'], bold11, bg, left)
+            ws_exp.merge_cells(start_row=r, start_column=5, end_row=r, end_column=6)
+            write_cell(r, 5, emp_title or "-", normal11, bg, center)
+            ws_exp.cell(r,6).fill=bg; ws_exp.cell(r,6).border=thin_border
+            r += 1
+
+            # === ROW 5: Dates ===
+            bg = light1
             eos_start_str = eos_start.strftime('%Y-%m-%d') if hasattr(eos_start, 'strftime') else str(eos_start)
             eos_end_str = eos_end.strftime('%Y-%m-%d') if hasattr(eos_end, 'strftime') else str(eos_end)
-            write_cell(r, 1, "تاريخ الالتحاق", bold11, bg, left)
+            write_cell(r, 1, L['join_date'], bold11, bg, left)
             ws_exp.merge_cells(start_row=r, start_column=2, end_row=r, end_column=3)
             write_cell(r, 2, eos_start_str, normal11, bg, center)
             ws_exp.cell(r,3).fill=bg; ws_exp.cell(r,3).border=thin_border
-            write_cell(r, 4, "آخر يوم عمل", bold11, bg, left)
+            write_cell(r, 4, L['last_day'], bold11, bg, left)
             ws_exp.merge_cells(start_row=r, start_column=5, end_row=r, end_column=6)
             write_cell(r, 5, eos_end_str, normal11, bg, center)
             ws_exp.cell(r,6).fill=bg; ws_exp.cell(r,6).border=thin_border
             r += 1
 
-            # === ROW 5: Service duration ===
-            bg = light1
-            write_cell(r, 1, "مدة الخدمة (سنوات)", bold11, bg, left)
+            # === ROW 6: Service duration ===
+            bg = light2
+            write_cell(r, 1, L['svc_years'], bold11, bg, left)
             ws_exp.merge_cells(start_row=r, start_column=2, end_row=r, end_column=3)
             write_cell(r, 2, round(eos_years, 2), blue_val, bg, center)
             ws_exp.cell(r,3).fill=bg; ws_exp.cell(r,3).border=thin_border
-            write_cell(r, 4, "مدة الخدمة (أيام)", bold11, bg, left)
+            write_cell(r, 4, L['svc_days'], bold11, bg, left)
             ws_exp.merge_cells(start_row=r, start_column=5, end_row=r, end_column=6)
             write_cell(r, 5, eos_service_days, blue_val, bg, center)
             ws_exp.cell(r,6).fill=bg; ws_exp.cell(r,6).border=thin_border
             r += 1
 
-            # === ROW 6: Leave balance & total salary ===
-            bg = light2
-            write_cell(r, 1, "رصيد الإجازات (أيام)", bold11, bg, left)
+            # === ROW 7: Leave balance & total salary ===
+            bg = light1
+            write_cell(r, 1, L['leave_bal'], bold11, bg, left)
             ws_exp.merge_cells(start_row=r, start_column=2, end_row=r, end_column=3)
             write_cell(r, 2, vac_days_input, blue_val, bg, center)
             ws_exp.cell(r,3).fill=bg; ws_exp.cell(r,3).border=thin_border
-            write_cell(r, 4, "إجمالي الراتب الشهري", bold11, bg, left)
+            write_cell(r, 4, L['total_sal'], bold11, bg, left)
             ws_exp.merge_cells(start_row=r, start_column=5, end_row=r, end_column=6)
             write_cell(r, 5, round(gross_sal, 2), blue_val, bg, center)
             ws_exp.cell(r,6).fill=bg; ws_exp.cell(r,6).border=thin_border
             r += 1
 
-            # === ROW 7: Salary Details Header ===
-            write_merged(r, 1, 6, "تفاصيل الراتب الشهري", white_font12, med_blue)
+            # === ROW 8: Salary Details Header ===
+            write_merged(r, 1, 6, L['sal_breakdown'], white_font12, med_blue)
             r += 1
 
-            # === ROW 8: Salary table header ===
-            sal_headers = ["#", "البند", "", "المبلغ (ريال)", "النسبة", ""]
+            # === ROW 9: Salary table header ===
+            sal_headers = [L['num'], L['item'], "", L['amount'], L['pct'], ""]
             for i, h in enumerate(sal_headers, 1):
                 write_cell(r, i, h, white_font11, hdr_blue, center)
             ws_exp.merge_cells(start_row=r, start_column=2, end_row=r, end_column=3)
@@ -3386,10 +3518,10 @@ def main():
 
             # === ROWS 9-12: Salary items ===
             sal_items = [
-                ("الأجر الأساسي", basic_sal),
-                ("بدل السكن", housing),
-                ("بدل المواصلات", transport),
-                ("بدلات أخرى", other_allow),
+                (L['basic'], basic_sal),
+                (L['housing'], housing),
+                (L['transport'], transport),
+                (L['other'], other_allow),
             ]
             for idx, (item, amt) in enumerate(sal_items, 1):
                 bg = light1 if idx % 2 == 1 else light2
@@ -3404,9 +3536,9 @@ def main():
                 ws_exp.cell(r,6).fill=bg; ws_exp.cell(r,6).border=thin_border
                 r += 1
 
-            # === ROW 13: Total Salary ===
+            # === Total Salary ===
             ws_exp.merge_cells(start_row=r, start_column=2, end_row=r, end_column=3)
-            write_cell(r, 2, "إجمالي الراتب", white_font12, dark_blue, center)
+            write_cell(r, 2, L['gross_total'], white_font12, dark_blue, center)
             ws_exp.cell(r,3).fill=dark_blue; ws_exp.cell(r,3).border=thin_border
             write_cell(r, 4, round(gross_sal, 2), white_font12, dark_blue, center)
             ws_exp.merge_cells(start_row=r, start_column=5, end_row=r, end_column=6)
@@ -3415,12 +3547,12 @@ def main():
             write_cell(r, 1, "", normal11, dark_blue, center)
             r += 1
 
-            # === ROW 14: Benefits Details Header ===
-            write_merged(r, 1, 6, "تفاصيل المستحقات", white_font12, med_blue)
+            # === Benefits Details Header ===
+            write_merged(r, 1, 6, L['benefits'], white_font12, med_blue)
             r += 1
 
-            # === ROW 15: Benefits table header ===
-            ben_headers = ["#", "البند", "طريقة الحساب", "التفاصيل", "المبلغ (ريال)", "السند النظامي"]
+            # === Benefits table header ===
+            ben_headers = [L['num'], L['item'], L['calc_method'], L['details'], L['amount'], L['legal']]
             for i, h in enumerate(ben_headers, 1):
                 write_cell(r, i, h, white_font11, hdr_blue, center)
             r += 1
@@ -3432,31 +3564,31 @@ def main():
                 bg = light1 if ben_idx % 2 == 1 else light2
                 is_ded = "خصم" in label or "حسم" in label
 
-                # Determine calculation method and legal basis
+                # Determine calculation method and legal basis (English)
                 if "نهاية الخدمة" in label:
-                    calc_method = f"نصف الراتب × السنوات (أول 5 سنوات) + الراتب × بقية السنوات"
-                    details = f"{eos_years:.2f} سنة | مادة {'85' if is_85 else '84'} ({eos_pct}%)"
-                    legal = f"المادة {'85' if is_85 else '84'}"
+                    calc_method = f"Half salary x years (first 5 yrs) + full salary x remaining years"
+                    details = f"{eos_years:.2f} years | Article {'85' if is_85 else '84'} ({eos_pct}%)"
+                    legal = f"Article {'85' if is_85 else '84'}"
                 elif "إجازة" in label:
-                    calc_method = f"الراتب ÷ 30 × عدد أيام الإجازة"
-                    details = f"{vac_days_input} يوم × {daily_sal:,.2f} ريال/يوم"
-                    legal = "المادة 109"
+                    calc_method = f"Salary / 30 x leave days"
+                    details = f"{vac_days_input} days x {daily_sal:,.2f} SAR/day"
+                    legal = "Article 109"
                 elif "متأخرة" in label:
-                    calc_method = "الراتب ÷ 30 × عدد أيام التأخر"
-                    details = f"{dw_total_days} يوم"
-                    legal = "المادة 88"
+                    calc_method = "Salary / 30 x delayed days"
+                    details = f"{dw_total_days} days"
+                    legal = "Article 88"
                 elif "إضافي" in label:
-                    calc_method = "ساعة الإضافي (150%) × عدد الساعات"
-                    details = f"{ot_total_hours} ساعة × {ot_rate:,.2f}"
-                    legal = "المادة 107"
+                    calc_method = "Overtime rate (150%) x hours"
+                    details = f"{ot_total_hours} hours x {ot_rate:,.2f}"
+                    legal = "Article 107"
                 elif "إنهاء" in label or "تعويض" in label:
-                    calc_method = "تعويض الإنهاء لغير سبب مشروع"
-                    details = f"نوع العقد: {contract_type}"
-                    legal = "المادة 77"
+                    calc_method = "Unfair termination compensation"
+                    details = f"Contract type: {contract_type}"
+                    legal = "Article 77"
                 elif "حسم" in label or "غياب" in label:
-                    calc_method = "الأجر اليومي × أيام الغياب + ساعات/دقائق التأخر"
-                    details = "خصم من المستحقات"
-                    legal = "نظام العمل"
+                    calc_method = "Daily wage x absent days + late hours"
+                    details = "Deducted from total"
+                    legal = "Labor Law"
                 else:
                     calc_method = "-"; details = "-"; legal = "-"
 
@@ -3472,36 +3604,37 @@ def main():
             # === Total Benefits Row ===
             ws_exp.merge_cells(start_row=r, start_column=2, end_row=r, end_column=4)
             write_cell(r, 1, "", normal11, dark_blue, center)
-            write_cell(r, 2, "إجمالي المستحقات النهائية", white_font13, dark_blue, center)
+            write_cell(r, 2, L['net_total'], white_font13, dark_blue, center)
             ws_exp.cell(r,3).fill=dark_blue; ws_exp.cell(r,3).border=thin_border
             ws_exp.cell(r,4).fill=dark_blue; ws_exp.cell(r,4).border=thin_border
             write_cell(r, 5, round(grand_total, 2), white_font13, dark_blue, center)
-            write_cell(r, 6, "ريال سعودي", white_font11, dark_blue, center)
+            write_cell(r, 6, L['currency'], white_font11, dark_blue, center)
             r += 1
 
             # === Legal Basis Section ===
-            write_merged(r, 1, 6, "السند النظامي", white_font12, med_blue)
+            write_merged(r, 1, 6, L['legal_basis'], white_font12, med_blue)
             r += 1
 
-            legal_notes = [
-                "● المادة 84: مكافأة نهاية الخدمة - نصف الراتب عن كل سنة من الخمس الأولى وراتب كامل عن كل سنة بعدها",
-                "● المادة 85: إذا كان إنهاء العلاقة بسبب استقالة العامل، يستحق ثلث المكافأة (2-5 سنوات)، ثلثيها (5-10)، كاملة (10+)",
-                "● المادة 77: تعويض الإنهاء غير المشروع - يستحق العامل تعويضاً إذا لم يتضمن العقد تعويضاً محدداً",
-                "● المادة 109: يستحق العامل تعويضاً نقدياً عن رصيد إجازاته المتراكمة عند انتهاء العلاقة",
-                "● المادة 88: يجب على صاحب العمل دفع أجر العامل وتصفية حقوقه خلال أسبوع من تاريخ انتهاء العلاقة",
-            ]
+            legal_notes = [L['art84'], L['art85'], L['art77'], L['art109'], L['art88']]
             for i, note in enumerate(legal_notes):
                 bg = light1 if i % 2 == 0 else light2
                 write_merged(r, 1, 6, note, small10, bg, left)
                 r += 1
 
             # === Settlement Date ===
-            write_cell(r, 1, "تاريخ إعداد التسوية:", gray10, None, left)
+            write_cell(r, 1, f"{L['settlement']}:", gray10, None, left)
             write_cell(r, 2, datetime.now().strftime('%Y-%m-%d'), gray10, None, center)
+            r += 1
+            write_cell(r, 1, f"{L['prepared']}:", gray10, None, left)
+            write_cell(r, 2, L['hr_dept'], gray10, None, left)
+
+            # Set RTL for Arabic
+            is_rtl = "العربية" in rpt_lang and "English" not in rpt_lang
+            ws_exp.sheet_view.rightToLeft = is_rtl
 
             wb_exp.save(ox)
 
-            fname = f"مستحقات_{emp_name or 'موظف'}_{datetime.now().strftime('%Y%m%d')}"
+            fname = f"EOS_Settlement_{emp_name or 'Employee'}_{datetime.now().strftime('%Y%m%d')}"
             xc1, xc2 = st.columns(2)
             with xc1:
                 st.download_button("📥 تحميل Excel", data=ox.getvalue(), file_name=f"{fname}.xlsx",
@@ -3513,7 +3646,7 @@ def main():
         else:
             st.info("عبّئ البيانات أعلاه وستظهر المستحقات هنا تلقائياً")
 
-        ibox("إصدار استرشادي تقريبي ولا يغني عن الاستشارة القانونية المتخصصة.", "warning")
+        ibox("This is an approximate advisory calculation and does not substitute for specialized legal consultation.", "warning")
 
     # =========================================
     #         📚 TRAINING & DEVELOPMENT
