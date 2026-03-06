@@ -480,69 +480,87 @@ def kpi(l,v): st.markdown(f'<div class="kpi"><p>{l}</p><h3>{v}</h3></div>',unsaf
 
 def export_widget(dataframes, title="تقرير", key_prefix="exp"):
     """Universal export widget: Excel + CSV + PDF for any data"""
+    # Normalize input
+    if dataframes is None:
+        return
+    if isinstance(dataframes, pd.DataFrame):
+        if len(dataframes) == 0:
+            return
+        main_df = dataframes.copy()
+        all_dfs = {"البيانات": dataframes}
+    elif isinstance(dataframes, dict):
+        all_dfs = {k: v for k, v in dataframes.items() if isinstance(v, pd.DataFrame) and len(v) > 0}
+        if not all_dfs:
+            return
+        main_df = list(all_dfs.values())[0]
+    else:
+        return
+
     st.markdown("---")
     st.markdown("### 📥 تصدير التقرير")
     ex1, ex2, ex3 = st.columns(3)
+    fname = f"{title}_{datetime.now().strftime('%Y%m%d')}".replace(" ","_")
 
-    # Prepare main dataframe
-    if isinstance(dataframes, pd.DataFrame):
-        main_df = dataframes
-        all_dfs = {"Data": dataframes}
-    elif isinstance(dataframes, dict):
-        main_df = list(dataframes.values())[0] if dataframes else pd.DataFrame()
-        all_dfs = dataframes
-    else:
-        main_df = pd.DataFrame()
-        all_dfs = {"Data": main_df}
-
-    fname = f"{title}_{datetime.now().strftime('%Y%m%d')}"
-
+    # Excel
     with ex1:
-        ox = io.BytesIO()
-        with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
-            for sheet_name, df in all_dfs.items():
-                if len(df) > 0:
-                    df.to_excel(w, sheet_name=sheet_name[:31], index=False)
+        try:
+            ox = io.BytesIO()
+            with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
+                for sname, df in all_dfs.items():
+                    clean = str(sname)[:31].replace('/','_').replace('\\','_')
+                    df.to_excel(w, sheet_name=clean, index=False)
                     try:
-                        ws = w.sheets[sheet_name[:31]]
+                        ws = w.sheets[clean]
                         ws.set_column('A:Z', 18)
-                        # Header format
                         hf = w.book.add_format({'bold':True,'bg_color':'#0F4C5C','font_color':'white','border':1})
                         for ci, col in enumerate(df.columns):
-                            ws.write(0, ci, col, hf)
+                            ws.write(0, ci, str(col), hf)
                     except: pass
-        st.download_button("📊 Excel", data=ox.getvalue(), file_name=f"{fname}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            type="primary", use_container_width=True, key=f"{key_prefix}_xl")
+            st.download_button("📊 Excel", data=ox.getvalue(), file_name=f"{fname}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary", use_container_width=True, key=f"{key_prefix}_xl")
+        except Exception as e:
+            st.error(f"خطأ Excel: {e}")
 
+    # CSV (all sheets combined)
     with ex2:
-        csv_data = main_df.to_csv(index=False).encode('utf-8-sig')
-        st.download_button("📄 CSV", data=csv_data, file_name=f"{fname}.csv",
-            mime="text/csv", use_container_width=True, key=f"{key_prefix}_csv")
+        try:
+            parts = []
+            for sname, df in all_dfs.items():
+                if len(all_dfs) > 1:
+                    parts.append(f"\n=== {sname} ===\n")
+                parts.append(df.to_csv(index=False))
+            csv_data = "\n".join(parts).encode('utf-8-sig')
+            st.download_button("📄 CSV", data=csv_data, file_name=f"{fname}.csv",
+                mime="text/csv", use_container_width=True, key=f"{key_prefix}_csv")
+        except Exception as e:
+            st.error(f"خطأ CSV: {e}")
 
+    # PDF
     with ex3:
-        # Generate PDF-ready HTML
-        tables_html = ""
-        for sheet_name, df in all_dfs.items():
-            if len(df) > 0:
-                tables_html += f"<h2>{sheet_name}</h2>{df.to_html(index=False, classes='tbl')}"
-        pdf_html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
-        <style>body{{font-family:Arial,sans-serif;padding:20px;direction:rtl}}
-        h1{{color:#0F4C5C;border-bottom:3px solid #E36414;padding-bottom:8px}}
-        h2{{color:#264653;margin-top:25px}}
-        .tbl{{border-collapse:collapse;width:100%;margin:10px 0}}
-        .tbl th{{background:#0F4C5C;color:white;padding:8px;border:1px solid #ddd;text-align:center}}
-        .tbl td{{padding:6px;border:1px solid #ddd;text-align:center}}
-        .tbl tr:nth-child(even){{background:#f8f9fa}}
-        .footer{{margin-top:30px;color:#888;font-size:0.8em;text-align:center;border-top:1px solid #ddd;padding-top:10px}}
-        @media print{{body{{margin:0}} @page{{margin:1cm}}}}</style>
-        <script>window.onload=function(){{setTimeout(function(){{window.print()}},800)}}</script>
-        </head><body><h1>{title}</h1><p>التاريخ: {datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
-        {tables_html}
-        <div class="footer">HR Analytics Platform</div></body></html>"""
-        st.download_button("📄 PDF", data=pdf_html.encode('utf-8'), file_name=f"{fname}.html",
-            mime="text/html", use_container_width=True, key=f"{key_prefix}_pdf",
-            help="افتح الملف في المتصفح → سيطبع تلقائياً → اختر Save as PDF")
+        try:
+            tables_html = ""
+            for sname, df in all_dfs.items():
+                tables_html += f"<h2>{sname}</h2>{df.to_html(index=False, classes='tbl')}"
+            pdf_html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
+            <style>body{{font-family:Arial,sans-serif;padding:20px;direction:rtl}}
+            h1{{color:#0F4C5C;border-bottom:3px solid #E36414;padding-bottom:8px}}
+            h2{{color:#264653;margin-top:25px}}
+            .tbl{{border-collapse:collapse;width:100%;margin:10px 0}}
+            .tbl th{{background:#0F4C5C;color:white;padding:8px;border:1px solid #ddd;text-align:center}}
+            .tbl td{{padding:6px;border:1px solid #ddd;text-align:center}}
+            .tbl tr:nth-child(even){{background:#f8f9fa}}
+            .footer{{margin-top:30px;color:#888;font-size:0.8em;text-align:center;border-top:1px solid #ddd;padding-top:10px}}
+            @media print{{body{{margin:0}} @page{{margin:1cm}}}}</style>
+            <script>window.onload=function(){{setTimeout(function(){{window.print()}},800)}}</script>
+            </head><body><h1>{title}</h1><p>التاريخ: {datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
+            {tables_html}
+            <div class="footer">HR Analytics Platform</div></body></html>"""
+            st.download_button("📄 PDF", data=pdf_html.encode('utf-8'), file_name=f"{fname}.html",
+                mime="text/html", use_container_width=True, key=f"{key_prefix}_pdf",
+                help="افتح في المتصفح ← Save as PDF")
+        except Exception as e:
+            st.error(f"خطأ PDF: {e}")
 def fmt(v): return f"{v:,.0f}"
 def has(df,n): return df is not None and n in df.columns and len(df)>0
 
@@ -1979,6 +1997,7 @@ def main():
                     if 'Positions' in xl.sheet_names:
                         try: all_sheets['Positions'] = pd.read_excel(xl, 'Positions', header=0)
                         except: pass
+
             except: pass
 
             # Cache parsed results
@@ -2234,8 +2253,7 @@ def main():
 
 
 
-            try: export_widget(data, "نظرة عامة", "ov1")
-            except: pass
+            export_widget(data, "نظرة عامة", "ov1")
         elif page == "🤖 المحلل الذكي":
             hdr("🤖 المحلل الذكي","يبحث في كل الأوراق")
             data = sal_snapshot if len(sal_snapshot)>0 else emp
@@ -2489,16 +2507,16 @@ def main():
             # Export salary dashboard
             if len(snap) > 0:
                 export_sheets = {"الراتب الشامل": snap}
-                if dept_col and sal_col:
-                    export_sheets["تحليل الأقسام"] = dept_stats
-                if nat_col and sal_col:
-                    export_sheets["الجنسيات"] = nat_stats
+                try:
+                    if dept_stats is not None and len(dept_stats) > 0:
+                        export_sheets["تحليل الأقسام"] = dept_stats
+                except: pass
+                try:
+                    if nat_stats is not None and len(nat_stats) > 0:
+                        export_sheets["الجنسيات"] = nat_stats
+                except: pass
                 export_widget(export_sheets, "تحليل_الرواتب", "sal_dash")
 
-
-
-            try: export_widget(snap, "لوحة الرواتب", "sal1")
-            except: pass
         elif page == "📈 تحليل شهري/ربعي":
             hdr("📈 تحليل الرواتب الشهري والربعي")
             if len(sal_df)==0: st.info("📁 ارفع ملف رواتب شهري (من القائمة الجانبية)"); return
@@ -2539,8 +2557,7 @@ def main():
 
 
 
-            try: export_widget(data, "تحليل شهري", "sal2")
-            except: pass
+            export_widget(data, "تحليل شهري", "sal2")
         elif page == "🏷️ تحليل حسب الفئات":
             hdr("🏷️ تحليل حسب الفئات","الجنس، الجيل، المستوى، نوع التوظيف")
             if len(sal_df)==0 and n==0: st.info("📁 ارفع ملف"); return
@@ -2596,8 +2613,7 @@ def main():
 
 
 
-            try: export_widget(data, "تحليل الفئات", "sal3")
-            except: pass
+            export_widget(data, "تحليل الفئات", "sal3")
         elif page == "📊 سلم الرواتب":
             hdr("📊 سلم الرواتب والدرجات")
             if 'Salary Scale' in all_sheets:
@@ -2667,8 +2683,7 @@ def main():
 
 
 
-            try: export_widget(snap, "Total Rewards", "tr1")
-            except: pass
+            export_widget(snap, "Total Rewards", "tr1")
         elif page == "💰 هيكل الرواتب":
             hdr("💰 هيكل الرواتب والعدالة","Salary Structure & Pay Equity")
             if len(snap)==0: st.info("📁 ارفع ملف"); return
@@ -2698,8 +2713,7 @@ def main():
 
 
 
-            try: export_widget(snap, "هيكل الرواتب", "tr2")
-            except: pass
+            export_widget(snap, "هيكل الرواتب", "tr2")
         elif page == "🏥 المزايا والتأمينات":
             hdr("🏥 المزايا والتأمينات","Benefits & Insurance")
             benefits_data = st.data_editor(
@@ -2738,8 +2752,7 @@ def main():
 
 
 
-            try: export_widget(snap, "تحليل التنافسية", "tr4")
-            except: pass
+            export_widget(snap, "تحليل التنافسية", "tr4")
         elif page == "📥 تصدير TR":
             hdr("📥 تصدير تقرير الرواتب","Excel تقرير شامل للرواتب والتعويضات")
             data = sal_df if len(sal_df)>0 else (sal_snapshot if len(sal_snapshot)>0 else emp)
@@ -3106,8 +3119,7 @@ def main():
 
 
 
-            try: export_widget(data, "Headcount", "hc1")
-            except: pass
+            export_widget(data, "Headcount", "hc1")
         elif page == "📋 بيانات الموظفين":
             hdr("📋 سجل بيانات الموظفين","Employee Data Registry - عرض وتصفية")
             data = sal_snapshot if len(sal_snapshot)>0 else emp
@@ -3277,8 +3289,7 @@ def main():
 
 
 
-            try: export_widget(data, "تحليل الأداء", "perf1")
-            except: pass
+            export_widget(data, "تحليل الأداء", "perf1")
     # =========================================
     #         ⚖️ LABOR CALCULATOR (MOJ-MATCHING)
     # =========================================
@@ -4166,8 +4177,7 @@ def main():
 
 
 
-            try: export_widget(data, "ميزانية التدريب", "trn1")
-            except: pass
+            export_widget(data, "ميزانية التدريب", "trn1")
         elif page == "💹 ROI التدريب":
             hdr("💹 عائد التدريب ROI","نموذج Phillips ذو 5 مستويات")
             c1,c2 = st.columns(2)
@@ -4732,8 +4742,7 @@ def main():
 
 
 
-            try: export_widget(data, "خطة التوظيف", "rec1")
-            except: pass
+            export_widget(data, "خطة التوظيف", "rec1")
         # ===== AI Salary Benchmark =====
         elif page == "🤖 Benchmark ذكاء اصطناعي":
             hdr("🤖 Benchmark الرواتب بالذكاء الاصطناعي","بيانات مرجعية من مصادر حية للسوق السعودي والمصري")
@@ -4851,8 +4860,7 @@ def main():
 
 
 
-            try: export_widget(data, "Benchmark", "rec2")
-            except: pass
+            export_widget(data, "Benchmark", "rec2")
         # ===== Market Comparison =====
         elif page == "🌍 مقارنة الأسواق":
             hdr("🌍 مقارنة تكاليف التوظيف: السعودية مقابل مصر","تحليل مقارن شامل للتكاليف والمزايا")
@@ -5045,8 +5053,7 @@ def main():
 
 
 
-            try: export_widget(data, "متابعة التوظيف", "rec3")
-            except: pass
+            export_widget(data, "متابعة التوظيف", "rec3")
         elif page == "📥 تصدير التوظيف":
             hdr("📥 تصدير بيانات التوظيف")
             ox = io.BytesIO()
@@ -5584,8 +5591,7 @@ def main():
 
 
 
-            try: export_widget(data, "تحليلات Onboarding", "ob1")
-            except: pass
+            export_widget(data, "تحليلات Onboarding", "ob1")
         elif page == "🎬 عرض تقديمي AI":
             hdr("🎬 عرض تقديمي Onboarding بالذكاء الاصطناعي","عرض slides احترافي مع سرد صوتي تفاعلي")
 
@@ -7420,8 +7426,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 
 
 
-            try: export_widget(data, "تشخيص المنظمة", "od1")
-            except: pass
+            export_widget(data, "تشخيص المنظمة", "od1")
         elif page == "📊 تحليل OD":
             hdr("📊 تحليل التطوير المؤسسي","Workforce Analytics for OD Planning")
             if len(data)==0: st.info("📁 ارفع ملف"); return
@@ -7479,8 +7484,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 
 
 
-            try: export_widget(data, "تحليل OD", "od2")
-            except: pass
+            export_widget(data, "تحليل OD", "od2")
         elif page == "🎯 استراتيجية OD":
             hdr("🎯 بناء استراتيجية التطوير المؤسسي","OD Strategy Framework")
 
