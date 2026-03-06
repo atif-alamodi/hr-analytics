@@ -843,7 +843,8 @@ ROLE_DESCRIPTIONS = {
 }
 
 ALL_SECTIONS = ["📊 التحليلات العامة","💰 تحليل الرواتب","👥 Headcount","⚖️ حاسبة المستحقات",
-    "📚 التدريب والتطوير","🎯 التوظيف","🚀 Onboarding","📜 العقود","🤖 المستشار الذكي","🔍 التحليل العام","📝 الاستبيانات","🧠 اختبارات الشخصية","📤 التقارير والتصدير"]
+    "📚 التدريب والتطوير","🎯 التوظيف","🚀 Onboarding","📜 العقود","🤖 المستشار الذكي",
+    "🎁 Total Rewards","🏗️ التطوير المؤسسي OD","🔍 التحليل العام","📝 الاستبيانات","🧠 اختبارات الشخصية","📤 التقارير والتصدير"]
 
 # Email sending function
 def send_test_email(to_email, emp_name, tests, deadline, assigned_by, app_url=""):
@@ -1767,6 +1768,10 @@ def main():
             page = st.radio("📌", ["📜 إنشاء عقد","🔍 تحليل العقود","📋 العقود المحفوظة","📥 تصدير العقود"], label_visibility="collapsed")
         elif section == "🤖 المستشار الذكي":
             page = st.radio("📌", ["⚖️ مستشار القضايا العمالية","📚 مستشار الموارد البشرية","🧠 قاعدة المعرفة RAG","📊 التعلم والتحسين","📋 إدارة المراجع"], label_visibility="collapsed")
+        elif section == "🎁 Total Rewards":
+            page = st.radio("📌", ["🎁 لوحة Total Rewards","💰 هيكل الرواتب","🏥 المزايا والتأمينات","📊 تحليل التنافسية","📥 تصدير TR"], label_visibility="collapsed")
+        elif section == "🏗️ التطوير المؤسسي OD":
+            page = st.radio("📌", ["🔍 تشخيص المنظمة","📊 تحليل OD","🎯 استراتيجية OD","📋 خطة التنفيذ","📥 تصدير OD"], label_visibility="collapsed")
         elif section == "🔍 التحليل العام":
             page = st.radio("📌", ["📊 تحليل تلقائي","🤖 أسئلة ذكية"], label_visibility="collapsed")
         elif section == "📝 الاستبيانات":
@@ -6908,6 +6913,395 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                         conn.close()
                     except: pass
                     st.success("✅ تم حفظ API Key")
+
+
+    # =========================================
+    #         🎁 TOTAL REWARDS MODULE
+    # =========================================
+    elif section == "🎁 Total Rewards":
+
+        data = sal_snapshot if len(sal_snapshot)>0 else emp
+        sal_col_tr = next((c for c in data.select_dtypes('number').columns if any(x in c.lower() for x in ['gross','إجمالي','total sal','net'])), None)
+        basic_col_tr = next((c for c in data.select_dtypes('number').columns if any(x in c.lower() for x in ['basic','أساسي','base'])), None)
+        dept_col_tr = next((c for c in data.columns if any(x in c.lower() for x in ['dept','قسم','department'])), None)
+
+        if page == "🎁 لوحة Total Rewards":
+            hdr("🎁 لوحة Total Rewards الشاملة","Compensation + Benefits + Work-Life + Performance + Development")
+
+            if len(data) == 0:
+                st.info("📁 ارفع ملف بيانات الموظفين"); return
+
+            st.markdown("### 📊 مكونات Total Rewards (WorldatWork Model)")
+            ibox("**نموذج WorldatWork:** Total Rewards = Compensation + Benefits + Work-Life Effectiveness + Recognition + Development")
+
+            # TR Components input
+            trc1, trc2, trc3 = st.columns(3)
+            with trc1:
+                tr_comp_pct = st.number_input("💰 Compensation (% من الميزانية):", 0, 100, 60, key="tr_comp")
+                tr_benefits_pct = st.number_input("🏥 Benefits (%):", 0, 100, 20, key="tr_ben")
+            with trc2:
+                tr_worklife_pct = st.number_input("⚖️ Work-Life (%):", 0, 100, 8, key="tr_wl")
+                tr_recognition_pct = st.number_input("🏆 Recognition (%):", 0, 100, 5, key="tr_rec")
+            with trc3:
+                tr_development_pct = st.number_input("📚 Development (%):", 0, 100, 7, key="tr_dev")
+                total_budget_tr = st.number_input("💵 إجمالي ميزانية TR (ريال/شهر):", value=int(data[sal_col_tr].sum()) if sal_col_tr else 500000, key="tr_budget")
+
+            # KPIs
+            n_emp = len(data)
+            avg_sal = data[sal_col_tr].mean() if sal_col_tr else 0
+            k1,k2,k3,k4,k5 = st.columns(5)
+            with k1: kpi("👥 الموظفين", str(n_emp))
+            with k2: kpi("💰 متوسط الراتب", f"{avg_sal:,.0f}")
+            with k3: kpi("💵 الميزانية الشهرية", f"{total_budget_tr:,.0f}")
+            with k4: kpi("📅 السنوية", f"{total_budget_tr*12:,.0f}")
+            with k5: kpi("💵 للفرد/سنة", f"{total_budget_tr*12//max(n_emp,1):,.0f}")
+
+            # TR Composition chart
+            tr_data = [
+                {"المكون":"💰 Compensation","النسبة":tr_comp_pct,"المبلغ":total_budget_tr*tr_comp_pct//100},
+                {"المكون":"🏥 Benefits","النسبة":tr_benefits_pct,"المبلغ":total_budget_tr*tr_benefits_pct//100},
+                {"المكون":"⚖️ Work-Life","النسبة":tr_worklife_pct,"المبلغ":total_budget_tr*tr_worklife_pct//100},
+                {"المكون":"🏆 Recognition","النسبة":tr_recognition_pct,"المبلغ":total_budget_tr*tr_recognition_pct//100},
+                {"المكون":"📚 Development","النسبة":tr_development_pct,"المبلغ":total_budget_tr*tr_development_pct//100},
+            ]
+            tr_df = pd.DataFrame(tr_data)
+
+            tc1, tc2 = st.columns(2)
+            with tc1:
+                fig = px.pie(tr_df, values='النسبة', names='المكون', title='توزيع Total Rewards', hole=0.4,
+                    color_discrete_sequence=['#E36414','#2A9D8F','#E9C46A','#264653','#F4A261'])
+                fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380)
+                st.plotly_chart(fig, use_container_width=True)
+            with tc2:
+                fig = px.bar(tr_df, x='المكون', y='المبلغ', title='التوزيع بالريال', color='المكون',
+                    color_discrete_sequence=['#E36414','#2A9D8F','#E9C46A','#264653','#F4A261'])
+                fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380, showlegend=False)
+                st.plotly_chart(fig, use_container_width=True)
+
+            st.dataframe(tr_df, use_container_width=True, hide_index=True)
+
+        elif page == "💰 هيكل الرواتب":
+            hdr("💰 تحليل هيكل الرواتب","Salary Structure & Pay Equity Analysis")
+            if len(data)==0: st.info("📁 ارفع ملف"); return
+
+            if sal_col_tr:
+                # Salary bands
+                st.markdown("### 📊 نطاقات الرواتب (Salary Bands)")
+                data['_SalBand'] = pd.cut(data[sal_col_tr], bins=[0,3000,5000,8000,12000,18000,30000,50000,999999],
+                    labels=['<3K','3-5K','5-8K','8-12K','12-18K','18-30K','30-50K','50K+'])
+                band_counts = data['_SalBand'].value_counts().sort_index()
+                fig = px.bar(x=band_counts.index.astype(str), y=band_counts.values, title='توزيع الموظفين حسب نطاق الراتب',
+                    color=band_counts.values, color_continuous_scale='teal')
+                fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380, showlegend=False, coloraxis_showscale=False)
+                st.plotly_chart(fig, use_container_width=True)
+
+                # Compa-ratio analysis
+                if dept_col_tr:
+                    st.markdown("### 📊 تحليل Compa-Ratio حسب القسم")
+                    market_mid = data[sal_col_tr].median()
+                    dept_compa = data.groupby(dept_col_tr)[sal_col_tr].mean().reset_index()
+                    dept_compa.columns = [dept_col_tr, 'متوسط الراتب']
+                    dept_compa['Compa-Ratio'] = (dept_compa['متوسط الراتب'] / market_mid * 100).round(1)
+                    dept_compa['الحالة'] = dept_compa['Compa-Ratio'].apply(lambda x: '🔴 أقل من السوق' if x < 90 else ('🟢 تنافسي' if x <= 110 else '🟡 أعلى من السوق'))
+
+                    fig = px.bar(dept_compa.sort_values('Compa-Ratio'), x='Compa-Ratio', y=dept_col_tr, orientation='h',
+                        title='Compa-Ratio حسب القسم (100% = وسيط السوق)', color='Compa-Ratio',
+                        color_continuous_scale='RdYlGn', range_color=[70,130])
+                    fig.add_vline(x=100, line_dash="dash", line_color="black", annotation_text="Market Midpoint")
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=420, coloraxis_showscale=False)
+                    st.plotly_chart(fig, use_container_width=True)
+                    st.dataframe(dept_compa, use_container_width=True, hide_index=True)
+
+                # Pay equity scatter
+                st.markdown("### ⚖️ تحليل العدالة في الأجور (Pay Equity)")
+                num_cols_tr = data.select_dtypes('number').columns.tolist()
+                if len(num_cols_tr) >= 2:
+                    fig = px.box(data, y=sal_col_tr, x=dept_col_tr if dept_col_tr else None,
+                        title='توزيع الرواتب حسب القسم (Box Plot)', color_discrete_sequence=['#E9C46A'])
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
+                    st.plotly_chart(fig, use_container_width=True)
+
+        elif page == "🏥 المزايا والتأمينات":
+            hdr("🏥 المزايا والتأمينات","Benefits & Insurance Analysis")
+
+            st.markdown("### 📋 مكونات المزايا")
+            benefits_data = st.data_editor(
+                pd.DataFrame([
+                    {"المزية":"التأمين الطبي","التكلفة/موظف (شهري)":500,"المشمولين %":100,"الفئة":"تأمين"},
+                    {"المزية":"التأمينات الاجتماعية (GOSI)","التكلفة/موظف (شهري)":800,"المشمولين %":100,"الفئة":"تأمين"},
+                    {"المزية":"بدل سكن","التكلفة/موظف (شهري)":2500,"المشمولين %":85,"الفئة":"بدل"},
+                    {"المزية":"بدل مواصلات","التكلفة/موظف (شهري)":500,"المشمولين %":90,"الفئة":"بدل"},
+                    {"المزية":"تذاكر سفر سنوية","التكلفة/موظف (شهري)":300,"المشمولين %":40,"الفئة":"سفر"},
+                    {"المزية":"تدريب وتطوير","التكلفة/موظف (شهري)":200,"المشمولين %":70,"الفئة":"تطوير"},
+                    {"المزية":"مكافآت أداء","التكلفة/موظف (شهري)":1000,"المشمولين %":60,"الفئة":"مكافآت"},
+                    {"المزية":"برنامج wellness","التكلفة/موظف (شهري)":100,"المشمولين %":50,"الفئة":"رفاهية"},
+                ]),
+                column_config={'الفئة': st.column_config.SelectboxColumn('الفئة', options=['تأمين','بدل','سفر','تطوير','مكافآت','رفاهية'])},
+                use_container_width=True, hide_index=True, num_rows="dynamic", key="benefits_editor"
+            )
+
+            if len(benefits_data) > 0:
+                total_ben = benefits_data['التكلفة/موظف (شهري)'].sum()
+                fig = px.pie(benefits_data, values='التكلفة/موظف (شهري)', names='المزية', title='توزيع تكلفة المزايا', hole=0.4)
+                fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380)
+                st.plotly_chart(fig, use_container_width=True)
+                kpi("💵 إجمالي المزايا/موظف/شهر", f"{total_ben:,} ريال")
+
+        elif page == "📊 تحليل التنافسية":
+            hdr("📊 تحليل التنافسية","Market Competitiveness & Benchmarking")
+            if len(data)==0: st.info("📁 ارفع ملف"); return
+
+            if sal_col_tr:
+                st.markdown("### 📊 موقع الشركة في السوق")
+                market_benchmarks = {"P25 (أقل 25%)": data[sal_col_tr].quantile(0.25),
+                    "P50 (الوسيط)": data[sal_col_tr].median(),
+                    "P75 (أعلى 25%)": data[sal_col_tr].quantile(0.75),
+                    "المتوسط": data[sal_col_tr].mean()}
+
+                fig = go.Figure()
+                fig.add_trace(go.Indicator(mode="gauge+number", value=data[sal_col_tr].mean(),
+                    title={'text': "متوسط الراتب مقارنة بالسوق"},
+                    gauge={'axis':{'range':[0, data[sal_col_tr].quantile(0.95)]},
+                        'bar':{'color':'#E36414'},
+                        'steps':[{'range':[0,data[sal_col_tr].quantile(0.25)],'color':'#E74C3C'},
+                            {'range':[data[sal_col_tr].quantile(0.25),data[sal_col_tr].quantile(0.75)],'color':'#F39C12'},
+                            {'range':[data[sal_col_tr].quantile(0.75),data[sal_col_tr].quantile(0.95)],'color':'#27AE60'}]}))
+                fig.update_layout(height=300)
+                st.plotly_chart(fig, use_container_width=True)
+
+                bm_df = pd.DataFrame([{"المؤشر":k,"القيمة":f"{v:,.0f} ريال"} for k,v in market_benchmarks.items()])
+                st.dataframe(bm_df, use_container_width=True, hide_index=True)
+
+        elif page == "📥 تصدير TR":
+            hdr("📥 تصدير Total Rewards")
+            if st.button("📥 تصدير Excel", type="primary", use_container_width=True, key="tr_exp"):
+                ox = io.BytesIO()
+                with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
+                    if len(data)>0: data.to_excel(w, sheet_name='Employee Data', index=False)
+                st.download_button("📥 تحميل", data=ox.getvalue(),
+                    file_name=f"Total_Rewards_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+    # =========================================
+    #         🏗️ OD MODULE
+    # =========================================
+    elif section == "🏗️ التطوير المؤسسي OD":
+
+        data = sal_snapshot if len(sal_snapshot)>0 else emp
+        dept_col_od = next((c for c in data.columns if any(x in c.lower() for x in ['dept','قسم','department'])), None)
+        sal_col_od = next((c for c in data.select_dtypes('number').columns if any(x in c.lower() for x in ['gross','إجمالي','total','net'])), None)
+
+        if page == "🔍 تشخيص المنظمة":
+            hdr("🔍 تشخيص المنظمة","Organizational Diagnosis - Burke-Litwin Model")
+            ibox("""**نموذج Burke-Litwin للتشخيص المؤسسي:** يحلل 12 بُعداً تنظيمياً مترابطاً لفهم الحالة الحالية وتحديد فرص التحسين.""")
+
+            st.markdown("### 📊 تقييم الأبعاد التنظيمية (1 = ضعيف، 5 = ممتاز)")
+            dimensions = {
+                "البيئة الخارجية": {"en":"External Environment","desc":"العوامل الخارجية المؤثرة (سوق، تقنية، تنظيمات)"},
+                "القيادة": {"en":"Leadership","desc":"فعالية القيادة العليا والرؤية"},
+                "الثقافة التنظيمية": {"en":"Culture","desc":"القيم والمعتقدات والسلوكيات السائدة"},
+                "الاستراتيجية": {"en":"Strategy","desc":"وضوح الاستراتيجية ومواءمتها"},
+                "الهيكل التنظيمي": {"en":"Structure","desc":"تصميم الهيكل وتوزيع السلطات"},
+                "الأنظمة والسياسات": {"en":"Systems","desc":"السياسات والإجراءات والعمليات"},
+                "ممارسات الإدارة": {"en":"Management Practices","desc":"أساليب الإدارة والإشراف"},
+                "المناخ التنظيمي": {"en":"Work Climate","desc":"بيئة العمل والعلاقات"},
+                "المهام والمهارات": {"en":"Task & Skills","desc":"تصميم الوظائف وملاءمة المهارات"},
+                "الدافعية": {"en":"Motivation","desc":"مستوى التحفيز والالتزام"},
+                "الاحتياجات الفردية": {"en":"Individual Needs","desc":"تلبية احتياجات الموظفين"},
+                "الأداء المؤسسي": {"en":"Performance","desc":"النتائج والإنتاجية والجودة"},
+            }
+
+            scores = {}
+            cols = st.columns(3)
+            for i, (dim, info) in enumerate(dimensions.items()):
+                with cols[i % 3]:
+                    scores[dim] = st.slider(f"{dim}", 1, 5, 3, key=f"od_{dim}", help=info['desc'])
+
+            # Radar chart
+            fig = go.Figure()
+            dims = list(scores.keys())
+            vals = list(scores.values()) + [list(scores.values())[0]]
+            fig.add_trace(go.Scatterpolar(r=vals, theta=dims + [dims[0]], fill='toself',
+                line=dict(color='#E36414'), fillcolor='rgba(227,100,20,0.2)', name='التقييم الحالي'))
+            # Add benchmark
+            fig.add_trace(go.Scatterpolar(r=[4]*len(dims)+[4], theta=dims+[dims[0]], fill='toself',
+                line=dict(color='#2A9D8F', dash='dash'), fillcolor='rgba(42,157,143,0.1)', name='المستوى المستهدف'))
+            fig.update_layout(polar=dict(radialaxis=dict(range=[0,5])),
+                title='Burke-Litwin Organizational Diagnosis', font=dict(family="Noto Sans Arabic"), height=500)
+            st.plotly_chart(fig, use_container_width=True)
+
+            # Gap analysis
+            st.markdown("### 📊 تحليل الفجوات")
+            gap_df = pd.DataFrame([{"البُعد":d,"التقييم":s,"المستهدف":4,"الفجوة":4-s,
+                "الأولوية":"🔴 حرج" if s<=2 else ("🟡 متوسط" if s<=3 else "🟢 جيد")} for d,s in scores.items()])
+            gap_df = gap_df.sort_values('الفجوة', ascending=False)
+            st.dataframe(gap_df, use_container_width=True, hide_index=True)
+
+            avg_score = sum(scores.values()) / len(scores)
+            st.markdown(f"### 🎯 التقييم العام: **{avg_score:.1f}/5**")
+            if avg_score >= 4: ibox("المنظمة في حالة ممتازة. ركّز على الاستدامة والابتكار.", "success")
+            elif avg_score >= 3: ibox("المنظمة في حالة جيدة. ركّز على الأبعاد ذات الفجوات العالية.", "warning")
+            else: ibox("المنظمة تحتاج تدخل تطويري شامل. ابدأ بالأبعاد الحرجة.", "warning")
+
+        elif page == "📊 تحليل OD":
+            hdr("📊 تحليل التطوير المؤسسي","Workforce Analytics for OD Planning")
+            if len(data)==0: st.info("📁 ارفع ملف"); return
+
+            n = len(data)
+            nat_col = next((c for c in data.columns if any(x in c.lower() for x in ['nat','جنسية'])), None)
+            status_col = next((c for c in data.columns if any(x in c.lower() for x in ['status','حالة'])), None)
+            type_col = next((c for c in data.columns if any(x in c.lower() for x in ['type','نوع'])), None)
+
+            # OD Metrics
+            st.markdown("### 📊 مؤشرات OD الرئيسية")
+            ok1,ok2,ok3,ok4 = st.columns(4)
+            with ok1:
+                n_depts = data[dept_col_od].nunique() if dept_col_od else 0
+                kpi("🏢 الأقسام", str(n_depts))
+            with ok2:
+                span = n / max(n_depts,1)
+                kpi("📏 Span of Control", f"{span:.1f}")
+            with ok3:
+                if status_col:
+                    active = len(data[data[status_col].isin(['Active','نشط'])])
+                    kpi("✅ نشط", str(active))
+                else: kpi("👥 الإجمالي", str(n))
+            with ok4:
+                if sal_col_od:
+                    cost_per = data[sal_col_od].mean()
+                    kpi("💰 تكلفة/موظف", f"{cost_per:,.0f}")
+
+            # Dept size distribution
+            if dept_col_od:
+                dc = data[dept_col_od].value_counts().reset_index()
+                dc.columns = [dept_col_od, 'العدد']
+                dc['النسبة'] = (dc['العدد'] / n * 100).round(1)
+
+                oc1, oc2 = st.columns(2)
+                with oc1:
+                    fig = px.treemap(dc, path=[dept_col_od], values='العدد', title='الهيكل التنظيمي (Treemap)',
+                        color='العدد', color_continuous_scale='teal')
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
+                    st.plotly_chart(fig, use_container_width=True)
+                with oc2:
+                    fig = px.funnel(dc.head(10), x='العدد', y=dept_col_od, title='حجم الأقسام (Funnel)',
+                        color_discrete_sequence=['#E36414'])
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
+                    st.plotly_chart(fig, use_container_width=True)
+
+            # Diversity analysis
+            if nat_col:
+                st.markdown("### 🌍 تحليل التنوع (Diversity)")
+                diversity = data[nat_col].value_counts()
+                hhi = sum((cnt/n)**2 for cnt in diversity.values)
+                diversity_index = round((1 - hhi) * 100, 1)
+                kpi("🌍 مؤشر التنوع (HHI)", f"{diversity_index}%")
+                st.caption("100% = تنوع كامل | 0% = لا تنوع")
+
+        elif page == "🎯 استراتيجية OD":
+            hdr("🎯 بناء استراتيجية التطوير المؤسسي","OD Strategy Framework")
+
+            st.markdown("### 🎯 SWOT Analysis")
+            sw1, sw2 = st.columns(2)
+            with sw1:
+                strengths = st.text_area("💪 نقاط القوة (Strengths):", height=100, key="od_s",
+                    placeholder="فريق تقني قوي\nثقافة ابتكار\nقيادة داعمة")
+                weaknesses = st.text_area("⚠️ نقاط الضعف (Weaknesses):", height=100, key="od_w",
+                    placeholder="دوران وظيفي مرتفع\nضعف التدريب\nهيكل غير واضح")
+            with sw2:
+                opportunities = st.text_area("🚀 الفرص (Opportunities):", height=100, key="od_o",
+                    placeholder="توسع السوق\nتقنيات AI جديدة\nدعم حكومي")
+                threats = st.text_area("🔴 التهديدات (Threats):", height=100, key="od_t",
+                    placeholder="منافسة شديدة\nتغييرات تنظيمية\nنقص الكفاءات")
+
+            # OD Interventions
+            st.markdown("---")
+            st.markdown("### 🔧 التدخلات التطويرية (OD Interventions)")
+            interventions = {
+                "Human Process": {
+                    "icon":"👥","items":["Team Building","Conflict Resolution","Process Consultation",
+                        "Third-Party Intervention","Coaching & Mentoring","Survey Feedback"]},
+                "Techno-Structural": {
+                    "icon":"🏗️","items":["Restructuring","Job Redesign","Quality Circles",
+                        "Total Quality Management","Work Design","Downsizing/Rightsizing"]},
+                "HR Management": {
+                    "icon":"📋","items":["Performance Management","Talent Development",
+                        "Succession Planning","Career Planning","Reward Systems","Diversity & Inclusion"]},
+                "Strategic": {
+                    "icon":"🎯","items":["Strategic Planning","Culture Change","Organization Transformation",
+                        "Merger & Acquisition Integration","Learning Organization","Knowledge Management"]},
+            }
+
+            selected_interventions = []
+            for cat, info in interventions.items():
+                with st.expander(f"{info['icon']} {cat}"):
+                    for item in info['items']:
+                        if st.checkbox(item, key=f"odi_{cat}_{item}"):
+                            selected_interventions.append({"الفئة":cat, "التدخل":item})
+
+            if selected_interventions:
+                st.markdown("### ✅ التدخلات المختارة")
+                st.dataframe(pd.DataFrame(selected_interventions), use_container_width=True, hide_index=True)
+
+            # Strategic priorities
+            st.markdown("---")
+            st.markdown("### 🎯 الأولويات الاستراتيجية")
+            priorities = st.data_editor(
+                pd.DataFrame([
+                    {"الأولوية":"تطوير القيادة","المدة":"6 أشهر","المسؤول":"HR","الحالة":"مخطط"},
+                    {"الأولوية":"تحسين بيئة العمل","المدة":"3 أشهر","المسؤول":"HR + Operations","الحالة":"مخطط"},
+                    {"الأولوية":"برنامج إدارة المواهب","المدة":"12 شهر","المسؤول":"HR","الحالة":"مخطط"},
+                ]),
+                column_config={'الحالة': st.column_config.SelectboxColumn('الحالة', options=['مخطط','جاري','مكتمل','مؤجل'])},
+                use_container_width=True, hide_index=True, num_rows="dynamic", key="od_priorities"
+            )
+
+        elif page == "📋 خطة التنفيذ":
+            hdr("📋 خطة تنفيذ OD","Kotter's 8-Step Change Model")
+            ibox("""**نموذج Kotter للتغيير المؤسسي (8 خطوات):**
+1. Create Urgency | 2. Form Coalition | 3. Create Vision | 4. Communicate Vision
+5. Empower Action | 6. Quick Wins | 7. Build on Change | 8. Anchor in Culture""")
+
+            kotter_steps = [
+                {"step":1,"name":"خلق الإلحاح","en":"Create Urgency","desc":"بيّن لماذا التغيير ضروري الآن","duration":"أسبوعين"},
+                {"step":2,"name":"تشكيل تحالف","en":"Form Coalition","desc":"حدد القادة والمؤثرين الداعمين","duration":"أسبوع"},
+                {"step":3,"name":"صياغة الرؤية","en":"Create Vision","desc":"حدد الرؤية الواضحة والاستراتيجية","duration":"أسبوعين"},
+                {"step":4,"name":"نشر الرؤية","en":"Communicate","desc":"تواصل الرؤية بكل الوسائل المتاحة","duration":"شهر"},
+                {"step":5,"name":"تمكين العمل","en":"Empower Action","desc":"أزل العوائق ومكّن الفرق","duration":"شهر"},
+                {"step":6,"name":"تحقيق مكاسب سريعة","en":"Quick Wins","desc":"حقق نتائج ملموسة مبكرة","duration":"شهرين"},
+                {"step":7,"name":"البناء على التغيير","en":"Build on Change","desc":"وسّع نطاق التحسينات","duration":"3 أشهر"},
+                {"step":8,"name":"ترسيخ في الثقافة","en":"Anchor","desc":"اجعل التغيير جزءاً من الثقافة","duration":"6 أشهر"},
+            ]
+
+            for step in kotter_steps:
+                with st.expander(f"Step {step['step']}: {step['name']} ({step['en']})", expanded=step['step']<=3):
+                    st.markdown(f"**{step['desc']}**")
+                    sc1, sc2, sc3 = st.columns(3)
+                    with sc1: st.text_input("الإجراءات:", key=f"k_action_{step['step']}", placeholder="ماذا ستفعل؟")
+                    with sc2: st.text_input("المسؤول:", key=f"k_owner_{step['step']}")
+                    with sc3: st.selectbox("الحالة:", ["لم يبدأ","جاري","مكتمل"], key=f"k_status_{step['step']}")
+
+        elif page == "📥 تصدير OD":
+            hdr("📥 تصدير خطة التطوير المؤسسي")
+            if st.button("📥 تصدير Excel", type="primary", use_container_width=True, key="od_exp"):
+                ox = io.BytesIO()
+                with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
+                    kotter_df = pd.DataFrame([{"Step":s['step'],"Name":s['name'],"EN":s['en'],"Description":s['desc'],"Duration":s['duration']} for s in [
+                        {"step":1,"name":"خلق الإلحاح","en":"Create Urgency","desc":"بيّن لماذا التغيير ضروري","duration":"أسبوعين"},
+                        {"step":2,"name":"تشكيل تحالف","en":"Form Coalition","desc":"حدد القادة الداعمين","duration":"أسبوع"},
+                        {"step":3,"name":"صياغة الرؤية","en":"Create Vision","desc":"حدد الرؤية الواضحة","duration":"أسبوعين"},
+                        {"step":4,"name":"نشر الرؤية","en":"Communicate","desc":"تواصل بكل الوسائل","duration":"شهر"},
+                        {"step":5,"name":"تمكين العمل","en":"Empower","desc":"أزل العوائق","duration":"شهر"},
+                        {"step":6,"name":"مكاسب سريعة","en":"Quick Wins","desc":"نتائج ملموسة مبكرة","duration":"شهرين"},
+                        {"step":7,"name":"البناء","en":"Build","desc":"وسّع التحسينات","duration":"3 أشهر"},
+                        {"step":8,"name":"ترسيخ","en":"Anchor","desc":"جزء من الثقافة","duration":"6 أشهر"},
+                    ]])
+                    kotter_df.to_excel(w, sheet_name='Kotter 8 Steps', index=False)
+                    if len(data)>0: data.to_excel(w, sheet_name='Workforce Data', index=False)
+                st.download_button("📥 تحميل", data=ox.getvalue(),
+                    file_name=f"OD_Plan_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
     # =========================================
