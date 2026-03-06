@@ -479,29 +479,22 @@ def ibox(t,tp="info"):
 def kpi(l,v): st.markdown(f'<div class="kpi"><p>{l}</p><h3>{v}</h3></div>',unsafe_allow_html=True)
 
 def export_widget(dataframes, title="تقرير", key_prefix="exp"):
-    """Universal export widget: Excel + CSV + PDF for any data"""
-    # Normalize input
-    if dataframes is None:
-        return
+    """Universal export: Excel (with charts) + CSV + PDF (with interactive charts)"""
+    if dataframes is None: return
     if isinstance(dataframes, pd.DataFrame):
-        if len(dataframes) == 0:
-            return
-        main_df = dataframes.copy()
+        if len(dataframes) == 0: return
         all_dfs = {"البيانات": dataframes}
     elif isinstance(dataframes, dict):
         all_dfs = {k: v for k, v in dataframes.items() if isinstance(v, pd.DataFrame) and len(v) > 0}
-        if not all_dfs:
-            return
-        main_df = list(all_dfs.values())[0]
-    else:
-        return
+        if not all_dfs: return
+    else: return
 
     st.markdown("---")
     st.markdown("### 📥 تصدير التقرير")
     ex1, ex2, ex3 = st.columns(3)
     fname = f"{title}_{datetime.now().strftime('%Y%m%d')}".replace(" ","_")
 
-    # Excel
+    # ===== EXCEL with auto-charts =====
     with ex1:
         try:
             ox = io.BytesIO()
@@ -509,58 +502,106 @@ def export_widget(dataframes, title="تقرير", key_prefix="exp"):
                 for sname, df in all_dfs.items():
                     clean = str(sname)[:31].replace('/','_').replace('\\','_')
                     df.to_excel(w, sheet_name=clean, index=False)
-                    try:
-                        ws = w.sheets[clean]
-                        ws.set_column('A:Z', 18)
-                        hf = w.book.add_format({'bold':True,'bg_color':'#0F4C5C','font_color':'white','border':1})
-                        for ci, col in enumerate(df.columns):
-                            ws.write(0, ci, str(col), hf)
-                    except: pass
+                    ws = w.sheets[clean]; ws.set_column('A:Z', 18)
+                    hf = w.book.add_format({'bold':True,'bg_color':'#0F4C5C','font_color':'white','border':1})
+                    for ci, col in enumerate(df.columns): ws.write(0, ci, str(col), hf)
+                    # Auto-charts
+                    num_c = df.select_dtypes('number').columns.tolist()
+                    cat_c = [c for c in df.columns if df[c].dtype=='object' and 1<df[c].nunique()<20]
+                    if cat_c and num_c:
+                        grp = df.groupby(cat_c[0])[num_c[0]].sum().head(10)
+                        csn = f'{clean[:26]}_ch'
+                        cws = w.book.add_worksheet(csn)
+                        cws.write(0,0,cat_c[0],hf); cws.write(0,1,num_c[0],hf)
+                        for j,(idx,val) in enumerate(grp.items()): cws.write(j+1,0,str(idx)); cws.write(j+1,1,val)
+                        ch = w.book.add_chart({'type':'bar'})
+                        ch.add_series({'categories':[csn,1,0,len(grp),0],'values':[csn,1,1,len(grp),1],'fill':{'color':'#2A9D8F'}})
+                        ch.set_title({'name':f'{cat_c[0]} vs {num_c[0]}'}); ch.set_size({'width':520,'height':320}); ch.set_legend({'none':True})
+                        cws.insert_chart('D1',ch)
+                        ch2 = w.book.add_chart({'type':'pie'})
+                        counts = df[cat_c[0]].value_counts().head(8)
+                        for j,(idx,val) in enumerate(counts.items()): cws.write(j+1,3,str(idx)); cws.write(j+1,4,val)
+                        ch2.add_series({'categories':[csn,1,3,len(counts),3],'values':[csn,1,4,len(counts),4],'data_labels':{'percentage':True}})
+                        ch2.set_title({'name':f'توزيع {cat_c[0]}'}); ch2.set_size({'width':480,'height':320})
+                        cws.insert_chart('D20',ch2)
             st.download_button("📊 Excel", data=ox.getvalue(), file_name=f"{fname}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 type="primary", use_container_width=True, key=f"{key_prefix}_xl")
-        except Exception as e:
-            st.error(f"خطأ Excel: {e}")
+        except Exception as e: st.error(f"خطأ Excel: {e}")
 
-    # CSV (all sheets combined)
+    # ===== CSV =====
     with ex2:
         try:
             parts = []
             for sname, df in all_dfs.items():
-                if len(all_dfs) > 1:
-                    parts.append(f"\n=== {sname} ===\n")
+                if len(all_dfs)>1: parts.append(f"\n=== {sname} ===\n")
                 parts.append(df.to_csv(index=False))
-            csv_data = "\n".join(parts).encode('utf-8-sig')
-            st.download_button("📄 CSV", data=csv_data, file_name=f"{fname}.csv",
+            st.download_button("📄 CSV", data="\n".join(parts).encode('utf-8-sig'), file_name=f"{fname}.csv",
                 mime="text/csv", use_container_width=True, key=f"{key_prefix}_csv")
-        except Exception as e:
-            st.error(f"خطأ CSV: {e}")
+        except Exception as e: st.error(f"خطأ CSV: {e}")
 
-    # PDF
+    # ===== PDF with interactive Plotly charts =====
     with ex3:
         try:
-            tables_html = ""
+            charts_html = ""; tables_html = ""
+            kpi_html = "<div style='display:flex;gap:12px;flex-wrap:wrap;margin:15px 0'>"
             for sname, df in all_dfs.items():
-                tables_html += f"<h2>{sname}</h2>{df.to_html(index=False, classes='tbl')}"
+                num_c = df.select_dtypes('number').columns.tolist()
+                cat_c = [c for c in df.columns if df[c].dtype=='object' and 1<df[c].nunique()<20]
+                kpi_html += f"<div class='kb'><div class='kv'>{len(df):,}</div><div class='kl'>سجلات {sname}</div></div>"
+                for nc in num_c[:2]:
+                    kpi_html += f"<div class='kb'><div class='kv'>{df[nc].mean():,.0f}</div><div class='kl'>متوسط {nc[:15]}</div></div>"
+                    kpi_html += f"<div class='kb'><div class='kv'>{df[nc].sum():,.0f}</div><div class='kl'>إجمالي {nc[:15]}</div></div>"
+                # Bar chart
+                if cat_c and num_c:
+                    grp = df.groupby(cat_c[0])[num_c[0]].sum().head(12).sort_values()
+                    fig = px.bar(x=grp.values,y=grp.index,orientation='h',title=f'{cat_c[0]} vs {num_c[0]}',color=grp.values,color_continuous_scale='teal')
+                    fig.update_layout(height=350,margin=dict(l=10,r=10,t=40,b=10),showlegend=False,coloraxis_showscale=False)
+                    charts_html += fig.to_html(full_html=False,include_plotlyjs=False)
+                # Pie chart
+                if cat_c:
+                    counts = df[cat_c[0]].value_counts().head(8)
+                    fig = px.pie(values=counts.values,names=counts.index,title=f'توزيع {cat_c[0]}',hole=0.4)
+                    fig.update_layout(height=350,margin=dict(l=10,r=10,t=40,b=10))
+                    charts_html += fig.to_html(full_html=False,include_plotlyjs=False)
+                # Histogram
+                if num_c:
+                    fig = px.histogram(df,x=num_c[0],nbins=20,title=f'توزيع {num_c[0]}',color_discrete_sequence=['#E36414'])
+                    fig.add_vline(x=df[num_c[0]].mean(),line_dash="dash",line_color="red",annotation_text=f"المتوسط: {df[num_c[0]].mean():,.0f}")
+                    fig.update_layout(height=350,margin=dict(l=10,r=10,t=40,b=10))
+                    charts_html += fig.to_html(full_html=False,include_plotlyjs=False)
+                # Box plot
+                if len(num_c)>=1 and cat_c:
+                    fig = px.box(df,x=cat_c[0],y=num_c[0],title=f'{num_c[0]} حسب {cat_c[0]}',color_discrete_sequence=['#E9C46A'])
+                    fig.update_layout(height=350,margin=dict(l=10,r=10,t=40,b=10))
+                    charts_html += fig.to_html(full_html=False,include_plotlyjs=False)
+                tables_html += f"<h2>{sname}</h2>{df.to_html(index=False,classes='tbl')}"
+                break  # Charts from first df only
+            kpi_html += "</div>"
             pdf_html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
-            <style>body{{font-family:Arial,sans-serif;padding:20px;direction:rtl}}
-            h1{{color:#0F4C5C;border-bottom:3px solid #E36414;padding-bottom:8px}}
-            h2{{color:#264653;margin-top:25px}}
+            <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+            <style>body{{font-family:Arial,sans-serif;padding:20px;direction:rtl;color:#333}}
+            h1{{color:#0F4C5C;text-align:center;border-bottom:3px solid #E36414;padding-bottom:10px}}
+            h2{{color:#264653;margin-top:25px;border-bottom:1px solid #eee;padding-bottom:5px}}
             .tbl{{border-collapse:collapse;width:100%;margin:10px 0}}
             .tbl th{{background:#0F4C5C;color:white;padding:8px;border:1px solid #ddd;text-align:center}}
             .tbl td{{padding:6px;border:1px solid #ddd;text-align:center}}
             .tbl tr:nth-child(even){{background:#f8f9fa}}
+            .kb{{background:#f0f4f8;border-radius:8px;padding:12px 20px;border-right:4px solid #E36414;min-width:110px}}
+            .kv{{font-size:1.3em;font-weight:700;color:#0F4C5C}} .kl{{font-size:0.7em;color:#888}}
             .footer{{margin-top:30px;color:#888;font-size:0.8em;text-align:center;border-top:1px solid #ddd;padding-top:10px}}
-            @media print{{body{{margin:0}} @page{{margin:1cm}}}}</style>
-            <script>window.onload=function(){{setTimeout(function(){{window.print()}},800)}}</script>
-            </head><body><h1>{title}</h1><p>التاريخ: {datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
-            {tables_html}
-            <div class="footer">HR Analytics Platform</div></body></html>"""
+            @media print{{@page{{margin:0.5cm}} .js-plotly-plot{{break-inside:avoid}}}}</style>
+            <script>window.onload=function(){{setTimeout(function(){{window.print()}},1500)}}</script>
+            </head><body><h1>📊 {title}</h1>
+            <p style="text-align:center;color:#888">{datetime.now().strftime('%Y-%m-%d %H:%M')} | HR Analytics Platform</p>
+            {kpi_html}
+            <h2>📊 الرسوم البيانية</h2>{charts_html}
+            <h2>📋 البيانات التفصيلية</h2>{tables_html}
+            <div class="footer">HR Analytics Platform | تم الإنشاء تلقائياً</div></body></html>"""
             st.download_button("📄 PDF", data=pdf_html.encode('utf-8'), file_name=f"{fname}.html",
                 mime="text/html", use_container_width=True, key=f"{key_prefix}_pdf",
                 help="افتح في المتصفح ← Save as PDF")
-        except Exception as e:
-            st.error(f"خطأ PDF: {e}")
+        except Exception as e: st.error(f"خطأ PDF: {e}")
 def fmt(v): return f"{v:,.0f}"
 def has(df,n): return df is not None and n in df.columns and len(df)>0
 
