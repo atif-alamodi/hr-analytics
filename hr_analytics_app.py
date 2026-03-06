@@ -557,29 +557,28 @@ def export_widget(dataframes, title="تقرير", key_prefix="exp"):
                     grp = df.groupby(cat_c[0])[num_c[0]].sum().head(12).sort_values()
                     fig = px.bar(x=grp.values,y=grp.index,orientation='h',title=f'{cat_c[0]} vs {num_c[0]}',color=grp.values,color_continuous_scale='teal')
                     fig.update_layout(height=350,margin=dict(l=10,r=10,t=40,b=10),showlegend=False,coloraxis_showscale=False)
-                    charts_html += fig.to_html(full_html=False,include_plotlyjs=False)
+                    charts_html += fig.to_html(full_html=False,include_plotlyjs="cdn")
                 # Pie chart
                 if cat_c:
                     counts = df[cat_c[0]].value_counts().head(8)
                     fig = px.pie(values=counts.values,names=counts.index,title=f'توزيع {cat_c[0]}',hole=0.4)
                     fig.update_layout(height=350,margin=dict(l=10,r=10,t=40,b=10))
-                    charts_html += fig.to_html(full_html=False,include_plotlyjs=False)
+                    charts_html += fig.to_html(full_html=False,include_plotlyjs='cdn')
                 # Histogram
                 if num_c:
                     fig = px.histogram(df,x=num_c[0],nbins=20,title=f'توزيع {num_c[0]}',color_discrete_sequence=['#E36414'])
                     fig.add_vline(x=df[num_c[0]].mean(),line_dash="dash",line_color="red",annotation_text=f"المتوسط: {df[num_c[0]].mean():,.0f}")
                     fig.update_layout(height=350,margin=dict(l=10,r=10,t=40,b=10))
-                    charts_html += fig.to_html(full_html=False,include_plotlyjs=False)
+                    charts_html += fig.to_html(full_html=False,include_plotlyjs='cdn')
                 # Box plot
                 if len(num_c)>=1 and cat_c:
                     fig = px.box(df,x=cat_c[0],y=num_c[0],title=f'{num_c[0]} حسب {cat_c[0]}',color_discrete_sequence=['#E9C46A'])
                     fig.update_layout(height=350,margin=dict(l=10,r=10,t=40,b=10))
-                    charts_html += fig.to_html(full_html=False,include_plotlyjs=False)
+                    charts_html += fig.to_html(full_html=False,include_plotlyjs='cdn')
                 tables_html += f"<h2>{sname}</h2>{df.to_html(index=False,classes='tbl')}"
                 break  # Charts from first df only
             kpi_html += "</div>"
             pdf_html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
-            <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
             <style>body{{font-family:Arial,sans-serif;padding:20px;direction:rtl;color:#333}}
             h1{{color:#0F4C5C;text-align:center;border-bottom:3px solid #E36414;padding-bottom:10px}}
             h2{{color:#264653;margin-top:25px;border-bottom:1px solid #eee;padding-bottom:5px}}
@@ -591,7 +590,7 @@ def export_widget(dataframes, title="تقرير", key_prefix="exp"):
             .kv{{font-size:1.3em;font-weight:700;color:#0F4C5C}} .kl{{font-size:0.7em;color:#888}}
             .footer{{margin-top:30px;color:#888;font-size:0.8em;text-align:center;border-top:1px solid #ddd;padding-top:10px}}
             @media print{{@page{{margin:0.5cm}} .js-plotly-plot{{break-inside:avoid}}}}</style>
-            <script>window.onload=function(){{setTimeout(function(){{window.print()}},1500)}}</script>
+            
             </head><body><h1>📊 {title}</h1>
             <p style="text-align:center;color:#888">{datetime.now().strftime('%Y-%m-%d %H:%M')} | HR Analytics Platform</p>
             {kpi_html}
@@ -2674,6 +2673,8 @@ def main():
 
 
 
+
+            export_widget(snap if len(snap)>0 else None, "سلم_الرواتب", "slsc")
         elif page == "🎁 لوحة Total Rewards":
             hdr("🎁 لوحة Total Rewards الشاملة","Compensation + Benefits + Work-Life + Performance + Development")
             if len(snap) == 0: st.info("📁 ارفع ملف بيانات الموظفين"); return
@@ -2778,6 +2779,8 @@ def main():
 
 
 
+
+            export_widget(benefits_data if len(benefits_data)>0 else None, "المزايا_والتأمينات", "bnft")
         elif page == "📊 تحليل التنافسية":
             hdr("📊 تحليل التنافسية","Market Competitiveness")
             if len(snap)==0 or not sal_col_tr: st.info("📁 ارفع ملف رواتب"); return
@@ -7742,7 +7745,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                 with st.expander("📋 عرض البيانات الخام"):
                     st.dataframe(ga_df, use_container_width=True, height=400)
 
-
+            export_widget(ga_df if 'ga_df' in dir() and len(ga_df)>0 else (data if len(data)>0 else None), "تحليل_تلقائي", "ga01")
 
         elif page == "🤖 أسئلة ذكية":
             hdr("🤖 المحلل الذكي", "اطرح أسئلة عن بياناتك بالعربي أو الإنجليزي")
@@ -7896,7 +7899,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                             fig.update_layout(template='plotly_dark', paper_bgcolor='#1e1e2e', plot_bgcolor='#1e1e2e',
                                 height=350, font=dict(color='white', size=11), margin=dict(l=10,r=10,t=40,b=10),
                                 showlegend=True)
-                            chart_div = fig.to_html(full_html=False, include_plotlyjs=False)
+                            chart_div = fig.to_html(full_html=False, include_plotlyjs='cdn')
                             charts_html += f"<div class='chart'>{chart_div}</div>"
 
                         charts_html = ""
@@ -8105,7 +8108,7 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                             .section h2{color:#0F4C5C!important}}</style>"""
                             pdf_html = pdf_html.replace('</head>', pdf_css + '</head>')
                             # Auto-print script
-                            pdf_html = pdf_html.replace('</body>', '<script>window.onload=function(){setTimeout(function(){window.print()},1500)}</script></body>')
+                            pdf_html = pdf_html.replace('</body>', '</body>')
                             st.download_button("📄 PDF (Print)", data=pdf_html.encode('utf-8'),
                                 file_name=f"{rpt_title}_{datetime.now().strftime('%Y%m%d')}_print.html",
                                 mime="text/html", use_container_width=True,
@@ -8735,6 +8738,8 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
 
 
 
+
+            export_widget(data if len(data)>0 else None, "تحليل_النتائج", "svrs")
         elif page == "📥 تصدير الاستبيانات":
             hdr("📥 تصدير بيانات الاستبيانات")
             if st.session_state.survey_responses:
@@ -9216,6 +9221,8 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
 
 
         # ===== PAGE: Thomas PPA =====
+
+            export_widget(data if len(data)>0 else None, "BigFive_OCEAN", "bf01")
         elif page == "📊 Thomas PPA":
             hdr("📊 Thomas PPA", "تحليل الملف الشخصي المهني (24 سؤال)")
             st.caption("مبني على نموذج DISC لتحليل السلوك المهني: الهيمنة، التأثير، الثبات، الامتثال")
@@ -9237,6 +9244,8 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
 
 
         # ===== PAGE: Hogan HPI =====
+
+            export_widget(data if len(data)>0 else None, "Thomas_PPA", "tp01")
         elif page == "🔬 Hogan HPI":
             hdr("🔬 Hogan HPI", "مقياس هوجان للشخصية المهنية (28 سؤال)")
             st.caption("يقيس 7 مقاييس أساسية: التوازن النفسي، الطموح، الاجتماعية، الحساسية، الحصافة، الفضول، التعلم")
@@ -9258,6 +9267,8 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
 
 
         # ===== PAGE: MBTI =====
+
+            export_widget(data if len(data)>0 else None, "Hogan_HPI", "hg01")
         elif page == "💡 MBTI":
             hdr("💡 MBTI", "مؤشر مايرز بريغز لأنماط الشخصية (32 سؤال)")
             st.caption("يحدد نمط الشخصية من 16 نمط عبر 4 أبعاد: الطاقة، المعلومات، القرارات، أسلوب الحياة")
@@ -9279,6 +9290,8 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
 
 
         # ===== PAGE: DISC =====
+
+            export_widget(data if len(data)>0 else None, "MBTI", "mb01")
         elif page == "💎 DISC":
             hdr("💎 اختبار DISC", "تقييم أنماط السلوك المهني الأربعة (24 سؤال)")
             st.caption("يقيس 4 أنماط سلوكية: الهيمنة (D)، التأثير (I)، الثبات (S)، الالتزام (C) مع تحديد النمط المركب")
@@ -9300,6 +9313,8 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
 
 
         # ===== PAGE: Reports =====
+
+            export_widget(data if len(data)>0 else None, "DISC", "dc01")
         elif page == "📈 تقارير الشخصية":
             hdr("📈 تقارير اختبارات الشخصية", "قاعدة بيانات دائمة - لا تُحذف إلا بموافقة مدير النظام")
 
