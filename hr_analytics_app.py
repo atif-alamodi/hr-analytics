@@ -6036,24 +6036,47 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 5. **نظام مجلس الضمان الصحي التعاوني** (CCHI) - Health insurance regulations
 6. **قرارات وزير الموارد البشرية** - Ministerial decisions for private sector
 
-**KEY LABOR LAW ARTICLES YOU MUST KNOW:**
-- Art. 50-57: Employment contracts (types, probation, termination)
-- Art. 74-82: Contract termination (legitimate/illegitimate reasons)
-- Art. 77: Unfair dismissal compensation (15 days/year indefinite, remaining term fixed, min 2 months)
-- Art. 80: Lawful termination without compensation
-- Art. 81: Worker's right to leave without notice
-- Art. 84-85: End of service benefits (half salary first 5 years, full after)
-- Art. 88: Settlement within 7 days
-- Art. 98-104: Working hours (48/week, 36 Ramadan)
-- Art. 107: Overtime (150%)
-- Art. 109-116: Annual leave (21 days first 5 years, 30 after)
-- Art. 113-116: Sick leave, maternity leave
-- Art. 143-149: Work injuries
-- Art. 155-161: Women's employment
-- Art. 229-245: Penalties and violations
-- Nitaqat/Saudization requirements and quotas
-- Wage Protection System (WPS)
-- GOSI: 9.75% employee + 11.75% employer (Saudi), 2% employer (non-Saudi)
+**KEY LABOR LAW ARTICLES (ACTUAL TEXT):**
+
+**المادة 50:** عقد العمل هو عقد مبرم بين صاحب عمل وعامل، يتعهد الأخير بموجبه أن يعمل تحت إدارة صاحب العمل أو إشراقه مقابل أجر.
+
+**المادة 53:** فترة التجربة لا تزيد عن 90 يوماً، يجوز تمديدها لـ 180 يوماً باتفاق كتابي. لا تدخل فيها إجازة العيدين والإجازة المرضية.
+
+**المادة 55:** إذا تضمن العقد المحدد المدة شرطاً يقضي بتجديده لمدة مماثلة، فإنه يتجدد. إذا تجدد العقد لثلاث مرات متتالية أو بلغت مدته مع التجديدات أربع سنوات أيهما أقل، يتحول لغير محدد المدة.
+
+**المادة 74:** ينتهي عقد العمل بالحالات: اتفاق الطرفين، انتهاء المدة، إرادة أحد الطرفين (غير محدد)، القوة القاهرة، إغلاق المنشأة، بلوغ سن التقاعد (60 للرجل 55 للمرأة)، الإفلاس.
+
+**المادة 77 (تعويض الفسخ غير المشروع):** ما لم يتضمن العقد تعويضاً محدداً: (1) أجر 15 يوماً عن كل سنة خدمة إذا كان العقد غير محدد المدة. (2) أجر المدة الباقية إذا كان العقد محدد المدة. (3) لا يقل التعويض عن أجر شهرين في كلا الحالتين.
+
+**المادة 80 (فسخ بدون تعويض):** يحق لصاحب العمل فسخ العقد دون مكافأة أو إشعار إذا: اعتدى العامل على صاحب العمل، لم يؤدِ التزاماته الجوهرية، ارتكب سلوكاً سيئاً، تغيب 30 يوماً متفرقة أو 15 متتالية، أفشى أسراراً، استغل المنصب.
+
+**المادة 81 (ترك بدون إشعار):** يحق للعامل ترك العمل بدون إشعار إذا: أخل صاحب العمل بالتزاماته، أو وقع غش، أو كُلف بعمل يختلف جوهرياً، أو وقع اعتداء عليه.
+
+**المادة 84 (مكافأة نهاية الخدمة - إنهاء):** يستحق العامل عند انتهاء علاقة العمل مكافأة: نصف أجر شهر عن كل سنة من السنوات الخمس الأولى + أجر شهر كامل عن كل سنة بعد ذلك. يحسب على أساس آخر أجر.
+
+**المادة 85 (مكافأة - استقالة):** إذا كان الانتهاء بسبب استقالة العامل: ثلث المكافأة (2-5 سنوات)، ثلثان (5-10 سنوات)، كاملة (10+ سنوات).
+
+**المادة 88:** يجب على صاحب العمل تصفية حقوق العامل خلال أسبوع من انتهاء العقد.
+
+**المادة 98-99:** لا تزيد ساعات العمل على 8 ساعات يومياً أو 48 ساعة أسبوعياً. تُخفض لـ 6 ساعات/36 أسبوعياً في رمضان.
+
+**المادة 107 (العمل الإضافي):** يدفع أجر إضافي بنسبة 150% من الأجر الأساسي.
+
+**المادة 109 (الإجازة السنوية):** 21 يوماً في أول 5 سنوات، 30 يوماً بعد ذلك. لا يجوز التنازل عنها.
+
+**المادة 113 (الإجازة المرضية):** 30 يوماً بأجر كامل + 60 يوماً بثلاثة أرباع + 30 يوماً بدون أجر في السنة.
+
+**المادة 151 (إجازة الوضع):** 10 أسابيع توزعها كما تشاء (4 أسابيع قبل كحد أقصى).
+
+**التأمينات الاجتماعية (GOSI):** سعودي: 9.75% موظف + 11.75% صاحب عمل = 21.5%. غير سعودي: 2% صاحب عمل فقط (أخطار مهنية).
+
+**نطاقات:** برنامج السعودة يصنف المنشآت (بلاتيني/أخضر/أصفر/أحمر) حسب نسبة السعودة.
+
+**IMPORTANT INSTRUCTIONS:**
+- Use web search to find the latest ministerial decisions and updates to Saudi Labor Law
+- When answering, ALWAYS cite the specific article number
+- If the user's question relates to a recent change, search for the latest updates
+- Answer in the same language the user asks (Arabic gets Arabic response)
 
 **RULES:**
 1. ALWAYS cite the specific article number when answering
@@ -6126,7 +6149,30 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 5. Use real-world examples and case studies
 6. For Saudi context, consider local labor law and culture
 7. Suggest metrics and KPIs to measure success
-8. Recommend tools and technologies when appropriate"""
+8. Recommend tools and technologies when appropriate
+9. Use web search to find the latest HR trends, research, and best practices
+10. For Saudi-specific questions, consider local labor law and cultural context
+
+**KEY MODELS & FRAMEWORKS (from PHRi):**
+- ADDIE Model: Analysis → Design → Development → Implementation → Evaluation
+- Kirkpatrick 4 Levels: Reaction → Learning → Behavior → Results
+- Phillips ROI: Level 5 = (Benefits - Costs) / Costs × 100
+- Maslow's Hierarchy: Physiological → Safety → Social → Esteem → Self-Actualization
+- Herzberg Two-Factor: Motivators (achievement, recognition) vs Hygiene (salary, conditions)
+- Vroom Expectancy: Motivation = Expectancy × Instrumentality × Valence
+- Adams Equity Theory: Perceived fairness of inputs vs outcomes
+- Balanced Scorecard: Financial, Customer, Internal Process, Learning & Growth
+- 70-20-10 Model: 70% experience, 20% social, 10% formal training
+- Competency-Based HRM: Selection, development, performance based on competencies
+- Strategic HRM: Aligning HR practices with business strategy
+- Talent Management: Attract, develop, engage, retain top talent
+- Succession Planning: Identifying and developing future leaders
+- Total Rewards: Compensation + Benefits + Work-Life + Performance + Development
+- Job Evaluation Methods: Point Factor, Ranking, Classification, Factor Comparison
+- Performance Appraisal: 360-degree, MBO, BARS, Critical Incidents
+- Employee Engagement: Gallup Q12, eNPS, Pulse Surveys
+- Change Management: Kotter 8-Step, ADKAR, Lewin's Model
+- HR Analytics: Descriptive, Diagnostic, Predictive, Prescriptive"""
 
         def chunk_text(text, chunk_size=500, overlap=50):
             """Split text into overlapping chunks for RAG"""
@@ -6276,51 +6322,92 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                     messages.append({"role": msg['role'], "content": msg['content']})
             messages.append({"role": "user", "content": user_message})
 
-            payload = json.dumps({
-                "model": "claude-3-5-sonnet-20241022",
-                "max_tokens": 4000,
-                "system": enhanced_prompt,
-                "messages": messages
-            })
+            # Try with web search first, fallback without
+            for use_web in [True, False]:
+                payload_dict = {
+                    "model": "claude-3-5-sonnet-20241022",
+                    "max_tokens": 4000,
+                    "system": enhanced_prompt,
+                    "messages": messages,
+                }
+                if use_web:
+                    payload_dict["tools"] = [{"type": "web_search_20250305", "name": "web_search"}]
+                payload = json.dumps(payload_dict)
 
-            try:
-                req = urllib.request.Request(
-                    "https://api.anthropic.com/v1/messages",
-                    data=payload.encode('utf-8'),
-                    headers={'Content-Type':'application/json','x-api-key':api_key,'anthropic-version':'2023-06-01'},
-                    method='POST'
-                )
-                with urllib.request.urlopen(req, timeout=60) as resp:
-                    result = json.loads(resp.read().decode())
-                    text = result.get('content', [{}])[0].get('text', '')
-                    if text:
-                        save_qa_pair(user_message, text, model_type)
-                    return text, None
-            except urllib.request.HTTPError as he:
-                error_body = he.read().decode('utf-8', errors='ignore')
                 try:
-                    err_json = json.loads(error_body)
-                    err_msg = err_json.get('error', {}).get('message', error_body[:200])
-                except:
-                    err_msg = error_body[:200]
-                if he.code == 401:
-                    return None, "❌ API Key غير صالح. تأكد من المفتاح في الإعدادات"
-                elif he.code == 429:
-                    return None, "⚠️ تم تجاوز حد الاستخدام. انتظر دقيقة أو أضف رصيد"
-                elif he.code == 400:
-                    return None, f"❌ خطأ في الطلب: {err_msg}"
-                else:
-                    return None, f"خطأ {he.code}: {err_msg}"
-            except Exception as e:
-                return None, f"خطأ في الاتصال: {str(e)}"
+                    req = urllib.request.Request(
+                        "https://api.anthropic.com/v1/messages",
+                        data=payload.encode('utf-8'),
+                        headers={'Content-Type':'application/json','x-api-key':api_key,'anthropic-version':'2023-06-01'},
+                        method='POST'
+                    )
+                    with urllib.request.urlopen(req, timeout=90) as resp:
+                        result = json.loads(resp.read().decode())
+                        text_parts = []
+                        for block in result.get('content', []):
+                            if block.get('type') == 'text':
+                                text_parts.append(block.get('text', ''))
+                        text = "\n".join(text_parts)
+                        if text:
+                            save_qa_pair(user_message, text, model_type)
+                        return text, None
+                except urllib.request.HTTPError as he:
+                    if use_web and he.code == 400:
+                        continue  # Retry without web search
+                    error_body = he.read().decode('utf-8', errors='ignore')
+                    try:
+                        err_json = json.loads(error_body)
+                        err_msg = err_json.get('error', {}).get('message', error_body[:200])
+                    except:
+                        err_msg = error_body[:200]
+                    if he.code == 401:
+                        return None, "❌ API Key غير صالح. تأكد من المفتاح في الإعدادات"
+                    elif he.code == 429:
+                        return None, "⚠️ تم تجاوز حد الاستخدام. انتظر دقيقة أو أضف رصيد في console.anthropic.com"
+                    else:
+                        return None, f"خطأ {he.code}: {err_msg}"
+                except Exception as e:
+                    if use_web:
+                        continue
+                    return None, f"خطأ في الاتصال: {str(e)}"
+            return None, "خطأ غير متوقع"
 
-        # API Key check
+        # API Key check + auto-load knowledge base
         if 'claude_api_key' not in st.session_state:
             try:
                 api_key = st.secrets.get("anthropic", {}).get("api_key", "")
                 st.session_state.claude_api_key = api_key
             except:
                 st.session_state.claude_api_key = ""
+            # Also try loading from DB
+            if not st.session_state.claude_api_key:
+                try:
+                    conn = get_conn()
+                    c = conn.cursor()
+                    c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("claude_api_key",))
+                    row = c.fetchone()
+                    conn.close()
+                    if row: st.session_state.claude_api_key = row[0]
+                except: pass
+
+        # Auto-load RAG context on first visit
+        if 'rag_auto_loaded' not in st.session_state:
+            st.session_state.rag_auto_loaded = True
+            try:
+                conn = get_conn()
+                c = conn.cursor()
+                c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_chunks",))
+                row = c.fetchone()
+                # Also load legal docs
+                legal_ctx = ""
+                for dk in ["labor_law","labor_regulations","social_insurance","insurance_regulations","health_insurance","minister_decisions"]:
+                    c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", (f"legal_doc_{dk}",))
+                    r2 = c.fetchone()
+                    if r2: legal_ctx += r2[0][:5000] + "\n"
+                conn.close()
+                if legal_ctx:
+                    st.session_state['legal_docs_context'] = legal_ctx
+            except: pass
 
         if not st.session_state.claude_api_key:
             st.warning("⚠️ يرجى إدخال Claude API Key")
