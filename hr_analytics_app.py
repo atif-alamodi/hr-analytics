@@ -6266,6 +6266,10 @@ function stopSpeak(){{speechSynthesis.cancel()}}
             if legal_context:
                 enhanced_prompt += f"\n\n**UPLOADED LEGAL REFERENCES:**\n{legal_context[:6000]}"
 
+            # Truncate system prompt if too long (max ~15000 chars)
+            if len(enhanced_prompt) > 15000:
+                enhanced_prompt = enhanced_prompt[:15000] + "\n\n[Context truncated for length]"
+
             messages = []
             if chat_history:
                 for msg in chat_history[-10:]:
@@ -6273,7 +6277,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
             messages.append({"role": "user", "content": user_message})
 
             payload = json.dumps({
-                "model": "claude-sonnet-4-20250514",
+                "model": "claude-3-5-sonnet-20241022",
                 "max_tokens": 4000,
                 "system": enhanced_prompt,
                 "messages": messages
@@ -6289,12 +6293,26 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                 with urllib.request.urlopen(req, timeout=60) as resp:
                     result = json.loads(resp.read().decode())
                     text = result.get('content', [{}])[0].get('text', '')
-                    # Save Q&A for learning
                     if text:
                         save_qa_pair(user_message, text, model_type)
                     return text, None
+            except urllib.request.HTTPError as he:
+                error_body = he.read().decode('utf-8', errors='ignore')
+                try:
+                    err_json = json.loads(error_body)
+                    err_msg = err_json.get('error', {}).get('message', error_body[:200])
+                except:
+                    err_msg = error_body[:200]
+                if he.code == 401:
+                    return None, "❌ API Key غير صالح. تأكد من المفتاح في الإعدادات"
+                elif he.code == 429:
+                    return None, "⚠️ تم تجاوز حد الاستخدام. انتظر دقيقة أو أضف رصيد"
+                elif he.code == 400:
+                    return None, f"❌ خطأ في الطلب: {err_msg}"
+                else:
+                    return None, f"خطأ {he.code}: {err_msg}"
             except Exception as e:
-                return None, f"خطأ: {str(e)}"
+                return None, f"خطأ في الاتصال: {str(e)}"
 
         # API Key check
         if 'claude_api_key' not in st.session_state:
