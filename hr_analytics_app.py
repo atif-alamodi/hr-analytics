@@ -1766,7 +1766,7 @@ def main():
         elif section == "📜 العقود":
             page = st.radio("📌", ["📜 إنشاء عقد","🔍 تحليل العقود","📋 العقود المحفوظة","📥 تصدير العقود"], label_visibility="collapsed")
         elif section == "🤖 المستشار الذكي":
-            page = st.radio("📌", ["⚖️ مستشار القضايا العمالية","📚 مستشار الموارد البشرية","📋 إدارة المراجع القانونية"], label_visibility="collapsed")
+            page = st.radio("📌", ["⚖️ مستشار القضايا العمالية","📚 مستشار الموارد البشرية","🧠 قاعدة المعرفة RAG","📊 التعلم والتحسين","📋 إدارة المراجع"], label_visibility="collapsed")
         elif section == "🔍 التحليل العام":
             page = st.radio("📌", ["📊 تحليل تلقائي","🤖 أسئلة ذكية"], label_visibility="collapsed")
         elif section == "📝 الاستبيانات":
@@ -6128,28 +6128,154 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 7. Suggest metrics and KPIs to measure success
 8. Recommend tools and technologies when appropriate"""
 
-        def call_claude_api(system_prompt, user_message, chat_history=None):
-            """Call Claude API with system prompt and user message"""
+        def chunk_text(text, chunk_size=500, overlap=50):
+            """Split text into overlapping chunks for RAG"""
+            chunks = []
+            words = text.split()
+            for i in range(0, len(words), chunk_size - overlap):
+                chunk = " ".join(words[i:i + chunk_size])
+                if chunk.strip():
+                    chunks.append(chunk)
+            return chunks
+
+        def search_knowledge_base(query, top_k=5):
+            """RAG Retrieval: search knowledge base for relevant chunks"""
+            try:
+                conn = get_conn()
+                c = conn.cursor()
+                c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_chunks",))
+                row = c.fetchone()
+                conn.close()
+                if not row: return ""
+                all_chunks = json.loads(row[0])
+
+                # Simple TF-IDF-like scoring
+                query_words = set(query.lower().split())
+                scored = []
+                for chunk in all_chunks:
+                    chunk_words = set(chunk.get('text','').lower().split())
+                    # Score = number of matching words / total query words
+                    match_count = len(query_words & chunk_words)
+                    if match_count > 0:
+                        score = match_count / max(len(query_words), 1)
+                        # Boost by source relevance
+                        if chunk.get('source','') in query.lower(): score *= 1.5
+                        scored.append((score, chunk))
+
+                scored.sort(key=lambda x: x[0], reverse=True)
+                top_chunks = scored[:top_k]
+                context = "\n\n---\n".join([f"[Source: {c[1].get('source','')}]\n{c[1]['text']}" for c in top_chunks])
+                return context
+            except:
+                return ""
+
+        def save_to_knowledge_base(text, source, doc_type="legal"):
+            """RAG Indexing: chunk and save document to knowledge base"""
+            chunks = chunk_text(text)
+            try:
+                conn = get_conn()
+                c = conn.cursor()
+                c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_chunks",))
+                row = c.fetchone()
+                existing = json.loads(row[0]) if row else []
+
+                # Remove old chunks from same source
+                existing = [ch for ch in existing if ch.get('source') != source]
+
+                # Add new chunks
+                for chunk in chunks:
+                    existing.append({"text": chunk, "source": source, "type": doc_type,
+                        "added": datetime.now().strftime("%Y-%m-%d")})
+
+                _upsert_config(c, "rag_chunks", json.dumps(existing, ensure_ascii=False))
+                conn.commit()
+                conn.close()
+                return len(chunks)
+            except Exception as e:
+                return 0
+
+        def save_qa_pair(question, answer, model_type, feedback=None):
+            """Save Q&A for continuous learning"""
+            try:
+                conn = get_conn()
+                c = conn.cursor()
+                c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_qa_history",))
+                row = c.fetchone()
+                history = json.loads(row[0]) if row else []
+                history.append({
+                    "q": question[:500], "a": answer[:1000], "model": model_type,
+                    "feedback": feedback, "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "user": st.session_state.get('user_name','')
+                })
+                # Keep last 500 Q&A pairs
+                if len(history) > 500: history = history[-500:]
+                _upsert_config(c, "rag_qa_history", json.dumps(history, ensure_ascii=False))
+                conn.commit()
+                conn.close()
+            except: pass
+
+        def get_learned_context(query, model_type, top_k=3):
+            """Get relevant past Q&A pairs for learning context"""
+            try:
+                conn = get_conn()
+                c = conn.cursor()
+                c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_qa_history",))
+                row = c.fetchone()
+                conn.close()
+                if not row: return ""
+                history = json.loads(row[0])
+                # Filter by model type and positive feedback
+                relevant = [h for h in history if h.get('model') == model_type and h.get('feedback') != 'bad']
+                if not relevant: return ""
+
+                # Score by query similarity
+                query_words = set(query.lower().split())
+                scored = []
+                for h in relevant:
+                    q_words = set(h.get('q','').lower().split())
+                    match = len(query_words & q_words)
+                    if match > 1: scored.append((match, h))
+
+                scored.sort(key=lambda x: x[0], reverse=True)
+                top = scored[:top_k]
+                if not top: return ""
+                return "\n\n".join([f"Previous Q: {h[1]['q']}\nPrevious A: {h[1]['a'][:300]}" for h in top])
+            except:
+                return ""
+
+        def call_claude_api(system_prompt, user_message, chat_history=None, model_type="general"):
+            """Enhanced Claude API call with RAG retrieval + learned context"""
             import urllib.request
             api_key = st.session_state.get('claude_api_key', '')
             if not api_key:
-                return None, "⚠️ يرجى إدخال Claude API Key في إعدادات المنصة"
+                return None, "يرجى إدخال Claude API Key في إعدادات المنصة"
+
+            # RAG: Search knowledge base
+            rag_context = search_knowledge_base(user_message)
+            learned_context = get_learned_context(user_message, model_type)
+
+            # Enhance system prompt with RAG context
+            enhanced_prompt = system_prompt
+            if rag_context:
+                enhanced_prompt += f"\n\n**RELEVANT KNOWLEDGE BASE DOCUMENTS:**\n{rag_context[:6000]}"
+            if learned_context:
+                enhanced_prompt += f"\n\n**LEARNED FROM PREVIOUS INTERACTIONS:**\n{learned_context[:2000]}"
+
+            # Add uploaded legal docs
+            legal_context = st.session_state.get('legal_docs_context', '')
+            if legal_context:
+                enhanced_prompt += f"\n\n**UPLOADED LEGAL REFERENCES:**\n{legal_context[:6000]}"
 
             messages = []
             if chat_history:
-                for msg in chat_history[-10:]:  # Last 10 messages for context
+                for msg in chat_history[-10:]:
                     messages.append({"role": msg['role'], "content": msg['content']})
             messages.append({"role": "user", "content": user_message})
-
-            # Add uploaded legal docs context if available
-            legal_context = st.session_state.get('legal_docs_context', '')
-            if legal_context and 'عمالي' in system_prompt.lower() or 'labor' in system_prompt.lower():
-                system_prompt += f"\n\n**ADDITIONAL LEGAL REFERENCE DOCUMENTS:**\n{legal_context[:8000]}"
 
             payload = json.dumps({
                 "model": "claude-sonnet-4-20250514",
                 "max_tokens": 4000,
-                "system": system_prompt,
+                "system": enhanced_prompt,
                 "messages": messages
             })
 
@@ -6157,19 +6283,18 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                 req = urllib.request.Request(
                     "https://api.anthropic.com/v1/messages",
                     data=payload.encode('utf-8'),
-                    headers={
-                        'Content-Type': 'application/json',
-                        'x-api-key': api_key,
-                        'anthropic-version': '2023-06-01'
-                    },
+                    headers={'Content-Type':'application/json','x-api-key':api_key,'anthropic-version':'2023-06-01'},
                     method='POST'
                 )
                 with urllib.request.urlopen(req, timeout=60) as resp:
                     result = json.loads(resp.read().decode())
                     text = result.get('content', [{}])[0].get('text', '')
+                    # Save Q&A for learning
+                    if text:
+                        save_qa_pair(user_message, text, model_type)
                     return text, None
             except Exception as e:
-                return None, f"خطأ في الاتصال: {str(e)}"
+                return None, f"خطأ: {str(e)}"
 
         # API Key check
         if 'claude_api_key' not in st.session_state:
@@ -6236,7 +6361,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 
             if submitted and labor_q:
                 with st.spinner("جاري تحليل القضية..."):
-                    response, error = call_claude_api(LABOR_LAW_SYSTEM_PROMPT, labor_q, st.session_state.labor_chat)
+                    response, error = call_claude_api(LABOR_LAW_SYSTEM_PROMPT, labor_q, st.session_state.labor_chat, "labor")
                     if response:
                         st.session_state.labor_chat.append({"role": "user", "content": labor_q})
                         st.session_state.labor_chat.append({"role": "assistant", "content": response})
@@ -6294,7 +6419,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 
             if submitted and hr_q:
                 with st.spinner("جاري البحث في المراجع..."):
-                    response, error = call_claude_api(HR_EXPERT_SYSTEM_PROMPT, hr_q, st.session_state.hr_chat)
+                    response, error = call_claude_api(HR_EXPERT_SYSTEM_PROMPT, hr_q, st.session_state.hr_chat, "hr")
                     if response:
                         st.session_state.hr_chat.append({"role": "user", "content": hr_q})
                         st.session_state.hr_chat.append({"role": "assistant", "content": response})
@@ -6307,8 +6432,274 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                 st.rerun()
 
         # ===== Legal Documents Management =====
-        elif page == "📋 إدارة المراجع القانونية":
-            hdr("📋 إدارة المراجع القانونية","تحديث الأنظمة والقرارات الوزارية")
+        elif page == "🧠 قاعدة المعرفة RAG":
+            hdr("🧠 قاعدة المعرفة RAG","Retrieval Augmented Generation - تغذية النموذج بمستنداتك")
+
+            st.markdown("""
+            **كيف يعمل RAG؟** ترفع مستنداتك → تُقسّم لأجزاء صغيرة → تُفهرس وتُخزّن → عند السؤال يُبحث عن الأجزاء المناسبة → تُرسل مع سؤالك لـ Claude → إجابة مبنية على مستنداتك
+            """)
+
+            # Upload documents
+            st.markdown("### 📁 رفع مستندات للقاعدة المعرفية")
+            rag_files = st.file_uploader("ارفع ملفات (PDF, DOCX, TXT):", type=["pdf","docx","txt"],
+                accept_multiple_files=True, key="rag_upload")
+
+            if rag_files:
+                for rag_file in rag_files:
+                    doc_text = ""
+                    if rag_file.name.endswith('.pdf'):
+                        try:
+                            import pdfplumber
+                            with pdfplumber.open(io.BytesIO(rag_file.getvalue())) as pdf_r:
+                                for pg in pdf_r.pages[:200]:
+                                    txt = pg.extract_text()
+                                    if txt: doc_text += txt + "\n"
+                        except: pass
+                    elif rag_file.name.endswith('.docx'):
+                        try:
+                            from docx import Document as DDoc
+                            doc = DDoc(io.BytesIO(rag_file.getvalue()))
+                            doc_text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
+                        except: pass
+                    elif rag_file.name.endswith('.txt'):
+                        doc_text = rag_file.getvalue().decode('utf-8', errors='ignore')
+
+                    if doc_text:
+                        n_chunks = save_to_knowledge_base(doc_text, rag_file.name)
+                        st.success(f"✅ {rag_file.name}: {len(doc_text):,} حرف → {n_chunks} جزء مفهرس")
+                    else:
+                        st.warning(f"⚠️ لم يتم استخراج نص من {rag_file.name}")
+
+            # Upload from URL (web scraping)
+            st.markdown("### 🌐 إضافة من رابط ويب")
+            web_url = st.text_input("رابط الصفحة:", placeholder="https://laws.boe.gov.sa/...", key="rag_url")
+            if st.button("🌐 استيراد", key="rag_web") and web_url:
+                try:
+                    import urllib.request
+                    req = urllib.request.Request(web_url, headers={'User-Agent':'Mozilla/5.0'})
+                    with urllib.request.urlopen(req, timeout=15) as resp:
+                        html = resp.read().decode('utf-8', errors='ignore')
+                    # Simple HTML to text
+                    import re
+                    text = re.sub(r'<[^>]+>', ' ', html)
+                    text = re.sub(r'\s+', ' ', text).strip()
+                    if len(text) > 100:
+                        n = save_to_knowledge_base(text, web_url[:80])
+                        st.success(f"✅ تم استيراد {len(text):,} حرف → {n} جزء")
+                    else:
+                        st.warning("لم يتم استخراج محتوى كافٍ")
+                except Exception as e:
+                    st.error(f"خطأ: {e}")
+
+            # Manual knowledge entry
+            st.markdown("### ✏️ إضافة معرفة يدوياً")
+            manual_source = st.text_input("اسم المصدر:", placeholder="مثال: سياسة الإجازات الداخلية", key="rag_msrc")
+            manual_text = st.text_area("النص:", height=150, key="rag_mtxt", placeholder="الصق نص السياسة أو المعلومة هنا...")
+            if st.button("➕ إضافة للقاعدة", type="primary", key="rag_madd") and manual_text and manual_source:
+                n = save_to_knowledge_base(manual_text, manual_source, "manual")
+                st.success(f"✅ {manual_source}: {n} جزء مفهرس")
+
+            # Knowledge base stats
+            st.markdown("---")
+            st.markdown("### 📊 إحصائيات القاعدة المعرفية")
+            try:
+                conn = get_conn()
+                c = conn.cursor()
+                c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_chunks",))
+                row = c.fetchone()
+                conn.close()
+                if row:
+                    chunks = json.loads(row[0])
+                    sources = {}
+                    for ch in chunks:
+                        src = ch.get('source','unknown')
+                        sources[src] = sources.get(src, 0) + 1
+
+                    k1,k2,k3 = st.columns(3)
+                    with k1: kpi("📚 إجمالي الأجزاء", str(len(chunks)))
+                    with k2: kpi("📄 المصادر", str(len(sources)))
+                    with k3: kpi("📝 الكلمات (تقريباً)", f"{sum(len(ch.get('text','').split()) for ch in chunks):,}")
+
+                    src_df = pd.DataFrame([{"المصدر":k,"الأجزاء":v,"النوع": chunks[0].get('type','') if chunks else ''} for k,v in sources.items()])
+                    st.dataframe(src_df, use_container_width=True, hide_index=True)
+
+                    if st.session_state.get('user_role') == "مدير":
+                        if st.button("🗑️ مسح القاعدة المعرفية بالكامل", key="rag_clear"):
+                            conn = get_conn()
+                            c = conn.cursor()
+                            _upsert_config(c, "rag_chunks", "[]")
+                            conn.commit(); conn.close()
+                            st.success("✅ تم مسح القاعدة"); st.rerun()
+                else:
+                    st.info("📚 القاعدة المعرفية فارغة. ارفع مستندات أو أضف معرفة يدوياً.")
+            except: st.info("📚 القاعدة المعرفية فارغة")
+
+            # Quick load legal documents
+            st.markdown("---")
+            st.markdown("### ⚡ تحميل سريع للأنظمة السعودية")
+            legal_docs = {
+                "نظام العمل السعودي": "labor_law",
+                "اللائحة التنفيذية لنظام العمل": "labor_regulations",
+                "نظام التأمينات الاجتماعية": "social_insurance",
+                "نظام الضمان الصحي التعاوني": "health_insurance",
+                "قرارات وزير الموارد البشرية": "minister_decisions",
+            }
+            for doc_name, doc_key in legal_docs.items():
+                uploaded = st.file_uploader(f"📄 {doc_name}:", type=["pdf","docx","txt"], key=f"ql_{doc_key}")
+                if uploaded:
+                    doc_text = ""
+                    if uploaded.name.endswith('.pdf'):
+                        try:
+                            import pdfplumber
+                            with pdfplumber.open(io.BytesIO(uploaded.getvalue())) as pr:
+                                for pg in pr.pages[:200]:
+                                    txt = pg.extract_text()
+                                    if txt: doc_text += txt + "\n"
+                        except: pass
+                    elif uploaded.name.endswith('.docx'):
+                        try:
+                            from docx import Document as DD
+                            d = DD(io.BytesIO(uploaded.getvalue()))
+                            doc_text = "\n".join([p.text for p in d.paragraphs if p.text.strip()])
+                        except: pass
+                    else:
+                        doc_text = uploaded.getvalue().decode('utf-8', errors='ignore')
+                    if doc_text:
+                        n = save_to_knowledge_base(doc_text, doc_name, "legal")
+                        st.success(f"✅ {doc_name}: {n} جزء")
+
+        elif page == "📊 التعلم والتحسين":
+            hdr("📊 التعلم المستمر والتحسين","تحليل أداء النموذج وتحسينه من تفاعلات المستخدمين")
+
+            # Load Q&A history
+            try:
+                conn = get_conn()
+                c = conn.cursor()
+                c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_qa_history",))
+                row = c.fetchone()
+                conn.close()
+                qa_history = json.loads(row[0]) if row else []
+            except:
+                qa_history = []
+
+            # KPIs
+            st.markdown("### 📊 إحصائيات التعلم")
+            k1,k2,k3,k4,k5 = st.columns(5)
+            with k1: kpi("💬 إجمالي المحادثات", str(len(qa_history)))
+            labor_qs = [h for h in qa_history if h.get('model') == 'labor']
+            hr_qs = [h for h in qa_history if h.get('model') == 'hr']
+            with k2: kpi("⚖️ استشارات عمالية", str(len(labor_qs)))
+            with k3: kpi("📚 استشارات HR", str(len(hr_qs)))
+            good = [h for h in qa_history if h.get('feedback') == 'good']
+            bad = [h for h in qa_history if h.get('feedback') == 'bad']
+            with k4: kpi("👍 إيجابية", str(len(good)))
+            with k5: kpi("👎 سلبية", str(len(bad)))
+
+            if qa_history:
+                # Feedback rate
+                total_fb = len(good) + len(bad)
+                if total_fb > 0:
+                    satisfaction = len(good) / total_fb * 100
+                    st.progress(satisfaction / 100, text=f"معدل الرضا: {satisfaction:.0f}%")
+
+                # Usage over time
+                daily = {}
+                for h in qa_history:
+                    day = h.get('date','')[:10]
+                    daily[day] = daily.get(day, 0) + 1
+                if daily:
+                    fig = px.bar(x=list(daily.keys()), y=list(daily.values()),
+                        title='📈 استخدام المستشار الذكي يومياً', color_discrete_sequence=['#E36414'])
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=300)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                # Topic analysis
+                st.markdown("### 📋 المواضيع الأكثر تكراراً")
+                all_words = " ".join([h.get('q','') for h in qa_history]).lower()
+                topic_keywords = {
+                    "مكافأة نهاية الخدمة": ["مكافأة","نهاية","خدمة","eos"],
+                    "الفصل والتعويض": ["فصل","تعويض","77","إنهاء","فسخ"],
+                    "الإجازات": ["إجازة","إجازات","سنوية","مرضية"],
+                    "الرواتب والبدلات": ["راتب","رواتب","بدل","سكن","مواصلات"],
+                    "التأمينات": ["تأمين","تأمينات","gosi","اجتماعية"],
+                    "التوظيف والاستقطاب": ["توظيف","استقطاب","مقابلة","recruitment"],
+                    "التدريب والتطوير": ["تدريب","تطوير","roi","kirkpatrick"],
+                    "الأداء": ["أداء","تقييم","kpi","okr"],
+                    "السعودة": ["سعودة","نطاقات","nitaqat"],
+                }
+                topic_counts = {}
+                for topic, kws in topic_keywords.items():
+                    count = sum(1 for kw in kws if kw in all_words)
+                    if count > 0: topic_counts[topic] = count
+                if topic_counts:
+                    fig = px.bar(x=list(topic_counts.values()), y=list(topic_counts.keys()), orientation='h',
+                        title='المواضيع الأكثر اهتماماً', color_discrete_sequence=['#2A9D8F'])
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                # Recent Q&A with feedback
+                st.markdown("### 💬 آخر المحادثات (مع إمكانية التقييم)")
+                for i, h in enumerate(reversed(qa_history[-20:])):
+                    with st.expander(f"{'⚖️' if h.get('model')=='labor' else '📚'} {h.get('q','')[:80]}... | {h.get('date','')}"):
+                        st.markdown(f"**السؤال:** {h.get('q','')}")
+                        st.markdown(f"**الإجابة:** {h.get('a','')[:500]}...")
+                        fc1, fc2 = st.columns(2)
+                        with fc1:
+                            if st.button("👍 إجابة جيدة", key=f"fb_good_{i}"):
+                                try:
+                                    idx = len(qa_history) - 1 - i
+                                    qa_history[idx]['feedback'] = 'good'
+                                    conn = get_conn()
+                                    c = conn.cursor()
+                                    _upsert_config(c, "rag_qa_history", json.dumps(qa_history, ensure_ascii=False))
+                                    conn.commit(); conn.close()
+                                    st.success("✅ شكراً على التقييم")
+                                except: pass
+                        with fc2:
+                            if st.button("👎 تحتاج تحسين", key=f"fb_bad_{i}"):
+                                try:
+                                    idx = len(qa_history) - 1 - i
+                                    qa_history[idx]['feedback'] = 'bad'
+                                    conn = get_conn()
+                                    c = conn.cursor()
+                                    _upsert_config(c, "rag_qa_history", json.dumps(qa_history, ensure_ascii=False))
+                                    conn.commit(); conn.close()
+                                    st.success("✅ سنعمل على التحسين")
+                                except: pass
+
+                # Knowledge growth chart
+                st.markdown("---")
+                st.markdown("### 📈 نمو قاعدة المعرفة")
+                try:
+                    conn = get_conn()
+                    c = conn.cursor()
+                    c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_chunks",))
+                    row = c.fetchone()
+                    conn.close()
+                    chunks = json.loads(row[0]) if row else []
+                    total_words = sum(len(ch.get('text','').split()) for ch in chunks)
+                    total_qa = len(qa_history)
+
+                    gc1, gc2, gc3 = st.columns(3)
+                    with gc1: kpi("📚 أجزاء المعرفة", str(len(chunks)))
+                    with gc2: kpi("📝 كلمات القاعدة", f"{total_words:,}")
+                    with gc3: kpi("💬 تفاعلات التعلم", str(total_qa))
+
+                    # Learning maturity
+                    maturity_score = min(100, (len(chunks) * 2 + total_qa * 5 + len(good) * 10) // 10)
+                    st.progress(maturity_score / 100, text=f"نضج النموذج: {maturity_score}%")
+                    if maturity_score < 30:
+                        ibox("🟡 المرحلة الأولى: النموذج يحتاج المزيد من المستندات والتفاعلات", "warning")
+                    elif maturity_score < 70:
+                        ibox("🟢 المرحلة المتوسطة: النموذج يتحسن. استمر في رفع المستندات والتقييم", "success")
+                    else:
+                        ibox("🔵 المرحلة المتقدمة: النموذج ناضج ويقدم إجابات عالية الجودة", "success")
+                except: pass
+            else:
+                st.info("💬 لا توجد محادثات بعد. استخدم المستشار الذكي لبدء التعلم.")
+
+        elif page == "📋 إدارة المراجع":
+            hdr("📋 إدارة المراجع والإعدادات","API Key + تحديث الأنظمة القانونية")
 
             if st.session_state.get('user_role') != "مدير":
                 st.warning("⚠️ إدارة المراجع متاحة للمدير فقط")
