@@ -2253,7 +2253,7 @@ def main():
 
 
 
-            export_widget(data, "نظرة عامة", "ov1")
+            export_widget(data if len(data)>0 else None, "نظرة_عامة", "ov1")
         elif page == "🤖 المحلل الذكي":
             hdr("🤖 المحلل الذكي","يبحث في كل الأوراق")
             data = sal_snapshot if len(sal_snapshot)>0 else emp
@@ -2557,7 +2557,7 @@ def main():
 
 
 
-            export_widget(data, "تحليل شهري", "sal2")
+            export_widget(data if len(data)>0 else None, "تحليل_شهري", "sal2")
         elif page == "🏷️ تحليل حسب الفئات":
             hdr("🏷️ تحليل حسب الفئات","الجنس، الجيل، المستوى، نوع التوظيف")
             if len(sal_df)==0 and n==0: st.info("📁 ارفع ملف"); return
@@ -2613,7 +2613,7 @@ def main():
 
 
 
-            export_widget(data, "تحليل الفئات", "sal3")
+            export_widget(data if len(data)>0 else None, "تحليل_الفئات", "sal3")
         elif page == "📊 سلم الرواتب":
             hdr("📊 سلم الرواتب والدرجات")
             if 'Salary Scale' in all_sheets:
@@ -2683,7 +2683,7 @@ def main():
 
 
 
-            export_widget(snap, "Total Rewards", "tr1")
+            export_widget({"Total Rewards": tr_df, "بيانات الموظفين": snap} if len(snap)>0 else tr_df, "Total_Rewards", "tr1")
         elif page == "💰 هيكل الرواتب":
             hdr("💰 هيكل الرواتب والعدالة","Salary Structure & Pay Equity")
             if len(snap)==0: st.info("📁 ارفع ملف"); return
@@ -2713,7 +2713,7 @@ def main():
 
 
 
-            export_widget(snap, "هيكل الرواتب", "tr2")
+            export_widget(snap if len(snap)>0 else None, "هيكل_الرواتب", "tr2")
         elif page == "🏥 المزايا والتأمينات":
             hdr("🏥 المزايا والتأمينات","Benefits & Insurance")
             benefits_data = st.data_editor(
@@ -3119,7 +3119,7 @@ def main():
 
 
 
-            export_widget(data, "Headcount", "hc1")
+            export_widget({"Headcount": data} if len(data)>0 else None, "Headcount", "hc1")
         elif page == "📋 بيانات الموظفين":
             hdr("📋 سجل بيانات الموظفين","Employee Data Registry - عرض وتصفية")
             data = sal_snapshot if len(sal_snapshot)>0 else emp
@@ -3289,7 +3289,7 @@ def main():
 
 
 
-            export_widget(data, "تحليل الأداء", "perf1")
+            export_widget(data if len(data)>0 else None, "تحليل_الأداء", "perf1")
     # =========================================
     #         ⚖️ LABOR CALCULATOR (MOJ-MATCHING)
     # =========================================
@@ -4177,7 +4177,7 @@ def main():
 
 
 
-            export_widget(data, "ميزانية التدريب", "trn1")
+            export_widget({"ميزانية التدريب": pd.DataFrame(st.session_state.get("budget_data",[])), "البرامج": pd.DataFrame(st.session_state.get("training_programs_list",[]))} if st.session_state.get("budget_data") else (data if len(data)>0 else None), "ميزانية_التدريب", "trn1")
         elif page == "💹 ROI التدريب":
             hdr("💹 عائد التدريب ROI","نموذج Phillips ذو 5 مستويات")
             c1,c2 = st.columns(2)
@@ -4742,7 +4742,7 @@ def main():
 
 
 
-            export_widget(data, "خطة التوظيف", "rec1")
+            export_widget(pd.DataFrame(st.session_state.get("recruit_plans",[])) if st.session_state.get("recruit_plans") else (data if len(data)>0 else None), "خطة_التوظيف", "rec1")
         # ===== AI Salary Benchmark =====
         elif page == "🤖 Benchmark ذكاء اصطناعي":
             hdr("🤖 Benchmark الرواتب بالذكاء الاصطناعي","بيانات مرجعية من مصادر حية للسوق السعودي والمصري")
@@ -4860,7 +4860,7 @@ def main():
 
 
 
-            export_widget(data, "Benchmark", "rec2")
+            export_widget(data if len(data)>0 else None, "Benchmark", "rec2")
         # ===== Market Comparison =====
         elif page == "🌍 مقارنة الأسواق":
             hdr("🌍 مقارنة تكاليف التوظيف: السعودية مقابل مصر","تحليل مقارن شامل للتكاليف والمزايا")
@@ -5053,7 +5053,7 @@ def main():
 
 
 
-            export_widget(data, "متابعة التوظيف", "rec3")
+            export_widget(pd.DataFrame(st.session_state.get("recruit_tracking",[])) if st.session_state.get("recruit_tracking") else (data if len(data)>0 else None), "متابعة_التوظيف", "rec3")
         elif page == "📥 تصدير التوظيف":
             hdr("📥 تصدير بيانات التوظيف")
             ox = io.BytesIO()
@@ -5591,7 +5591,7 @@ def main():
 
 
 
-            export_widget(data, "تحليلات Onboarding", "ob1")
+            export_widget(data if len(data)>0 else None, "تحليلات_Onboarding", "ob1")
         elif page == "🎬 عرض تقديمي AI":
             hdr("🎬 عرض تقديمي Onboarding بالذكاء الاصطناعي","عرض slides احترافي مع سرد صوتي تفاعلي")
 
@@ -7482,7 +7482,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 
 
 
-            export_widget(data, "تحليل OD", "od2")
+            export_widget(data if len(data)>0 else None, "تحليل_OD", "od2")
         elif page == "🎯 استراتيجية OD":
             hdr("🎯 بناء استراتيجية التطوير المؤسسي","OD Strategy Framework")
 
