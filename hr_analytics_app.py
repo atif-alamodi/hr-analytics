@@ -7424,9 +7424,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
             elif avg_score >= 3: ibox("المنظمة في حالة جيدة. ركّز على الأبعاد ذات الفجوات العالية.", "warning")
             else: ibox("المنظمة تحتاج تدخل تطويري شامل. ابدأ بالأبعاد الحرجة.", "warning")
 
-
-
-            export_widget(data, "تشخيص المنظمة", "od1")
+            export_widget(gap_df, "تشخيص_المنظمة_OD", "od1")
         elif page == "📊 تحليل OD":
             hdr("📊 تحليل التطوير المؤسسي","Workforce Analytics for OD Planning")
             if len(data)==0: st.info("📁 ارفع ملف"); return
