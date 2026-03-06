@@ -30,18 +30,24 @@ def _is_cloud_db():
     except: pass
     return bool(os.environ.get("DATABASE_URL"))
 
-def get_conn():
-    """Get database connection - PostgreSQL (cloud) or SQLite (local)"""
+@st.cache_resource(ttl=300)
+def _get_cached_conn_str():
+    """Cache DB connection string"""
     if _is_cloud_db():
-        import psycopg2
         try:
             if hasattr(st, 'secrets') and 'database' in st.secrets:
                 db = st.secrets["database"]
-                if db.get("url"):
-                    return psycopg2.connect(db["url"], sslmode="require")
-                return psycopg2.connect(host=db["host"], port=db.get("port",5432),
-                    dbname=db["dbname"], user=db["user"], password=db["password"], sslmode="require")
-            return psycopg2.connect(os.environ["DATABASE_URL"], sslmode="require")
+                return db.get("url", ""), "cloud"
+        except: pass
+    return DB_PATH, "local"
+
+def get_conn():
+    """Get database connection - PostgreSQL (cloud) or SQLite (local)"""
+    conn_str, db_type = _get_cached_conn_str()
+    if db_type == "cloud" and conn_str:
+        import psycopg2
+        try:
+            return psycopg2.connect(conn_str, sslmode="require")
         except Exception as e:
             st.warning(f"⚠️ Cloud DB error, falling back to local: {e}")
     return sqlite3.connect(DB_PATH)
@@ -890,14 +896,14 @@ def hash_pw(pw):
 
 # Default users (can be managed in-app)
 DEFAULT_USERS = {
-    "admin": {"password": hash_pw("admin123"), "role": "مدير", "name": "مدير النظام", "email": "HR@resal.me", "dept": "الإدارة", "sections": "all"},
-    "analyst": {"password": hash_pw("analyst123"), "role": "محلل", "name": "محلل البيانات", "email": "", "dept": "التحليلات",
+    "admin": {"password": hash_pw("Rsl@Adm2026"), "role": "مدير", "name": "مدير النظام", "email": "HR@resal.me", "dept": "الإدارة", "sections": "all"},
+    "analyst": {"password": hash_pw("Rsl@Anl2026"), "role": "محلل", "name": "محلل البيانات", "email": "", "dept": "التحليلات",
         "sections": "📊 التحليلات العامة,🎁 Total Rewards,👥 Headcount,🔍 التحليل العام,📤 التقارير والتصدير"},
-    "viewer": {"password": hash_pw("viewer123"), "role": "عارض", "name": "عارض", "email": "", "dept": "",
+    "viewer": {"password": hash_pw("Rsl@Vwr2026"), "role": "عارض", "name": "عارض", "email": "", "dept": "",
         "sections": "📊 التحليلات العامة,📤 التقارير والتصدير"},
-    "emp1": {"password": hash_pw("emp123"), "role": "موظف", "name": "أحمد محمد", "email": "", "dept": "تقنية المعلومات",
+    "emp1": {"password": hash_pw("Rsl@Emp2026"), "role": "موظف", "name": "أحمد محمد", "email": "", "dept": "تقنية المعلومات",
         "sections": "🧠 اختبارات الشخصية"},
-    "emp2": {"password": hash_pw("emp123"), "role": "موظف", "name": "سارة أحمد", "email": "", "dept": "الموارد البشرية",
+    "emp2": {"password": hash_pw("Rsl@Emp2026"), "role": "موظف", "name": "سارة أحمد", "email": "", "dept": "الموارد البشرية",
         "sections": "🧠 اختبارات الشخصية"},
 }
 
@@ -1088,13 +1094,16 @@ SMTP_PROVIDERS = {
 
 def init_users():
     if 'users_db' not in st.session_state:
-        # Try loading from cloud database first
-        cloud_users = db_load_users()
-        if cloud_users:
-            st.session_state.users_db = cloud_users
+        if '_users_loaded' not in st.session_state:
+            st.session_state._users_loaded = True
+            cloud_users = db_load_users()
+            if cloud_users:
+                st.session_state.users_db = cloud_users
+            else:
+                st.session_state.users_db = DEFAULT_USERS.copy()
+                db_save_users(DEFAULT_USERS)
         else:
             st.session_state.users_db = DEFAULT_USERS.copy()
-            db_save_users(DEFAULT_USERS)
 
 def _save_login_token(username):
     """Save login token to database + query_params for persistence across reruns"""
@@ -1114,20 +1123,16 @@ def _save_login_token(username):
 
 def _restore_login():
     """Try to restore login session from query_params or session_state"""
+    # Skip if already restored this session
+    if st.session_state.get('_login_restored'):
+        return False
+    st.session_state._login_restored = True
     try:
-        # Priority 1: query_params (survives reruns and page reloads)
         token = None
-        try:
-            qp = st.query_params
-            token = qp.get("tk")
+        try: token = st.query_params.get("tk")
         except: pass
-
-        # Priority 2: session_state
-        if not token:
-            token = st.session_state.get('_login_token')
-
-        if not token:
-            return False
+        if not token: token = st.session_state.get('_login_token')
+        if not token: return False
 
         conn = get_conn()
         c = conn.cursor()
@@ -1150,7 +1155,6 @@ def _restore_login():
                 st.session_state.user_dept = users[username].get("dept", "")
                 st.session_state['_login_token'] = token
                 return True
-        # Token invalid - clear it
         try: del st.query_params["tk"]
         except: pass
     except: pass
@@ -1246,11 +1250,11 @@ def login_page():
         with st.expander("📋 الحسابات الافتراضية"):
             st.markdown("| المستخدم | كلمة المرور | الدور |")
             st.markdown("|---|---|---|")
-            st.markdown("| admin | admin123 | مدير |")
-            st.markdown("| analyst | analyst123 | محلل |")
-            st.markdown("| viewer | viewer123 | عارض |")
-            st.markdown("| emp1 | emp123 | موظف (أحمد محمد) |")
-            st.markdown("| emp2 | emp123 | موظف (سارة أحمد) |")
+            st.markdown("| admin | Rsl@Adm2026 | مدير |")
+            st.markdown("| analyst | Rsl@Anl2026 | محلل |")
+            st.markdown("| viewer | Rsl@Vwr2026 | عارض |")
+            st.markdown("| emp1 | Rsl@Emp2026 | موظف (أحمد محمد) |")
+            st.markdown("| emp2 | Rsl@Emp2026 | موظف (سارة أحمد) |")
 
 def check_section_access(section_name):
     if not st.session_state.get('logged_in'): return False
@@ -1905,25 +1909,27 @@ def main():
                 except: pass
                 st.rerun()
         else:
-            # Try restoring file from cloud DB
-            try:
-                import base64
-                conn = get_conn()
-                c = conn.cursor()
-                c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("last_uploaded_file",))
-                meta_row = c.fetchone()
-                if meta_row:
-                    meta = json.loads(meta_row[0])
-                    c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("last_uploaded_data",))
-                    data_row = c.fetchone()
-                    conn.close()
-                    if data_row:
-                        st.session_state['uploaded_file_name'] = meta['name']
-                        st.session_state['uploaded_file_bytes'] = base64.b64decode(data_row[0])
-                        st.info(f"📂 {meta['name']} (مسترجع من السحابة)")
-                else:
-                    conn.close()
-            except: pass
+            # Try restoring file from cloud DB (only once)
+            if '_cloud_file_checked' not in st.session_state:
+                st.session_state._cloud_file_checked = True
+                try:
+                    import base64
+                    conn = get_conn()
+                    c = conn.cursor()
+                    c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("last_uploaded_file",))
+                    meta_row = c.fetchone()
+                    if meta_row:
+                        meta = json.loads(meta_row[0])
+                        c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("last_uploaded_data",))
+                        data_row = c.fetchone()
+                        conn.close()
+                        if data_row:
+                            st.session_state['uploaded_file_name'] = meta['name']
+                            st.session_state['uploaded_file_bytes'] = base64.b64decode(data_row[0])
+                            st.info(f"📂 {meta['name']} (مسترجع من السحابة)")
+                    else:
+                        conn.close()
+                except: pass
 
 
     # ===== LOAD DATA =====
@@ -5856,11 +5862,9 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 
         if 'saved_contracts' not in st.session_state:
             try:
-                conn = get_conn()
-                c = conn.cursor()
+                conn = get_conn(); c = conn.cursor()
                 c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("saved_contracts",))
-                row = c.fetchone()
-                conn.close()
+                row = c.fetchone(); conn.close()
                 st.session_state.saved_contracts = json.loads(row[0]) if row else []
             except:
                 st.session_state.saved_contracts = []
@@ -6778,45 +6782,38 @@ function stopSpeak(){{speechSynthesis.cancel()}}
         def call_claude_api(system_prompt, user_message, chat_history=None, model_type="general"):
             return call_ai_api(system_prompt, user_message, chat_history, model_type)
 
-        # API Keys check + auto-load
-        if 'claude_api_key' not in st.session_state:
+        # API Keys check + auto-load (single check per session)
+        if '_ai_keys_loaded' not in st.session_state:
+            st.session_state._ai_keys_loaded = True
+            # Load Claude key
             try: st.session_state.claude_api_key = st.secrets.get("anthropic", {}).get("api_key", "")
-            except: st.session_state.claude_api_key = ""
-            if not st.session_state.claude_api_key:
-                try:
-                    conn = get_conn(); c = conn.cursor()
-                    c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("claude_api_key",))
-                    row = c.fetchone(); conn.close()
-                    if row: st.session_state.claude_api_key = row[0]
-                except: pass
-
-        if 'groq_api_key' not in st.session_state:
+            except: st.session_state.setdefault('claude_api_key', '')
+            # Load Groq key
             try: st.session_state.groq_api_key = st.secrets.get("groq", {}).get("api_key", "")
-            except: st.session_state.groq_api_key = ""
-            if not st.session_state.groq_api_key:
-                try:
-                    conn = get_conn(); c = conn.cursor()
-                    c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("groq_api_key",))
-                    row = c.fetchone(); conn.close()
-                    if row: st.session_state.groq_api_key = row[0]
-                except: pass
-
-        if 'ai_provider' not in st.session_state:
-            st.session_state.ai_provider = 'auto'
-
-        # Auto-load RAG context on first visit
-        if 'rag_auto_loaded' not in st.session_state:
-            st.session_state.rag_auto_loaded = True
+            except: st.session_state.setdefault('groq_api_key', '')
+            # Load from DB if not in secrets
             try:
                 conn = get_conn(); c = conn.cursor()
+                if not st.session_state.get('claude_api_key'):
+                    c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("claude_api_key",))
+                    row = c.fetchone()
+                    if row: st.session_state.claude_api_key = row[0]
+                if not st.session_state.get('groq_api_key'):
+                    c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("groq_api_key",))
+                    row = c.fetchone()
+                    if row: st.session_state.groq_api_key = row[0]
+                # Load legal docs context
                 legal_ctx = ""
-                for dk in ["labor_law","labor_regulations","social_insurance","insurance_regulations","health_insurance","minister_decisions"]:
+                for dk in ["labor_law","labor_regulations","social_insurance","health_insurance","minister_decisions"]:
                     c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", (f"legal_doc_{dk}",))
                     r2 = c.fetchone()
                     if r2: legal_ctx += r2[0][:5000] + "\n"
                 conn.close()
                 if legal_ctx: st.session_state['legal_docs_context'] = legal_ctx
             except: pass
+
+        if 'ai_provider' not in st.session_state:
+            st.session_state.ai_provider = 'auto'
 
         # Check if any key is available
         has_claude = bool(st.session_state.get('claude_api_key'))
