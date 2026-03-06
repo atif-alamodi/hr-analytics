@@ -843,7 +843,7 @@ ROLE_DESCRIPTIONS = {
 }
 
 ALL_SECTIONS = ["📊 التحليلات العامة","💰 تحليل الرواتب","👥 Headcount","⚖️ حاسبة المستحقات",
-    "📚 التدريب والتطوير","🎯 التوظيف","🚀 Onboarding","📜 العقود","✈️ رحلات العمل","🔍 التحليل العام","📝 الاستبيانات","🧠 اختبارات الشخصية","📤 التقارير والتصدير"]
+    "📚 التدريب والتطوير","🎯 التوظيف","🚀 Onboarding","📜 العقود","🤖 المستشار الذكي","🔍 التحليل العام","📝 الاستبيانات","🧠 اختبارات الشخصية","📤 التقارير والتصدير"]
 
 # Email sending function
 def send_test_email(to_email, emp_name, tests, deadline, assigned_by, app_url=""):
@@ -1765,8 +1765,8 @@ def main():
             page = st.radio("📌", ["🚀 إنشاء Onboarding","📋 خطة 30/60/90","👥 متابعة الموظفين الجدد","📊 تحليلات Onboarding","🎬 عرض تقديمي AI","🏢 معلومات الشركة","📥 تصدير Onboarding"], label_visibility="collapsed")
         elif section == "📜 العقود":
             page = st.radio("📌", ["📜 إنشاء عقد","🔍 تحليل العقود","📋 العقود المحفوظة","📥 تصدير العقود"], label_visibility="collapsed")
-        elif section == "✈️ رحلات العمل":
-            page = st.radio("📌", ["✈️ تسجيل رحلة","📊 تحليل الرحلات","📥 تصدير الرحلات"], label_visibility="collapsed")
+        elif section == "🤖 المستشار الذكي":
+            page = st.radio("📌", ["⚖️ مستشار القضايا العمالية","📚 مستشار الموارد البشرية","📋 إدارة المراجع القانونية"], label_visibility="collapsed")
         elif section == "🔍 التحليل العام":
             page = st.radio("📌", ["📊 تحليل تلقائي","🤖 أسئلة ذكية"], label_visibility="collapsed")
         elif section == "📝 الاستبيانات":
@@ -5802,6 +5802,400 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                 st.download_button("📥 تحميل", data=ox.getvalue(),
                     file_name=f"Contracts_{datetime.now().strftime('%Y%m%d')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+    # =========================================
+    #         🤖 AI CONSULTANT MODULE (2 LLMs)
+    # =========================================
+    elif section == "🤖 المستشار الذكي":
+
+        # System prompts for the 2 AI models
+        LABOR_LAW_SYSTEM_PROMPT = """You are an expert Saudi Labor Law consultant AI assistant. Your knowledge is based on:
+
+**PRIMARY SOURCES (Saudi Arabia):**
+1. **نظام العمل السعودي** (Saudi Labor Law) - All 245 articles including latest amendments
+2. **اللائحة التنفيذية لنظام العمل** - Executive regulations
+3. **نظام التأمينات الاجتماعية** (Social Insurance Law/GOSI) - Contributions, benefits, retirement
+4. **اللائحة التنفيذية لنظام التأمينات** - GOSI executive regulations
+5. **نظام مجلس الضمان الصحي التعاوني** (CCHI) - Health insurance regulations
+6. **قرارات وزير الموارد البشرية** - Ministerial decisions for private sector
+
+**KEY LABOR LAW ARTICLES YOU MUST KNOW:**
+- Art. 50-57: Employment contracts (types, probation, termination)
+- Art. 74-82: Contract termination (legitimate/illegitimate reasons)
+- Art. 77: Unfair dismissal compensation (15 days/year indefinite, remaining term fixed, min 2 months)
+- Art. 80: Lawful termination without compensation
+- Art. 81: Worker's right to leave without notice
+- Art. 84-85: End of service benefits (half salary first 5 years, full after)
+- Art. 88: Settlement within 7 days
+- Art. 98-104: Working hours (48/week, 36 Ramadan)
+- Art. 107: Overtime (150%)
+- Art. 109-116: Annual leave (21 days first 5 years, 30 after)
+- Art. 113-116: Sick leave, maternity leave
+- Art. 143-149: Work injuries
+- Art. 155-161: Women's employment
+- Art. 229-245: Penalties and violations
+- Nitaqat/Saudization requirements and quotas
+- Wage Protection System (WPS)
+- GOSI: 9.75% employee + 11.75% employer (Saudi), 2% employer (non-Saudi)
+
+**RULES:**
+1. ALWAYS cite the specific article number when answering
+2. Answer in the SAME language the user asks (Arabic or English)
+3. If unsure, say so and recommend consulting a licensed lawyer
+4. Provide practical advice with step-by-step guidance
+5. Consider both employer and employee perspectives fairly
+6. Reference recent ministerial decisions when relevant
+7. For calculations (EOS, compensation), show the math step by step
+8. Always mention the minimum protections the law provides
+9. Distinguish between محدد المدة (fixed-term) and غير محدد المدة (indefinite) contracts
+10. Note when عقد يتحول لغير محدد (converts to indefinite): after 3 renewals or 4 years total"""
+
+        HR_EXPERT_SYSTEM_PROMPT = """You are a world-class HR professional and consultant with deep expertise equivalent to holding PHRi, SHRM-SCP, CIPD Level 7, APTD, and SPHR certifications.
+
+**YOUR KNOWLEDGE BASE INCLUDES:**
+
+**1. PHRi (Professional in Human Resources - International) by HRCI:**
+- Talent Acquisition: Job analysis, workforce planning, recruitment strategies, selection methods, onboarding
+- HR Administration & Shared Services: HRIS, employee records, policies, compliance
+- Talent Management & Development: Training needs analysis, L&D strategies, career development, succession planning
+- Compensation, Benefits & Work Experience: Total rewards, job evaluation, pay structures, benefits administration
+- Employee Relations & Risk Management: Employee engagement, conflict resolution, disciplinary procedures, health & safety
+- HR Information Management: Analytics, metrics, reporting, data-driven decision making
+
+**2. SHRM (Society for Human Resource Management):**
+- HR Strategic Planning: Aligning HR with business strategy
+- Behavioral Competencies: Leadership, ethical practice, business acumen, relationship management
+- Technical Competencies: People, organization, workplace
+- SHRM Body of Applied Skills & Knowledge (BASK)
+
+**3. CIPD (Chartered Institute of Personnel and Development):**
+- People Practice: Core behaviors, specialist knowledge
+- Strategic People Management: Organizational development, change management
+- Evidence-Based Practice: Research methods, data analysis
+- Employment Law & Employee Relations (UK/International perspective)
+- Learning & Development: 70-20-10 model, blended learning
+
+**4. APTD (Associate Professional in Talent Development) by ATD:**
+- Instructional Design: ADDIE, SAM models
+- Training Delivery: Facilitation techniques
+- Learning Technologies: LMS, e-learning, microlearning
+- Performance Improvement: HPT, Kirkpatrick evaluation model
+- Knowledge Management
+
+**5. SPHR (Senior Professional in Human Resources):**
+- Strategic HR Management
+- Workforce Planning & Employment
+- HR Development at organizational level
+- Total Rewards at strategic level
+- Employee & Labor Relations
+- Risk Management
+
+**6. Global Best Practices:**
+- Agile HR, Design Thinking in HR
+- People Analytics & AI in HR
+- Employee Experience (EX) design
+- DEI (Diversity, Equity & Inclusion)
+- Remote/Hybrid work policies
+- OKRs, KPIs for HR
+- Employer Branding
+- Phillips ROI Methodology for training
+- Balanced Scorecard for HR
+
+**RULES:**
+1. Answer in the SAME language the user asks
+2. Reference specific frameworks, models, and methodologies
+3. Provide practical, actionable advice
+4. When relevant, mention which certification covers the topic
+5. Use real-world examples and case studies
+6. For Saudi context, consider local labor law and culture
+7. Suggest metrics and KPIs to measure success
+8. Recommend tools and technologies when appropriate"""
+
+        def call_claude_api(system_prompt, user_message, chat_history=None):
+            """Call Claude API with system prompt and user message"""
+            import urllib.request
+            api_key = st.session_state.get('claude_api_key', '')
+            if not api_key:
+                return None, "⚠️ يرجى إدخال Claude API Key في إعدادات المنصة"
+
+            messages = []
+            if chat_history:
+                for msg in chat_history[-10:]:  # Last 10 messages for context
+                    messages.append({"role": msg['role'], "content": msg['content']})
+            messages.append({"role": "user", "content": user_message})
+
+            # Add uploaded legal docs context if available
+            legal_context = st.session_state.get('legal_docs_context', '')
+            if legal_context and 'عمالي' in system_prompt.lower() or 'labor' in system_prompt.lower():
+                system_prompt += f"\n\n**ADDITIONAL LEGAL REFERENCE DOCUMENTS:**\n{legal_context[:8000]}"
+
+            payload = json.dumps({
+                "model": "claude-sonnet-4-20250514",
+                "max_tokens": 4000,
+                "system": system_prompt,
+                "messages": messages
+            })
+
+            try:
+                req = urllib.request.Request(
+                    "https://api.anthropic.com/v1/messages",
+                    data=payload.encode('utf-8'),
+                    headers={
+                        'Content-Type': 'application/json',
+                        'x-api-key': api_key,
+                        'anthropic-version': '2023-06-01'
+                    },
+                    method='POST'
+                )
+                with urllib.request.urlopen(req, timeout=60) as resp:
+                    result = json.loads(resp.read().decode())
+                    text = result.get('content', [{}])[0].get('text', '')
+                    return text, None
+            except Exception as e:
+                return None, f"خطأ في الاتصال: {str(e)}"
+
+        # API Key check
+        if 'claude_api_key' not in st.session_state:
+            try:
+                api_key = st.secrets.get("anthropic", {}).get("api_key", "")
+                st.session_state.claude_api_key = api_key
+            except:
+                st.session_state.claude_api_key = ""
+
+        if not st.session_state.claude_api_key:
+            st.warning("⚠️ يرجى إدخال Claude API Key")
+            api_input = st.text_input("🔑 Anthropic API Key:", type="password", key="api_key_input",
+                help="احصل على API Key من https://console.anthropic.com/")
+            if api_input:
+                st.session_state.claude_api_key = api_input
+                st.rerun()
+            st.info("💡 أضف API Key في Streamlit Secrets:\n```\n[anthropic]\napi_key = \"sk-ant-...\"\n```")
+            return
+
+        # ===== MODEL 1: Labor Law Consultant =====
+        if page == "⚖️ مستشار القضايا العمالية":
+            hdr("⚖️ مستشار القضايا العمالية بالذكاء الاصطناعي",
+                "مدعوم بنظام العمل السعودي + التأمينات + الضمان الصحي + قرارات وزارة الموارد البشرية")
+
+            st.markdown("""
+            **المصادر المعتمدة:**
+            نظام العمل (245 مادة) | اللائحة التنفيذية | نظام التأمينات الاجتماعية (GOSI) | نظام الضمان الصحي (CCHI) | قرارات وزير الموارد البشرية
+            """)
+
+            # Chat history
+            if 'labor_chat' not in st.session_state:
+                st.session_state.labor_chat = []
+
+            # Display chat history
+            for msg in st.session_state.labor_chat:
+                if msg['role'] == 'user':
+                    st.markdown(f"<div style='background:#1e3a5f;color:white;padding:12px;border-radius:10px;margin:8px 0'>👤 {msg['content']}</div>", unsafe_allow_html=True)
+                else:
+                    st.markdown(f"<div style='background:#f0f4f8;color:#333;padding:12px;border-radius:10px;margin:8px 0;border-right:4px solid #0F4C5C'>⚖️ {msg['content']}</div>", unsafe_allow_html=True)
+
+            # Quick questions
+            st.markdown("### 💡 أسئلة شائعة")
+            quick_qs = [
+                "ما هي حقوقي عند الفصل وفق المادة 77؟",
+                "كيف تُحسب مكافأة نهاية الخدمة؟",
+                "ما هي فترة التجربة وشروطها؟",
+                "متى يتحول العقد المحدد لغير محدد المدة؟",
+                "ما هي نسبة اشتراكات التأمينات الاجتماعية؟",
+                "ما هي حقوق المرأة العاملة في نظام العمل؟",
+            ]
+            qc1, qc2, qc3 = st.columns(3)
+            for i, q in enumerate(quick_qs):
+                with [qc1, qc2, qc3][i % 3]:
+                    if st.button(q, key=f"lq_{i}", use_container_width=True):
+                        st.session_state._pending_labor_q = q
+                        st.rerun()
+
+            # Input
+            with st.form("labor_form", clear_on_submit=True):
+                default_q = st.session_state.pop('_pending_labor_q', '')
+                labor_q = st.text_area("اكتب سؤالك القانوني:", value=default_q, height=80, key="labor_q_input",
+                    placeholder="مثال: تم فصلي بعد 3 سنوات خدمة بدون سبب، ما مستحقاتي؟")
+                submitted = st.form_submit_button("⚖️ استشارة", type="primary", use_container_width=True)
+
+            if submitted and labor_q:
+                with st.spinner("جاري تحليل القضية..."):
+                    response, error = call_claude_api(LABOR_LAW_SYSTEM_PROMPT, labor_q, st.session_state.labor_chat)
+                    if response:
+                        st.session_state.labor_chat.append({"role": "user", "content": labor_q})
+                        st.session_state.labor_chat.append({"role": "assistant", "content": response})
+                        st.rerun()
+                    else:
+                        st.error(error)
+
+            # Clear chat
+            if st.session_state.labor_chat and st.button("🗑️ مسح المحادثة", key="labor_clear"):
+                st.session_state.labor_chat = []
+                st.rerun()
+
+        # ===== MODEL 2: HR Expert =====
+        elif page == "📚 مستشار الموارد البشرية":
+            hdr("📚 مستشار الموارد البشرية بالذكاء الاصطناعي",
+                "مدعوم بمناهج PHRi + SHRM + CIPD + APTD + SPHR وأفضل الممارسات العالمية")
+
+            st.markdown("""
+            **المناهج المعتمدة:**
+            PHRi (HRCI) | SHRM-SCP | CIPD Level 7 | APTD (ATD) | aPHRi | SPHR | أفضل الممارسات العالمية
+            """)
+
+            # Chat history
+            if 'hr_chat' not in st.session_state:
+                st.session_state.hr_chat = []
+
+            for msg in st.session_state.hr_chat:
+                if msg['role'] == 'user':
+                    st.markdown(f"<div style='background:#1e3a5f;color:white;padding:12px;border-radius:10px;margin:8px 0'>👤 {msg['content']}</div>", unsafe_allow_html=True)
+                else:
+                    st.markdown(f"<div style='background:#f0faf5;color:#333;padding:12px;border-radius:10px;margin:8px 0;border-right:4px solid #2A9D8F'>📚 {msg['content']}</div>", unsafe_allow_html=True)
+
+            # Quick topics
+            st.markdown("### 💡 مواضيع شائعة")
+            hr_topics = [
+                "كيف أبني خطة استقطاب فعالة؟",
+                "ما هو نموذج Phillips ROI للتدريب؟",
+                "كيف أحسب معدل دوران الموظفين وأحسّنه؟",
+                "ما الفرق بين OKRs و KPIs؟",
+                "كيف أصمم هيكل رواتب تنافسي؟",
+                "ما هي أفضل ممارسات تجربة الموظف (EX)؟",
+            ]
+            tc1, tc2, tc3 = st.columns(3)
+            for i, t in enumerate(hr_topics):
+                with [tc1, tc2, tc3][i % 3]:
+                    if st.button(t, key=f"ht_{i}", use_container_width=True):
+                        st.session_state._pending_hr_q = t
+                        st.rerun()
+
+            with st.form("hr_form", clear_on_submit=True):
+                default_q = st.session_state.pop('_pending_hr_q', '')
+                hr_q = st.text_area("اكتب سؤالك:", value=default_q, height=80, key="hr_q_input",
+                    placeholder="مثال: كيف أقيس فعالية برنامج التدريب باستخدام نموذج Kirkpatrick؟")
+                submitted = st.form_submit_button("📚 استشارة", type="primary", use_container_width=True)
+
+            if submitted and hr_q:
+                with st.spinner("جاري البحث في المراجع..."):
+                    response, error = call_claude_api(HR_EXPERT_SYSTEM_PROMPT, hr_q, st.session_state.hr_chat)
+                    if response:
+                        st.session_state.hr_chat.append({"role": "user", "content": hr_q})
+                        st.session_state.hr_chat.append({"role": "assistant", "content": response})
+                        st.rerun()
+                    else:
+                        st.error(error)
+
+            if st.session_state.hr_chat and st.button("🗑️ مسح المحادثة", key="hr_clear"):
+                st.session_state.hr_chat = []
+                st.rerun()
+
+        # ===== Legal Documents Management =====
+        elif page == "📋 إدارة المراجع القانونية":
+            hdr("📋 إدارة المراجع القانونية","تحديث الأنظمة والقرارات الوزارية")
+
+            if st.session_state.get('user_role') != "مدير":
+                st.warning("⚠️ إدارة المراجع متاحة للمدير فقط")
+                return
+
+            st.markdown("### 📄 رفع وتحديث المراجع القانونية")
+            st.caption("ارفع ملفات PDF أو Word للأنظمة واللوائح. سيتم استخدامها كمرجع إضافي للمستشار الذكي.")
+
+            doc_types = {
+                "نظام العمل السعودي": "labor_law",
+                "اللائحة التنفيذية لنظام العمل": "labor_regulations",
+                "نظام التأمينات الاجتماعية": "social_insurance",
+                "اللائحة التنفيذية للتأمينات": "insurance_regulations",
+                "نظام الضمان الصحي التعاوني": "health_insurance",
+                "قرارات وزير الموارد البشرية": "minister_decisions",
+            }
+
+            for doc_name, doc_key in doc_types.items():
+                with st.expander(f"📄 {doc_name}"):
+                    uploaded = st.file_uploader(f"ارفع {doc_name}:", type=["pdf","docx","txt"], key=f"legal_{doc_key}")
+                    if uploaded:
+                        # Extract text
+                        doc_text = ""
+                        if uploaded.name.endswith('.pdf'):
+                            try:
+                                import pdfplumber
+                                with pdfplumber.open(io.BytesIO(uploaded.getvalue())) as pdf_reader:
+                                    for pg in pdf_reader.pages[:100]:
+                                        txt = pg.extract_text()
+                                        if txt: doc_text += txt + "\n"
+                            except: pass
+                        elif uploaded.name.endswith('.docx'):
+                            try:
+                                from docx import Document as DocxDoc
+                                doc = DocxDoc(io.BytesIO(uploaded.getvalue()))
+                                doc_text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
+                            except: pass
+                        elif uploaded.name.endswith('.txt'):
+                            doc_text = uploaded.getvalue().decode('utf-8', errors='ignore')
+
+                        if doc_text:
+                            # Save to DB
+                            try:
+                                conn = get_conn()
+                                c = conn.cursor()
+                                _upsert_config(c, f"legal_doc_{doc_key}", doc_text[:50000])
+                                _upsert_config(c, f"legal_doc_{doc_key}_date", datetime.now().strftime("%Y-%m-%d %H:%M"))
+                                conn.commit()
+                                conn.close()
+                                st.success(f"✅ تم تحديث {doc_name} ({len(doc_text):,} حرف)")
+                            except Exception as e:
+                                st.error(f"خطأ: {e}")
+
+                    # Show last update
+                    try:
+                        conn = get_conn()
+                        c = conn.cursor()
+                        c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", (f"legal_doc_{doc_key}_date",))
+                        row = c.fetchone()
+                        conn.close()
+                        if row:
+                            st.caption(f"آخر تحديث: {row[0]}")
+                        else:
+                            st.caption("لم يتم رفع هذا المرجع بعد")
+                    except:
+                        st.caption("لم يتم رفع هذا المرجع بعد")
+
+            # Load all legal docs into context
+            if st.button("🔄 تحديث سياق المستشار الذكي", type="primary", use_container_width=True, key="refresh_legal"):
+                legal_context = ""
+                try:
+                    conn = get_conn()
+                    c = conn.cursor()
+                    for doc_name, doc_key in doc_types.items():
+                        c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", (f"legal_doc_{doc_key}",))
+                        row = c.fetchone()
+                        if row:
+                            legal_context += f"\n\n=== {doc_name} ===\n{row[0][:8000]}"
+                    conn.close()
+                    st.session_state.legal_docs_context = legal_context
+                    st.success(f"✅ تم تحديث سياق المستشار ({len(legal_context):,} حرف)")
+                except Exception as e:
+                    st.error(f"خطأ: {e}")
+
+            # API Key management
+            st.markdown("---")
+            st.markdown("### 🔑 إعدادات API")
+            current_key = st.session_state.get('claude_api_key', '')
+            masked = f"sk-ant-...{current_key[-8:]}" if len(current_key) > 10 else "غير مُعيّن"
+            st.caption(f"المفتاح الحالي: {masked}")
+
+            new_key = st.text_input("تحديث API Key:", type="password", key="new_api_key")
+            if st.button("💾 حفظ API Key", key="save_api"):
+                if new_key:
+                    st.session_state.claude_api_key = new_key
+                    try:
+                        conn = get_conn()
+                        c = conn.cursor()
+                        _upsert_config(c, "claude_api_key", new_key)
+                        conn.commit()
+                        conn.close()
+                    except: pass
+                    st.success("✅ تم حفظ API Key")
 
 
     # =========================================
