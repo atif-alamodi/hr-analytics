@@ -4800,7 +4800,7 @@ def main():
 
 
 
-            export_widget({"ميزانية التدريب": pd.DataFrame(st.session_state.get("budget_data",[])), "البرامج": pd.DataFrame(st.session_state.get("training_programs_list",[]))} if st.session_state.get("budget_data") else (data if len(data)>0 else None), "ميزانية_التدريب", "trn1")
+            export_widget({"ميزانية التدريب": pd.DataFrame(st.session_state.get("budget_data",[])), "البرامج": pd.DataFrame(st.session_state.get("training_programs_list",[]))} if st.session_state.get("budget_data") else None, "ميزانية_التدريب", "trn1")
         elif page == "💹 ROI التدريب":
             hdr("💹 عائد التدريب ROI","نموذج Phillips ذو 5 مستويات")
             c1,c2 = st.columns(2)
@@ -5365,7 +5365,7 @@ def main():
 
 
 
-            export_widget(pd.DataFrame(st.session_state.get("recruit_plans",[])) if st.session_state.get("recruit_plans") else (data if len(data)>0 else None), "خطة_التوظيف", "rec1")
+            export_widget(pd.DataFrame(st.session_state.get("recruit_plans",[])) if st.session_state.get("recruit_plans") else None, "خطة_التوظيف", "rec1")
         # ===== AI Salary Benchmark =====
         elif page == "🤖 Benchmark ذكاء اصطناعي":
             hdr("🤖 Benchmark الرواتب بالذكاء الاصطناعي","بيانات مرجعية من مصادر حية للسوق السعودي والمصري")
@@ -5483,7 +5483,7 @@ def main():
 
 
 
-            export_widget(data if len(data)>0 else None, "Benchmark", "rec2")
+            export_widget(None, "Benchmark", "rec2")
         # ===== Market Comparison =====
         elif page == "🌍 مقارنة الأسواق":
             hdr("🌍 مقارنة تكاليف التوظيف: السعودية مقابل مصر","تحليل مقارن شامل للتكاليف والمزايا")
@@ -5676,7 +5676,7 @@ def main():
 
 
 
-            export_widget(pd.DataFrame(st.session_state.get("recruit_tracking",[])) if st.session_state.get("recruit_tracking") else (data if len(data)>0 else None), "متابعة_التوظيف", "rec3")
+            export_widget(pd.DataFrame(st.session_state.get("recruit_tracking",[])) if st.session_state.get("recruit_tracking") else None, "متابعة_التوظيف", "rec3")
 
         # ===== CV ANALYSIS =====
         elif page == "📄 تحليل السير الذاتية":
@@ -6576,7 +6576,7 @@ def main():
 
 
 
-            export_widget(data if len(data)>0 else None, "تحليلات_Onboarding", "ob1")
+            export_widget(None, "تحليلات_Onboarding", "ob1")
         elif page == "🎬 عرض تقديمي AI":
             hdr("🎬 عرض تقديمي Onboarding بالذكاء الاصطناعي","عرض slides احترافي مع سرد صوتي تفاعلي")
 
@@ -9007,7 +9007,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                 with st.expander("📋 عرض البيانات الخام"):
                     st.dataframe(ga_df, use_container_width=True, height=400)
 
-            export_widget(ga_df if 'ga_df' in dir() and len(ga_df)>0 else (data if len(data)>0 else None), "تحليل_تلقائي", "ga01")
+            export_widget(None, "تحليل_تلقائي", "ga01")
 
         elif page == "🤖 أسئلة ذكية":
             hdr("🤖 المحلل الذكي", "اطرح أسئلة عن بياناتك بالعربي أو الإنجليزي")
