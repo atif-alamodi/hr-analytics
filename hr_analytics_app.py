@@ -129,26 +129,31 @@ class ModelOrchestrator:
             except: pass
 
         # Layer 1: RAG Knowledge Base - filtered by domain (if not already in reasoning context)
+        # IMPORTANT: Label RAG content with source confidence so LLM can weigh it appropriately
         if rag_ctx and remaining > 500:
             rag_budget = min(len(rag_ctx), remaining // 2)
-            enhanced += f"\n\n**مراجع إضافية:**\n{rag_ctx[:rag_budget]}"
+            source_label = "مراجع من قاعدة المعرفة المعتمدة (مصدر موثوق - استخدم كمرجع أساسي)"
+            enhanced += f"\n\n**{source_label}:**\n{rag_ctx[:rag_budget]}"
             remaining -= rag_budget
 
         # Layer 2: Legal documents - ONLY for labor law consultant
+        # These are verified legal texts - mark as highest confidence
         if model_type == 'labor' and remaining > 500:
             legal_ctx = st.session_state.get('legal_docs_context', '')
             if legal_ctx:
                 legal_budget = min(len(legal_ctx), remaining // 2)
-                enhanced += f"\n\n**نصوص قانونية:**\n{legal_ctx[:legal_budget]}"
+                enhanced += f"\n\n**نصوص قانونية رسمية (مصدر أساسي - الأولوية القصوى في الاستشهاد):**\n{legal_ctx[:legal_budget]}"
                 remaining -= legal_budget
 
         # Layer 3: Learned from past interactions - already filtered by model_type
+        # Mark as lower confidence since these are auto-learned (though now only validated answers are saved)
         if remaining > 300:
             try:
                 if hasattr(st.session_state, '_learning_system'):
                     learned = st.session_state._learning_system.get_relevant_history(user_message, model_type)
                     if learned:
-                        enhanced += f"\n\n**من تجارب سابقة:**\n{learned[:min(1000, remaining)]}"
+                        learn_label = "من تجارب سابقة (مصدر مساعد فقط - لا تستشهد بها كمصدر رسمي، تحقق من المعلومات قبل استخدامها)"
+                        enhanced += f"\n\n**{learn_label}:**\n{learned[:min(1000, remaining)]}"
             except: pass
 
         return enhanced
@@ -217,9 +222,11 @@ class ModelOrchestrator:
             if result:
                 # Step 3: Validate answer with reasoning layer (citation verification + quality)
                 answer_warnings = []
+                validation_passed = True  # Default for non-advisor calls
                 if analysis and reasoning:
                     try:
                         is_valid, issues, warnings = reasoning.validate_generated_answer(result, analysis, model_type)
+                        validation_passed = is_valid
                         answer_warnings = warnings
                         if not is_valid and prov == providers_to_try[0] and len(providers_to_try) > 1:
                             # Try next provider if validation fails on primary (hallucinated articles, etc.)
@@ -241,23 +248,31 @@ class ModelOrchestrator:
                 # Save interaction for learning
                 if hasattr(st.session_state, '_learning_system'):
                     st.session_state._learning_system.save_interaction(user_message, result, model_type, provider=prov)
-                # Auto-learn: save high-quality AI responses into RAG knowledge base
-                self._auto_learn_to_rag(user_message, result, model_type)
+                # Auto-learn: ONLY save validated answers to RAG (prevents hallucination contamination)
+                self._auto_learn_to_rag(user_message, result, model_type, validation_passed=validation_passed)
                 return result, None
             if error != "fallback":
                 last_error = error
         return None, last_error or "⚠️ لم يتمكن أي مزود من الإجابة. تحقق من مفاتيح API."
 
-    def _auto_learn_to_rag(self, question, answer, model_type):
-        """Auto-save high-quality AI answers into RAG knowledge base for continuous learning.
-        Tags with domain-specific doc_type so each consultant only sees its own data."""
+    def _auto_learn_to_rag(self, question, answer, model_type, validation_passed=False):
+        """Auto-save ONLY validated AI answers into RAG knowledge base.
+        CRITICAL: Never save answers that failed citation verification — this prevents
+        hallucinated content from contaminating the knowledge base."""
         try:
             if not answer or len(answer) < 100:
                 return
+            if not validation_passed:
+                return  # Do NOT save unvalidated answers to RAG
             if not hasattr(st.session_state, '_knowledge_engine'):
                 return
+            # Strip any appended warnings/disclaimers before saving
+            clean_answer = answer.split("\n\n---\n**ملاحظات التحقق:**")[0]
+            clean_answer = clean_answer.split("\n\n---\n**تنبيه:**")[0]
+            if len(clean_answer) < 100:
+                return
             # Build a Q&A document for RAG ingestion with domain-specific doc_type
-            qa_doc = f"سؤال: {question}\n\nالإجابة:\n{answer}"
+            qa_doc = f"سؤال: {question}\n\nالإجابة:\n{clean_answer}"
             source = f"AI-{model_type}-{datetime.now().strftime('%Y%m%d')}"
             doc_type = f"ai_learned_{model_type}"  # e.g. ai_learned_labor, ai_learned_hr_expert
             st.session_state._knowledge_engine.ingest(qa_doc, source, doc_type=doc_type)
@@ -293,12 +308,13 @@ class ModelOrchestrator:
             contents.append({"role": role, "parts": [{"text": msg['content']}]})
 
         # Gemini payload with Google Search grounding enabled
+        # Low temperature (0.15) for factual accuracy — reduces hallucination
         payload = json.dumps({
             "contents": contents,
             "systemInstruction": {"parts": [{"text": system_prompt}]},
             "generationConfig": {
                 "maxOutputTokens": config['max_tokens'],
-                "temperature": 0.3,
+                "temperature": 0.15,
             },
             "tools": [{"google_search": {}}],
         })
@@ -373,10 +389,11 @@ class ModelOrchestrator:
         """Call OpenAI-compatible APIs (Groq, OpenRouter, HuggingFace)."""
         models_to_try = self.OR_MODELS if provider == 'openrouter' else [config['model']]
         for model_name in models_to_try:
+            # Low temperature (0.1) for factual accuracy — these smaller models hallucinate more
             payload = json.dumps({
                 "model": model_name, "max_tokens": config['max_tokens'],
                 "messages": [{"role":"system","content":system_prompt}] + messages,
-                "temperature": 0.3
+                "temperature": 0.1
             })
             headers = {'Content-Type':'application/json','Authorization':f'Bearer {api_key}'}
             if provider == 'openrouter':
@@ -396,10 +413,11 @@ class ModelOrchestrator:
     def _call_claude(self, api_key, config, system_prompt, messages):
         """Call Claude/Anthropic API."""
         for use_web in [False, True]:
+            # Low temperature (0.15) for factual accuracy — reduces hallucination
             payload_dict = {
                 "model": config['model'], "max_tokens": config['max_tokens'],
                 "system": system_prompt, "messages": messages,
-                "temperature": 0.3,
+                "temperature": 0.15,
             }
             if use_web:
                 payload_dict["tools"] = [{"type":"web_search_20250305","name":"web_search"}]
@@ -973,7 +991,8 @@ class ReasoningLayer:
     # ---- Known/Approved Legal References ----
     # Only these article numbers may be cited. Any article not in this set is flagged.
     KNOWN_LABOR_ARTICLES = {
-        '2','3','5','6','7','10','11','12','15','22','23','25','26','27','28','29','30','31','32','33',
+        '1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','21',
+        '22','23','24','25','26','27','28','29','30','31','32','33','34','35','36',
         '37','38','39','40','41','42','43','44','45','46','47','48','49',
         '50','51','52','53','54','55','56','57','58','59','60','61','62','63','64',
         '65','66','67','68','69','70','71','72','73','74','75','76','77','78','79','80','81','82','83',
@@ -1594,24 +1613,58 @@ class ReasoningLayer:
 
     def validate_generated_answer(self, answer, analysis, advisor_type):
         """Validate the generated answer for quality, completeness, and citation accuracy.
-        Includes citation verification against known sources to prevent hallucinations.
+        Performs exhaustive citation verification against known sources to kill hallucinations.
         Returns (is_valid, issues, warnings) tuple."""
         if not answer or len(answer.strip()) < 30:
             return False, ["الإجابة قصيرة جداً"], []
 
-        issues = []    # Critical: may trigger retry
+        issues = []    # Critical: may trigger retry or block RAG save
         warnings = []  # Non-critical: attached as notes
         intent = analysis.get('intent', 'informational')
-
-        # === CITATION VERIFICATION (Anti-Hallucination) ===
         import re
 
+        # === CITATION VERIFICATION (Anti-Hallucination) ===
+
         if advisor_type == 'labor':
-            # Verify all cited article numbers exist in Saudi Labor Law
-            cited_articles = re.findall(r'(?:المادة|مادة)\s*(\d+)', answer)
-            for art in cited_articles:
+            # Multiple regex patterns to catch ALL article citation formats
+            patterns = [
+                r'(?:المادة|مادة)\s*[(\[]?\s*(\d+)\s*[)\]]?',  # المادة 77, المادة (77), المادة [77]
+                r'(?:المادة|مادة)\s*رقم\s*(\d+)',               # مادة رقم 84
+                r'(?:المادة|مادة)(\d+)',                         # المادة77 (no space)
+                r'[Aa]rticle\s*(\d+)',                            # Article 77
+                r'[Aa]rt\.\s*(\d+)',                              # Art. 77
+            ]
+            all_cited = set()
+            for pat in patterns:
+                all_cited.update(re.findall(pat, answer))
+
+            # Also catch Arabic numeral citations (١٠٩ etc.)
+            arabic_num_map = {'٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9'}
+            arabic_article_pattern = r'(?:المادة|مادة)\s*([٠-٩]+)'
+            for match in re.findall(arabic_article_pattern, answer):
+                western = ''.join(arabic_num_map.get(c, c) for c in match)
+                all_cited.add(western)
+
+            hallucinated_articles = []
+            for art in all_cited:
                 if art not in self.KNOWN_LABOR_ARTICLES:
-                    issues.append(f"المادة {art} المذكورة في الإجابة غير موجودة في نظام العمل السعودي")
+                    hallucinated_articles.append(art)
+
+            if hallucinated_articles:
+                for art in hallucinated_articles:
+                    issues.append(f"المادة {art} المذكورة في الإجابة غير موجودة في نظام العمل السعودي (245 مادة فقط)")
+
+            # Detect fabricated regulation names
+            fabricated_source_patterns = [
+                r'(?:نظام|قانون|لائحة|قرار)\s+[\u0600-\u06FF\s]{5,40}(?:رقم|لعام)\s*\d+',  # نظام X رقم Y
+            ]
+            for pat in fabricated_source_patterns:
+                matches = re.findall(pat, answer)
+                for m in matches:
+                    # Check if it matches a known source
+                    is_known = any(ks in m for ks in self.KNOWN_LEGAL_SOURCES)
+                    if not is_known:
+                        warnings.append(f"المرجع '{m[:50]}' قد لا يكون مصدراً قانونياً معتمداً")
 
             # Check expected articles are mentioned
             expected_articles = analysis.get('matched_articles', [])
@@ -1621,27 +1674,28 @@ class ReasoningLayer:
         elif advisor_type == 'hr_expert':
             # Verify cited frameworks are known/approved
             answer_lower = answer.lower()
-            # Extract potential framework names (capitalized multi-word patterns)
-            potential_refs = re.findall(r'\b([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*)\b', answer)
             known_lower = {f.lower() for f in self.KNOWN_HR_FRAMEWORKS}
-            for ref in potential_refs:
-                if len(ref) > 3 and ref.lower() not in known_lower:
-                    # Only flag if it looks like a framework name (not a common English word)
-                    common_words = {'the','and','for','with','from','this','that','what','how',
-                                    'when','where','which','about','each','every','some','any',
-                                    'more','most','other','than','they','will','have','been',
-                                    'based','level','high','low','rate','plan','total','model',
-                                    'human','resources','management','system','process','analysis',
-                                    'employee','employer','work','time','cost','quality','impact',
-                                    'result','value','return','investment','performance','training',
-                                    'development','recruitment','compensation','benefits','strategy'}
-                    if ref.lower() not in common_words and len(ref.split()) <= 4:
-                        # Check if it's a plausible framework mention
-                        if any(trigger in answer_lower[max(0,answer_lower.find(ref.lower())-30):answer_lower.find(ref.lower())+len(ref)+30]
-                               for trigger in ['نموذج','إطار','framework','model','method','theory','approach']):
-                            warnings.append(f"الإطار '{ref}' المذكور قد لا يكون إطاراً مهنياً معتمداً")
 
-            # Check expected frameworks are mentioned
+            # Check for framework-like citations near trigger words
+            framework_triggers = ['نموذج','إطار','framework','model','method','methodology',
+                                  'theory','approach','منهجية','نظرية','مقياس','أداة']
+            for trigger in framework_triggers:
+                trigger_positions = [m.start() for m in re.finditer(re.escape(trigger), answer_lower)]
+                for pos in trigger_positions:
+                    # Extract what comes after the trigger word (likely the framework name)
+                    surrounding = answer[pos:pos+60]
+                    # Look for capitalized framework name
+                    fw_match = re.search(r'([A-Z][a-zA-Z]+(?:[\s-][A-Z]?[a-zA-Z]+){0,3})', surrounding)
+                    if fw_match:
+                        fw_name = fw_match.group(1)
+                        if fw_name.lower() not in known_lower and len(fw_name) > 3:
+                            # Exclude common words
+                            common = {'the','and','for','with','from','this','that','based','level','model',
+                                      'human','resources','management','system','employee','performance'}
+                            if fw_name.lower() not in common:
+                                warnings.append(f"الإطار '{fw_name}' المذكور قد لا يكون إطاراً مهنياً معتمداً - يرجى التحقق")
+
+            # Check expected frameworks
             expected_fw = analysis.get('matched_frameworks', [])
             if expected_fw and not any(fw.lower() in answer_lower for fw in expected_fw[:2]):
                 warnings.append("لم يتم ذكر الأطر المهنية المتوقعة")
@@ -1661,14 +1715,28 @@ class ReasoningLayer:
             if arabic_chars / len(answer) < 0.2:
                 issues.append("لغة الإجابة لا تتوافق مع لغة السؤال")
 
+        # === FACTUAL CONSISTENCY CHECK ===
+        # Catch common LLM factual errors about Saudi Labor Law
+        factual_errors = [
+            # Wrong end-of-service formula
+            (r'ثلث.*(?:أقل من سنتين|أقل من 2)', "خطأ محتمل: أقل من سنتين لا يستحق ثلث المكافأة بل صفر"),
+            # Wrong probation period
+            (r'(?:فترة التجربة|تجربة).*(?:6 أشهر|180 يوم).*(?:بدون|دون)\s*(?:موافقة|اتفاق)', "خطأ محتمل: تمديد فترة التجربة لـ 180 يوم يتطلب موافقة مكتوبة"),
+            # Wrong GOSI rates
+            (r'(?:خصم|اشتراك)\s*(?:الموظف|العامل)\s*(?:السعودي)?\s*(?::|=|هو|يبلغ)\s*9\.75', "خطأ محتمل: خصم الموظف السعودي هو 10.5% وليس 9.75% (المعاشات 9.75% + ساند 0.75%)"),
+        ]
+        for pattern, error_msg in factual_errors:
+            if re.search(pattern, answer):
+                warnings.append(error_msg)
+
         # === PARTY-AWARENESS CHECK ===
         party = analysis.get('asking_party', 'neutral')
         if party != 'neutral':
             party_indicators = {
-                'employee': ['حقوق','يحق لك','يحق للعامل','حقوقك','مستحقاتك'],
-                'employer': ['التزامات','يلتزم صاحب العمل','إجراءات','عقوبات','غرامات'],
-                'hr_officer': ['إجراءات','سياسة','تطبيق','تنفيذ','نماذج'],
-                'manager': ['صلاحيات','فريق','إدارة','إشراف'],
+                'employee': ['حقوق','يحق لك','يحق للعامل','حقوقك','مستحقاتك','حق العامل'],
+                'employer': ['التزامات','يلتزم صاحب العمل','إجراءات','عقوبات','غرامات','التزام صاحب'],
+                'hr_officer': ['إجراءات','سياسة','تطبيق','تنفيذ','نماذج','ممارسات'],
+                'manager': ['صلاحيات','فريق','إدارة','إشراف','قيادة'],
             }
             indicators = party_indicators.get(party, [])
             if indicators and not any(ind in answer for ind in indicators):
@@ -1677,13 +1745,16 @@ class ReasoningLayer:
         # === CONFIDENCE CHECK ===
         confidence = analysis.get('confidence', {})
         if confidence.get('overall', 0) < 0.2:
-            # Low confidence: check if answer disclaims uncertainty
-            disclaimer_words = ['غير متأكد','لا يمكن التأكد','يُنصح بمراجعة','ينصح بالتحقق','يرجى مراجعة','لست متأكد']
+            disclaimer_words = ['غير متأكد','لا يمكن التأكد','يُنصح بمراجعة','ينصح بالتحقق',
+                                'يرجى مراجعة','لست متأكد','لم يتم التأكد','يُفضل التحقق']
             if not any(w in answer for w in disclaimer_words):
                 warnings.append("درجة الثقة منخفضة لكن الإجابة لم تُصرّح بعدم اليقين")
 
-        # Answer is valid if there are no critical issues
-        is_valid = not any("قصيرة" in i or "حسابية" in i or "لغة" in i or "غير موجودة" in i for i in issues)
+        # === FINAL VALIDITY DECISION ===
+        # Critical issues that invalidate the answer (trigger retry or block RAG save):
+        has_hallucinated_article = any("غير موجودة" in i for i in issues)
+        has_structural_issue = any("قصيرة" in i or "حسابية" in i or "لغة" in i for i in issues)
+        is_valid = not has_hallucinated_article and not has_structural_issue
         return is_valid, issues, warnings
 
 
@@ -7906,6 +7977,19 @@ def main():
 
                 stats = ci.get('stats',{})
 
+                # Pre-compute slide HTML blocks outside f-string to avoid backslash restrictions
+                slide_welcome = ("<div class='slide s-welcome active' id='s0'><div class='logo'>HR</div><h1>" + ci['name_en'] + "</h1><p class='subtitle'>" + ci['tagline'] + "</p><h2>Welcome, " + plan['name'] + "!</h2><p style='font-size:1.2em;opacity:0.9'>" + plan['title'] + " | " + plan['dept'] + "</p><p style='margin-top:20px;opacity:0.6'>Starting: " + plan['start_date'] + "</p></div>") if "ترحيب" in slides_sel else ""
+                slide_who = ("<div class='slide s-who'><h2>🏢 Who We Are</h2><p style='font-size:1.05em;line-height:1.8;max-width:800px'>" + ci.get('who_we_are','')[:500] + "</p><div class='grid2' style='margin-top:25px'><div class='stat'><div class='num'>" + stats.get('brands','1000+') + "</div><div class='lbl'>Brands</div></div><div class='stat'><div class='num'>" + stats.get('clients','1000+') + "</div><div class='lbl'>Clients</div></div><div class='stat'><div class='num'>" + stats.get('users','1.5M+') + "</div><div class='lbl'>Users</div></div><div class='stat'><div class='num'>" + stats.get('growth','100%+') + "</div><div class='lbl'>Growth</div></div></div></div>") if "من نحن" in slides_sel else ""
+                slide_vision = ("<div class='slide s-vision'><h2>🎯 Our Purpose, Mission & Vision</h2><div style='margin:20px 0'><div style='background:rgba(255,255,255,0.1);padding:20px;border-radius:12px;margin:12px 0;border-right:4px solid #E9C46A'><h3 style='color:#E9C46A'>Purpose (Why)</h3><p>" + ci.get('purpose','') + "</p></div><div style='background:rgba(255,255,255,0.1);padding:20px;border-radius:12px;margin:12px 0;border-right:4px solid #E36414'><h3 style='color:#E36414'>Mission (What)</h3><p>" + ci.get('mission','') + "</p></div><div style='background:rgba(255,255,255,0.1);padding:20px;border-radius:12px;margin:12px 0;border-right:4px solid #2A9D8F'><h3 style='color:#2A9D8F'>Vision (Where)</h3><p>" + ci.get('vision','') + "</p></div></div></div>") if "رؤيتنا ورسالتنا" in slides_sel else ""
+                slide_values = ("<div class='slide s-values'><h2 style='color:#0F4C5C'>💎 Our Values</h2><div class='grid5'>" + vals_html + "</div></div>") if "قيمنا" in slides_sel else ""
+                slide_products = ("<div class='slide s-products'><h2>📦 Our Products</h2><div class='grid2' style='gap:12px'>" + prods_html + "</div></div>") if "منتجاتنا" in slides_sel else ""
+                slide_milestones = ("<div class='slide s-milestones'><h2>🏆 Our Journey</h2><div style='max-width:700px'>" + miles_html + "</div></div>") if "إنجازاتنا" in slides_sel else ""
+                slide_market = ("<div class='slide s-market'><h2>📊 Market Opportunity</h2><div class='grid3'>" + market_html + "</div></div>") if "السوق" in slides_sel else ""
+                slide_team = ("<div class='slide s-team'><h2>👥 Your Team</h2><div class='grid2'><div class='stat'><div class='lbl'>Department</div><div class='num' style='font-size:1.3em'>" + plan['dept'] + "</div></div><div class='stat'><div class='lbl'>Manager</div><div class='num' style='font-size:1.3em'>" + plan.get('manager','') + "</div></div><div class='stat'><div class='lbl'>Start Date</div><div class='num' style='font-size:1.3em'>" + plan['start_date'] + "</div></div><div class='stat'><div class='lbl'>Type</div><div class='num' style='font-size:1.3em'>" + plan.get('type','Full-Time') + "</div></div></div></div>") if "فريقك" in slides_sel else ""
+                slide_plan = ("<div class='slide s-plan'><h2 style='color:#0F4C5C'>📋 Your 30/60/90 Day Plan</h2><div style='max-height:70vh;overflow-y:auto'>" + tasks_html + "</div></div>") if "خطة 30/60/90" in slides_sel else ""
+                slide_policies = ("<div class='slide s-policies'><h2>📌 Key Policies</h2><div class='grid2'>" + "".join(["<div class='stat'><div class='lbl'>" + k + "</div><div style='font-size:1em;margin-top:6px'>" + v + "</div></div>" for k,v in ci.get('work_policies',{}).items()]) + "</div></div>") if "سياسات" in slides_sel else ""
+                slide_contact = ("<div class='slide s-contact'><h2>📞 Stay Connected</h2><div class='grid2'>" + "".join(["<div class='stat'><div class='lbl'>" + k + "</div><div class='num' style='font-size:1em'>" + v + "</div></div>" for k,v in ci.get('contacts',{}).items()]) + "</div><p style='margin-top:40px;font-size:1.3em;text-align:center'>Welcome aboard, " + plan['name'] + "! 🎉</p></div>") if "تواصل" in slides_sel else ""
+
                 html = f"""<!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head>
@@ -7951,27 +8035,17 @@ h1{{font-size:2.8em;margin-bottom:10px}} h2{{font-size:2em;margin-bottom:15px}} 
 <div class="progress" id="prog"></div>
 <div class="counter" id="counter"></div>
 
-{"<div class='slide s-welcome active' id='s0'><div class='logo'>HR</div><h1>" + ci['name_en'] + "</h1><p class='subtitle'>" + ci['tagline'] + "</p><h2>Welcome, " + plan['name'] + "!</h2><p style=\"font-size:1.2em;opacity:0.9\">" + plan['title'] + " | " + plan['dept'] + "</p><p style=\"margin-top:20px;opacity:0.6\">Starting: " + plan['start_date'] + "</p></div>" if "ترحيب" in slides_sel else ""}
-
-{"<div class='slide s-who'><h2>🏢 Who We Are</h2><p style=\"font-size:1.05em;line-height:1.8;max-width:800px\">" + ci.get('who_we_are','')[:500] + "</p><div class='grid2' style='margin-top:25px'><div class='stat'><div class='num'>" + stats.get('brands','1000+') + "</div><div class='lbl'>Brands</div></div><div class='stat'><div class='num'>" + stats.get('clients','1000+') + "</div><div class='lbl'>Clients</div></div><div class='stat'><div class='num'>" + stats.get('users','1.5M+') + "</div><div class='lbl'>Users</div></div><div class='stat'><div class='num'>" + stats.get('growth','100%+') + "</div><div class='lbl'>Growth</div></div></div></div>" if "من نحن" in slides_sel else ""}
-
-{"<div class='slide s-vision'><h2>🎯 Our Purpose, Mission & Vision</h2><div style='margin:20px 0'><div style='background:rgba(255,255,255,0.1);padding:20px;border-radius:12px;margin:12px 0;border-right:4px solid #E9C46A'><h3 style='color:#E9C46A'>Purpose (Why)</h3><p>" + ci.get('purpose','') + "</p></div><div style='background:rgba(255,255,255,0.1);padding:20px;border-radius:12px;margin:12px 0;border-right:4px solid #E36414'><h3 style='color:#E36414'>Mission (What)</h3><p>" + ci.get('mission','') + "</p></div><div style='background:rgba(255,255,255,0.1);padding:20px;border-radius:12px;margin:12px 0;border-right:4px solid #2A9D8F'><h3 style='color:#2A9D8F'>Vision (Where)</h3><p>" + ci.get('vision','') + "</p></div></div></div>" if "رؤيتنا ورسالتنا" in slides_sel else ""}
-
-{"<div class='slide s-values'><h2 style='color:#0F4C5C'>💎 Our Values</h2><div class='grid5'>" + vals_html + "</div></div>" if "قيمنا" in slides_sel else ""}
-
-{"<div class='slide s-products'><h2>📦 Our Products</h2><div class='grid2' style='gap:12px'>" + prods_html + "</div></div>" if "منتجاتنا" in slides_sel else ""}
-
-{"<div class='slide s-milestones'><h2>🏆 Our Journey</h2><div style='max-width:700px'>" + miles_html + "</div></div>" if "إنجازاتنا" in slides_sel else ""}
-
-{"<div class='slide s-market'><h2>📊 Market Opportunity</h2><div class='grid3'>" + market_html + "</div></div>" if "السوق" in slides_sel else ""}
-
-{"<div class='slide s-team'><h2>👥 Your Team</h2><div class='grid2'><div class='stat'><div class='lbl'>Department</div><div class='num' style='font-size:1.3em'>" + plan['dept'] + "</div></div><div class='stat'><div class='lbl'>Manager</div><div class='num' style='font-size:1.3em'>" + plan.get('manager','') + "</div></div><div class='stat'><div class='lbl'>Start Date</div><div class='num' style='font-size:1.3em'>" + plan['start_date'] + "</div></div><div class='stat'><div class='lbl'>Type</div><div class='num' style='font-size:1.3em'>" + plan.get('type','Full-Time') + "</div></div></div></div>" if "فريقك" in slides_sel else ""}
-
-{"<div class='slide s-plan'><h2 style='color:#0F4C5C'>📋 Your 30/60/90 Day Plan</h2><div style='max-height:70vh;overflow-y:auto'>" + tasks_html + "</div></div>" if "خطة 30/60/90" in slides_sel else ""}
-
-{"<div class='slide s-policies'><h2>📌 Key Policies</h2><div class='grid2'>" + "".join([f"<div class='stat'><div class='lbl'>{k}</div><div style='font-size:1em;margin-top:6px'>{v}</div></div>" for k,v in ci.get('work_policies',{}).items()]) + "</div></div>" if "سياسات" in slides_sel else ""}
-
-{"<div class='slide s-contact'><h2>📞 Stay Connected</h2><div class='grid2'>" + "".join([f"<div class='stat'><div class='lbl'>{k}</div><div class='num' style='font-size:1em'>{v}</div></div>" for k,v in ci.get('contacts',{}).items()]) + "</div><p style='margin-top:40px;font-size:1.3em;text-align:center'>Welcome aboard, {plan['name']}! 🎉</p></div>" if "تواصل" in slides_sel else ""}
+{slide_welcome}
+{slide_who}
+{slide_vision}
+{slide_values}
+{slide_products}
+{slide_milestones}
+{slide_market}
+{slide_team}
+{slide_plan}
+{slide_policies}
+{slide_contact}
 
 <div class="nav">
 <button onclick="prev()">◀ السابق</button>
@@ -8728,13 +8802,17 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 - فرّق بوضوح بين نظام العمل واللائحة التنفيذية ونظام التأمينات
 - اذكر متى يتحول العقد المحدد لغير محدد: بعد 3 تجديدات أو 4 سنوات
 
-**خامساً - منع الاختلاق (هام جداً):**
-- لا تخترع مواد قانونية غير موجودة - نظام العمل يحتوي على 245 مادة فقط
-- لا تذكر رقم مادة إلا إذا كنت متأكداً من وجودها ومن نصها
-- لا تخلط بين مصادر مختلفة (نظام العمل vs التأمينات vs الضمان الصحي)
-- إذا لم تكن متأكداً من رقم المادة أو نصها بالضبط، قل ذلك صراحةً
-- إذا لم تكن متأكداً من معلومة، صرّح بذلك وأوصِ بمراجعة محامٍ مرخص أو وزارة الموارد البشرية
-- عند عدم وجود نص قانوني واضح، اذكر المبدأ العام وأوصِ بالتحقق"""
+**خامساً - منع الاختلاق (أهم قاعدة على الإطلاق):**
+- نظام العمل السعودي يحتوي على المواد من 1 إلى 245 فقط. لا توجد مادة 246 أو أعلى. لا تذكر أي رقم مادة خارج هذا النطاق.
+- لا تذكر رقم مادة إلا إذا كنت متأكداً تماماً من وجودها ومن نصها الدقيق
+- إذا لم تتذكر رقم المادة بالضبط: قل "وفقاً لنظام العمل" بدون ذكر رقم محدد، ولا تخمن الرقم أبداً
+- لا تخلط بين نظام العمل واللائحة التنفيذية ونظام التأمينات الاجتماعية ونظام الضمان الصحي — كل منها نظام مستقل
+- لا تخترع قرارات وزارية أو لوائح أو تعاميم غير موجودة
+- إذا كان سؤال المستخدم يتعلق بموضوع لا تملك معلومات مؤكدة عنه:
+  * اذكر ما تعرفه بيقين
+  * صرّح بوضوح بما لا تستطيع التأكد منه
+  * أوصِ بمراجعة محامٍ مرخص أو وزارة الموارد البشرية أو الموقع الرسمي
+- الدقة أهم من الشمولية: إجابة صحيحة جزئية أفضل بكثير من إجابة شاملة تحتوي على معلومة واحدة خاطئة"""
 
         HR_EXPERT_SYSTEM_PROMPT = """You are a world-class HR professional and consultant with deep expertise equivalent to holding PHRi, SHRM-SCP, CIPD Level 7, APTD, and SPHR certifications.
 
