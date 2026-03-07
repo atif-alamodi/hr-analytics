@@ -93,30 +93,33 @@ class ModelOrchestrator:
         return None
 
     def build_context(self, system_prompt, user_message, model_type='general', provider='claude'):
-        """Assemble full context: system prompt + RAG + learned + legal docs."""
+        """Assemble context with STRICT advisor_type separation."""
         max_ctx = self.CONTEXT_LIMITS.get(provider, 8000)
-        enhanced = system_prompt[:max_ctx // 2]  # Reserve half for added context
+        enhanced = system_prompt[:max_ctx // 2]
 
-        # Layer 1: RAG Knowledge Base
+        # Determine advisor_type from system prompt
+        advisor_type = "legal" if 'المستشار القانوني' in system_prompt else "hr"
+
+        # Layer 1: RAG Knowledge Base (FILTERED by advisor_type)
         if hasattr(st.session_state, '_knowledge_engine'):
-            rag_ctx = st.session_state._knowledge_engine.search(user_message)
+            rag_ctx = st.session_state._knowledge_engine.search(user_message, advisor_type=advisor_type)
             if rag_ctx:
                 enhanced += f"\n\n**RETRIEVED KNOWLEDGE:**\n{rag_ctx[:6000]}"
 
-        # Layer 2: Learned from past interactions
+        # Layer 2: Learned from past (FILTERED by model_type)
         if hasattr(st.session_state, '_learning_system'):
             learned = st.session_state._learning_system.get_relevant_history(user_message, model_type)
             if learned:
                 enhanced += f"\n\n**LEARNED FROM PAST:**\n{learned[:2000]}"
 
-        # Layer 3: Legal documents
-        legal_ctx = st.session_state.get('legal_docs_context', '')
-        if legal_ctx:
-            enhanced += f"\n\n**LEGAL REFERENCES:**\n{legal_ctx[:6000]}"
+        # Layer 3: Legal documents (ONLY for legal advisor)
+        if advisor_type == "legal":
+            legal_ctx = st.session_state.get('legal_docs_context', '')
+            if legal_ctx:
+                enhanced += f"\n\n**LEGAL REFERENCES:**\n{legal_ctx[:6000]}"
 
-        # Truncate if needed
         if len(enhanced) > max_ctx:
-            enhanced = enhanced[:max_ctx] + "\n[Context truncated]"
+            enhanced = enhanced[:max_ctx]
 
         return enhanced
 
@@ -327,30 +330,40 @@ class KnowledgeEngine:
                 self._vectors = self._vectorizer.fit_transform(texts)
         except: pass
 
-    def search(self, query, top_k=5):
-        """Semantic search using TF-IDF cosine similarity (upgraded from keyword matching)."""
+    def search(self, query, top_k=5, advisor_type=None):
+        """Semantic search filtered by advisor_type (legal/hr)."""
         self.load_from_db()
         if not self._chunks: return ""
 
-        # Try vector search first
-        if self._vectors is not None and self._vectorizer not in [None, "unavailable"]:
+        # Filter chunks by advisor_type BEFORE scoring
+        if advisor_type:
+            chunks_to_search = [ch for ch in self._chunks if ch.get('type','') == advisor_type or ch.get('advisor_type','') == advisor_type]
+        else:
+            chunks_to_search = self._chunks
+
+        if not chunks_to_search: return ""
+
+        # Try vector search on filtered chunks
+        if self._vectors is not None and self._vectorizer not in [None, "unavailable"] and not advisor_type:
             try:
                 query_vec = self._vectorizer.transform([query])
                 scores = self._cosine(query_vec, self._vectors).flatten()
                 top_indices = scores.argsort()[-top_k:][::-1]
                 results = []
                 for idx in top_indices:
-                    if scores[idx] > 0.05:  # Minimum relevance threshold
+                    if scores[idx] > 0.05:
                         ch = self._chunks[idx]
-                        results.append(f"[Source: {ch.get('source','')} | Score: {scores[idx]:.2f}]\n{ch['text']}")
+                        if advisor_type and ch.get('type','') != advisor_type and ch.get('advisor_type','') != advisor_type:
+                            continue
+                        results.append(f"[Source: {ch.get('source','')}]\n{ch['text']}")
                 if results:
-                    return "\n\n---\n".join(results)
+                    return "\n\n---\n".join(results[:top_k])
             except: pass
 
-        # Fallback to keyword search
+        # Keyword search on filtered chunks
         query_words = set(query.lower().split())
         scored = []
-        for ch in self._chunks:
+        for ch in chunks_to_search:
             chunk_words = set(ch.get('text','').lower().split())
             match = len(query_words & chunk_words)
             if match > 0:
@@ -359,8 +372,10 @@ class KnowledgeEngine:
         scored.sort(key=lambda x: x[0], reverse=True)
         return "\n\n---\n".join([f"[{c[1].get('source','')}]\n{c[1]['text']}" for c in scored[:top_k]])
 
-    def ingest(self, text, source, doc_type="legal", version=None):
-        """Ingest document with chunking, versioning, and metadata."""
+    def ingest(self, text, source, doc_type="legal", version=None, advisor_type=None):
+        """Ingest document with chunking, versioning, and advisor_type tagging."""
+        if not advisor_type:
+            advisor_type = doc_type
         chunks = self._chunk_text(text)
         ver = version or datetime.now().strftime("%Y%m%d_%H%M")
         try:
@@ -368,26 +383,18 @@ class KnowledgeEngine:
             c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_chunks",))
             row = c.fetchone()
             existing = json.loads(row[0]) if row else []
-
-            # Version tracking - keep old versions
             self._save_version(c, source, ver, len(chunks))
-
-            # Remove old chunks from same source (replace with new version)
             existing = [ch for ch in existing if ch.get('source') != source]
-
-            # Add new chunks with metadata
             for i, chunk in enumerate(chunks):
                 existing.append({
                     "text": chunk, "source": source, "type": doc_type,
+                    "advisor_type": advisor_type,
                     "version": ver, "chunk_id": i,
                     "added": datetime.now().strftime("%Y-%m-%d"),
                     "hash": hashlib.md5(chunk.encode()).hexdigest()[:12]
                 })
-
             _upsert_config(c, "rag_chunks", json.dumps(existing, ensure_ascii=False))
             conn.commit(); conn.close()
-
-            # Rebuild index
             self._chunks = existing
             self._build_index()
             return len(chunks)
@@ -1196,6 +1203,14 @@ def get_best_kb_answer(question, system_prompt=None):
         answer = smart_local_answer(question, HR_KB)
     if answer:
         return answer
+
+    # 1.5 RAG Knowledge Base search (filtered by advisor_type)
+    try:
+        if '_knowledge_engine' in st.session_state:
+            rag_result = st.session_state._knowledge_engine.search(question, advisor_type=consultant_type)
+            if rag_result and len(rag_result) > 30:
+                return f"**من قاعدة المعرفة:**\n\n{rag_result[:2000]}"
+    except: pass
 
     # 2. Try API (with filter to enforce separation)
     groq_key = st.session_state.get('groq_api_key', '')
@@ -7818,11 +7833,11 @@ GOSI: سعودي 10.5% خصم + 12.5% شركة | غير سعودي 2% شركة
         def chunk_text(text, chunk_size=500, overlap=50):
             return st.session_state._knowledge_engine._chunk_text(text, chunk_size, overlap)
 
-        def search_knowledge_base(query, top_k=5):
-            return st.session_state._knowledge_engine.search(query, top_k)
+        def search_knowledge_base(query, top_k=5, advisor_type=None):
+            return st.session_state._knowledge_engine.search(query, top_k, advisor_type)
 
-        def save_to_knowledge_base(text, source, doc_type="legal"):
-            return st.session_state._knowledge_engine.ingest(text, source, doc_type)
+        def save_to_knowledge_base(text, source, doc_type="legal", advisor_type=None):
+            return st.session_state._knowledge_engine.ingest(text, source, doc_type, advisor_type=advisor_type or doc_type)
 
         def save_qa_pair(question, answer, model_type, feedback=None):
             st.session_state._learning_system.save_interaction(question, answer, model_type, feedback)
@@ -8080,6 +8095,12 @@ GOSI: سعودي 10.5% خصم + 12.5% شركة | غير سعودي 2% شركة
 
             # Upload documents
             st.markdown("### 📁 رفع مستندات للقاعدة المعرفية")
+
+            # Advisor type selector for document tagging
+            rag_advisor = st.radio("📌 نوع المستند:", ["⚖️ قانوني (نظام العمل، التأمينات، اللوائح)", "📚 موارد بشرية (مناهج، أطر منهجية، ممارسات)"],
+                horizontal=True, key="rag_advisor_type")
+            advisor_tag = "legal" if "قانوني" in rag_advisor else "hr"
+
             rag_files = st.file_uploader("ارفع ملفات (PDF, DOCX, TXT):", type=["pdf","docx","txt"],
                 accept_multiple_files=True, key="rag_upload")
 
@@ -8104,7 +8125,7 @@ GOSI: سعودي 10.5% خصم + 12.5% شركة | غير سعودي 2% شركة
                         doc_text = rag_file.getvalue().decode('utf-8', errors='ignore')
 
                     if doc_text:
-                        n_chunks = save_to_knowledge_base(doc_text, rag_file.name)
+                        n_chunks = save_to_knowledge_base(doc_text, rag_file.name, advisor_tag, advisor_tag)
                         st.success(f"✅ {rag_file.name}: {len(doc_text):,} حرف → {n_chunks} جزء مفهرس")
                     else:
                         st.warning(f"⚠️ لم يتم استخراج نص من {rag_file.name}")
@@ -8123,7 +8144,7 @@ GOSI: سعودي 10.5% خصم + 12.5% شركة | غير سعودي 2% شركة
                     text = re.sub(r'<[^>]+>', ' ', html)
                     text = re.sub(r'\s+', ' ', text).strip()
                     if len(text) > 100:
-                        n = save_to_knowledge_base(text, web_url[:80])
+                        n = save_to_knowledge_base(text, web_url[:80], advisor_tag, advisor_tag)
                         st.success(f"✅ تم استيراد {len(text):,} حرف → {n} جزء")
                     else:
                         st.warning("لم يتم استخراج محتوى كافٍ")
@@ -8135,7 +8156,7 @@ GOSI: سعودي 10.5% خصم + 12.5% شركة | غير سعودي 2% شركة
             manual_source = st.text_input("اسم المصدر:", placeholder="مثال: سياسة الإجازات الداخلية", key="rag_msrc")
             manual_text = st.text_area("النص:", height=150, key="rag_mtxt", placeholder="الصق نص السياسة أو المعلومة هنا...")
             if st.button("➕ إضافة للقاعدة", type="primary", key="rag_madd") and manual_text and manual_source:
-                n = save_to_knowledge_base(manual_text, manual_source, "manual")
+                n = save_to_knowledge_base(manual_text, manual_source, "manual", advisor_tag)
                 st.success(f"✅ {manual_source}: {n} جزء مفهرس")
 
             # Knowledge base stats
@@ -8204,7 +8225,7 @@ GOSI: سعودي 10.5% خصم + 12.5% شركة | غير سعودي 2% شركة
                     else:
                         doc_text = uploaded.getvalue().decode('utf-8', errors='ignore')
                     if doc_text:
-                        n = save_to_knowledge_base(doc_text, doc_name, "legal")
+                        n = save_to_knowledge_base(doc_text, doc_name, "legal", "legal")
                         st.success(f"✅ {doc_name}: {n} جزء")
 
         elif page == "📊 التعلم والتحسين":
