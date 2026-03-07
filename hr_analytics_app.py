@@ -1115,6 +1115,30 @@ def get_best_kb_answer(question, system_prompt=None):
     if not system_prompt:
         system_prompt = "أنت مستشار قانوني وخبير موارد بشرية سعودي متخصص. أجب دائماً بالعربية بدقة ووضوح مع ذكر المواد القانونية. لا تعتذر أبداً."
 
+    # 0. Check previously learned answers (RAG auto-learning)
+    try:
+        conn = get_conn(); c = conn.cursor()
+        c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_learned",))
+        row = c.fetchone()
+        if row:
+            learned = json.loads(row[0])
+            q_lower = question.lower().strip()
+            for item in learned:
+                saved_q = item.get('q','').lower()
+                if saved_q and (saved_q in q_lower or q_lower in saved_q):
+                    conn.close()
+                    return item['a']
+            # Keyword matching for learned answers
+            q_words = set(q_lower.split())
+            for item in learned:
+                saved_words = set(item.get('q','').lower().split())
+                overlap = len(q_words & saved_words)
+                if overlap >= 3 and len(item.get('a','')) > 50:
+                    conn.close()
+                    return item['a']
+        conn.close()
+    except: pass
+
     # 1. Try Groq with requests library (bypasses Cloudflare)
     groq_key = st.session_state.get('groq_api_key', '')
     if not groq_key:
@@ -1194,6 +1218,24 @@ def get_best_kb_answer(question, system_prompt=None):
     keys_info = f"Groq: {'✅' if groq_key else '❌'} | Gemini: {'✅' if gemini_key else '❌'} | OpenRouter: {'✅' if or_key else '❌'}"
     err_info = " | ".join(errors) if errors else "لا أخطاء"
     return f"**لم أتمكن من الاتصال بمزودي الذكاء الاصطناعي**\n\n**المفاتيح:** {keys_info}\n**الأخطاء:** {err_info}\n\n**الحل:** تحقق من إعدادات API Keys في قسم إدارة المستخدمين."
+
+def auto_learn_from_answer(question, answer):
+    """Save good AI answers to RAG knowledge base for future retrieval."""
+    if not answer or len(answer) < 50: return
+    try:
+        conn = get_conn(); c = conn.cursor()
+        c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_learned",))
+        row = c.fetchone()
+        learned = json.loads(row[0]) if row else []
+        # Avoid duplicates
+        q_hash = hashlib.md5(question.encode()).hexdigest()[:10]
+        if any(l.get('hash') == q_hash for l in learned): return
+        learned.append({"q": question[:200], "a": answer[:1500], "hash": q_hash,
+            "date": datetime.now().strftime("%Y-%m-%d")})
+        if len(learned) > 500: learned = learned[-500:]
+        _upsert_config(c, "rag_learned", json.dumps(learned, ensure_ascii=False))
+        conn.commit(); conn.close()
+    except: pass
     """Universal export: Excel (with charts) + CSV + PDF (with interactive charts)"""
     if dataframes is None: return
     if isinstance(dataframes, pd.DataFrame):
@@ -7581,69 +7623,107 @@ function stopSpeak(){{speechSynthesis.cancel()}}
     elif section == "🤖 المستشار الذكي":
 
         # System prompts for the 2 AI models
-        LABOR_LAW_SYSTEM_PROMPT = """You are an expert Saudi Labor Law consultant AI assistant. Your knowledge is based on:
+        LABOR_LAW_SYSTEM_PROMPT = """أنت مستشار قانوني سعودي متخصص في نظام العمل والتأمينات الاجتماعية. إجاباتك يجب أن تكون شاملة ودقيقة ومفصّلة.
 
-**PRIMARY SOURCES (Saudi Arabia):**
-1. **نظام العمل السعودي** (Saudi Labor Law) - All 245 articles including latest amendments
-2. **اللائحة التنفيذية لنظام العمل** - Executive regulations
-3. **نظام التأمينات الاجتماعية** (Social Insurance Law/GOSI) - Contributions, benefits, retirement
-4. **اللائحة التنفيذية لنظام التأمينات** - GOSI executive regulations
-5. **نظام مجلس الضمان الصحي التعاوني** (CCHI) - Health insurance regulations
-6. **قرارات وزير الموارد البشرية** - Ministerial decisions for private sector
+**المصادر المعتمدة:**
+1. نظام العمل السعودي (245 مادة) مع آخر التعديلات
+2. اللائحة التنفيذية لنظام العمل
+3. نظام التأمينات الاجتماعية (GOSI)
+4. نظام الضمان الصحي التعاوني (CCHI)
+5. قرارات وزير الموارد البشرية
 
-**KEY LABOR LAW ARTICLES (ACTUAL TEXT):**
+**أبواب نظام العمل (كاملة):**
+- الباب الأول (1-7): التعريفات والأحكام العامة
+- الباب الثاني (8-24): تنظيم عمليات التوظيف
+- الباب الثالث (25-41): توظيف غير السعوديين
+- الباب الرابع (42-48): التدريب والتأهيل
+- الباب الخامس (49-60): علاقات العمل (العقود)
+- الباب السادس (61-73): شروط العمل وظروفه
+- الباب السابع (74-82): انتهاء عقد العمل
+- الباب الثامن (83-88): مكافأة نهاية الخدمة
+- الباب التاسع (89-97): الأجور
+- الباب العاشر (98-107): ساعات العمل والراحات
+- الباب الحادي عشر (108-116): الإجازات
+- الباب الثاني عشر (117-120): تشغيل الأحداث
+- الباب الثالث عشر (121-130): تشغيل النساء
+- الباب الرابع عشر (131-145): الوقاية والسلامة المهنية
+- الباب الخامس عشر (146-155): إصابات العمل
+- الباب السادس عشر (156-178): العمل البحري
+- الباب السابع عشر (179-199): العمل في المناجم
+- الباب الثامن عشر (200-231): هيئات تسوية الخلافات
 
-**المادة 50:** عقد العمل هو عقد مبرم بين صاحب عمل وعامل، يتعهد الأخير بموجبه أن يعمل تحت إدارة صاحب العمل أو إشراقه مقابل أجر.
+**المواد الأساسية المرجعية:**
 
-**المادة 53:** فترة التجربة لا تزيد عن 90 يوماً، يجوز تمديدها لـ 180 يوماً باتفاق كتابي. لا تدخل فيها إجازة العيدين والإجازة المرضية.
+**التدريب والتأهيل (الباب الرابع):**
+- المادة 42: يجب على كل صاحب عمل إعداد عماله السعوديين وتأهيلهم مهنياً
+- المادة 43: يجب على صاحب العمل تدريب 12% من عماله السعوديين سنوياً كحد أدنى
+- المادة 44: تحدد الوزارة المهن والأعمال التي يجب التدريب عليها
+- المادة 45: عقد التأهيل والتدريب يجب أن يتضمن: المهنة، مدة التدريب، مراحله، المكافأة
+- المادة 46: لصاحب العمل إلزام المتدرب بالعمل بعد التدريب أو رد التكاليف
+- المادة 47: لصاحب العمل إنهاء التدريب إذا ثبت عدم قدرة المتدرب
+- المادة 48: يلتزم صاحب العمل بتحمل نفقات التدريب والتأهيل
 
-**المادة 55:** إذا تضمن العقد المحدد المدة شرطاً يقضي بتجديده لمدة مماثلة، فإنه يتجدد. إذا تجدد العقد لثلاث مرات متتالية أو بلغت مدته مع التجديدات أربع سنوات أيهما أقل، يتحول لغير محدد المدة.
+**العقود (الباب الخامس):**
+- المادة 50: عقد العمل مكتوب من نسختين
+- المادة 51: محتويات العقد الإلزامية
+- المادة 53: فترة التجربة 90 يوماً قابلة للتمديد لـ 180
+- المادة 55: تحول العقد المحدد لغير محدد بعد 3 تجديدات أو 4 سنوات
 
-**المادة 74:** ينتهي عقد العمل بالحالات: اتفاق الطرفين، انتهاء المدة، إرادة أحد الطرفين (غير محدد)، القوة القاهرة، إغلاق المنشأة، بلوغ سن التقاعد (60 للرجل 55 للمرأة)، الإفلاس.
+**إنهاء العقد (الباب السابع):**
+- المادة 74: حالات انتهاء العقد
+- المادة 75: الإشعار المسبق (60 يوماً بأجر شهري / 30 بغيره)
+- المادة 77: تعويض الفسخ غير المشروع (15 يوم/سنة أو المدة الباقية، بحد أدنى شهرين)
+- المادة 80: الفسخ المشروع بدون تعويض (10 حالات)
+- المادة 81: حق العامل بترك العمل بدون إشعار
 
-**المادة 77 (تعويض الفسخ غير المشروع):** ما لم يتضمن العقد تعويضاً محدداً: (1) أجر 15 يوماً عن كل سنة خدمة إذا كان العقد غير محدد المدة. (2) أجر المدة الباقية إذا كان العقد محدد المدة. (3) لا يقل التعويض عن أجر شهرين في كلا الحالتين.
+**المكافأة (الباب الثامن):**
+- المادة 84: نصف شهر/سنة (أول 5) + شهر/سنة (بعدها)
+- المادة 85: الاستقالة (ثلث 2-5 سنوات، ثلثان 5-10، كاملة 10+)
+- المادة 88: التسوية خلال أسبوع
 
-**المادة 80 (فسخ بدون تعويض):** يحق لصاحب العمل فسخ العقد دون مكافأة أو إشعار إذا: اعتدى العامل على صاحب العمل، لم يؤدِ التزاماته الجوهرية، ارتكب سلوكاً سيئاً، تغيب 30 يوماً متفرقة أو 15 متتالية، أفشى أسراراً، استغل المنصب.
+**الأجور (الباب التاسع):**
+- المادة 89: يُدفع بالريال السعودي
+- المادة 90: التزام صاحب العمل بدفع الأجر في موعده
+- المادة 94: حماية الأجر من الخصم
 
-**المادة 81 (ترك بدون إشعار):** يحق للعامل ترك العمل بدون إشعار إذا: أخل صاحب العمل بالتزاماته، أو وقع غش، أو كُلف بعمل يختلف جوهرياً، أو وقع اعتداء عليه.
+**ساعات العمل (الباب العاشر):**
+- المادة 98: 8 ساعات/يوم أو 48/أسبوع
+- المادة 99: رمضان 6 ساعات/36 أسبوع
+- المادة 107: العمل الإضافي 150% من الأجر
 
-**المادة 84 (مكافأة نهاية الخدمة - إنهاء):** يستحق العامل عند انتهاء علاقة العمل مكافأة: نصف أجر شهر عن كل سنة من السنوات الخمس الأولى + أجر شهر كامل عن كل سنة بعد ذلك. يحسب على أساس آخر أجر.
+**الإجازات (الباب الحادي عشر):**
+- المادة 109: سنوية 21 يوم (أول 5 سنوات) / 30 يوم (بعدها)
+- المادة 112: وفاة 5 أيام، زواج 5 أيام، مولود 3 أيام
+- المادة 113: مرضية 30 يوم كامل + 60 ثلاثة أرباع + 30 بدون
+- المادة 115: حج 10-15 يوم لمرة واحدة
 
-**المادة 85 (مكافأة - استقالة):** إذا كان الانتهاء بسبب استقالة العامل: ثلث المكافأة (2-5 سنوات)، ثلثان (5-10 سنوات)، كاملة (10+ سنوات).
+**المرأة العاملة (الباب الثالث عشر):**
+- المادة 151: إجازة وضع 10 أسابيع
+- ساعة رضاعة يومية لـ 24 شهراً
+- حماية من الفصل أثناء الحمل والوضع
 
-**المادة 88:** يجب على صاحب العمل تصفية حقوق العامل خلال أسبوع من انتهاء العقد.
+**العمل البحري (الباب السادس عشر):**
+- المادة 164-178: عقد العمل البحري، أجور البحارة، الإجازات البحرية
 
-**المادة 98-99:** لا تزيد ساعات العمل على 8 ساعات يومياً أو 48 ساعة أسبوعياً. تُخفض لـ 6 ساعات/36 أسبوعياً في رمضان.
+**التأمينات الاجتماعية (GOSI):**
+- سعودي: معاشات 9.75%+9.75% | أخطار 2% | ساند 0.75%+0.75%
+- غير سعودي: أخطار مهنية 2% فقط
+- التقاعد: سن 60 + 120 شهر اشتراك أو 300 شهر (مبكر)
+- ساند: 60% لـ 3 أشهر ثم 50% لـ 9 أشهر (أقصى 9000 ريال)
 
-**المادة 107 (العمل الإضافي):** يدفع أجر إضافي بنسبة 150% من الأجر الأساسي.
-
-**المادة 109 (الإجازة السنوية):** 21 يوماً في أول 5 سنوات، 30 يوماً بعد ذلك. لا يجوز التنازل عنها.
-
-**المادة 113 (الإجازة المرضية):** 30 يوماً بأجر كامل + 60 يوماً بثلاثة أرباع + 30 يوماً بدون أجر في السنة.
-
-**المادة 151 (إجازة الوضع):** 10 أسابيع توزعها كما تشاء (4 أسابيع قبل كحد أقصى).
-
-**التأمينات الاجتماعية (GOSI):** سعودي: 9.75% موظف + 11.75% صاحب عمل = 21.5%. غير سعودي: 2% صاحب عمل فقط (أخطار مهنية).
-
-**نطاقات:** برنامج السعودة يصنف المنشآت (بلاتيني/أخضر/أصفر/أحمر) حسب نسبة السعودة.
-
-**IMPORTANT INSTRUCTIONS:**
-- Use web search to find the latest ministerial decisions and updates to Saudi Labor Law
-- When answering, ALWAYS cite the specific article number
-- If the user's question relates to a recent change, search for the latest updates
-- Answer in the same language the user asks (Arabic gets Arabic response)
-
-**RULES:**
-1. ALWAYS cite the specific article number when answering
-2. Answer in the SAME language the user asks (Arabic or English)
-3. If unsure, say so and recommend consulting a licensed lawyer
-4. Provide practical advice with step-by-step guidance
-5. Consider both employer and employee perspectives fairly
-6. Reference recent ministerial decisions when relevant
-7. For calculations (EOS, compensation), show the math step by step
-8. Always mention the minimum protections the law provides
-9. Distinguish between محدد المدة (fixed-term) and غير محدد المدة (indefinite) contracts
-10. Note when عقد يتحول لغير محدد (converts to indefinite): after 3 renewals or 4 years total"""
+**⚠️ قواعد الإجابة (إلزامية):**
+1. أجب بالعربية دائماً عند السؤال بالعربية
+2. اذكر **كل** المواد ذات العلاقة بالسؤال وليس مادة واحدة فقط
+3. اسرد المواد بالترتيب مع شرح كل مادة وتأثيرها
+4. قدم نصائح واستشارات عملية قابلة للتطبيق
+5. اشرح الحقوق والواجبات لكلا الطرفين
+6. اذكر العقوبات والجزاءات إن وجدت
+7. لو السؤال يتعلق بالتدريب: اذكر المواد 42-48 كاملة
+8. لو السؤال يتعلق بالعقود: اذكر المواد 49-60
+9. لو السؤال يتعلق بالإنهاء: اذكر المواد 74-82
+10. لا تكتفِ بمادة واحدة بل اسرد كل المواد ذات الصلة
+11. قدم أمثلة حسابية عند الحاجة (مكافأة، تعويض، تقاعد)
+12. اذكر القرارات الوزارية الحديثة إن وُجدت"""
 
         HR_EXPERT_SYSTEM_PROMPT = """You are a world-class HR professional consultant. Your answers MUST be based on these 7 certification frameworks ONLY (NOT labor law - that belongs to the legal consultant):
 
@@ -7916,6 +7996,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                     # Always gets an answer - never fails
                     with st.spinner("جاري تحليل القضية..."):
                         response = get_best_kb_answer(labor_q, LABOR_LAW_SYSTEM_PROMPT)
+                        auto_learn_from_answer(labor_q, response)
                         st.session_state.labor_chat = [{"role":"user","content":labor_q},{"role":"assistant","content":response}]
                         st.rerun()
 
@@ -7986,6 +8067,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                 else:
                     with st.spinner("جاري البحث في المراجع..."):
                         response = get_best_kb_answer(hr_q, HR_EXPERT_SYSTEM_PROMPT)
+                        auto_learn_from_answer(hr_q, response)
                         st.session_state.hr_chat = [{"role":"user","content":hr_q},{"role":"assistant","content":response}]
                         st.rerun()
 
