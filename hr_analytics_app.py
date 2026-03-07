@@ -7692,15 +7692,25 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                 submitted = st.form_submit_button("⚖️ استشارة", type="primary", use_container_width=True)
 
             if submitted and labor_q:
-                # Try instant answer first (no API needed)
-                instant = st.session_state._orchestrator._instant.get(labor_q.strip())
-                if not instant:
-                    for q, a in st.session_state._orchestrator._instant.items():
-                        if q in labor_q or labor_q.strip() in q:
-                            instant = a; break
-                if instant:
+                # Instant answers database (no API needed)
+                INSTANT_ANSWERS = {
+                    "ما هي حقوقي عند الفصل وفق المادة 77": "**المادة 77 من نظام العمل السعودي:**\n\nإذا أُنهي العقد لسبب غير مشروع، يحق للطرف المتضرر تعويض:\n\n**عقد غير محدد المدة:** أجر 15 يوماً عن كل سنة خدمة\n**عقد محدد المدة:** أجر المدة الباقية من العقد\n**الحد الأدنى:** لا يقل التعويض عن أجر شهرين\n\n**بالإضافة إلى:**\n- مكافأة نهاية الخدمة (المادة 84)\n- بدل إجازة غير مستخدمة\n- أجر الشهر الأخير كاملاً\n- شهادة خبرة",
+                    "متى يتحول العقد المحدد لغير محدد المدة": "**المادة 55 من نظام العمل:**\n\nيتحول العقد محدد المدة إلى غير محدد في:\n\n1. **التجديد 3 مرات متتالية** أو بلوغ 4 سنوات أيهما أقل\n2. **استمرار العمل** بعد انتهاء العقد دون تجديد\n3. **نص العقد** على التحول التلقائي",
+                    "كيف تُحسب مكافأة نهاية الخدمة": "**المادة 84 من نظام العمل:**\n\n**الحساب:**\n- **أول 5 سنوات:** نصف راتب شهري عن كل سنة\n- **بعد 5 سنوات:** راتب شهري كامل عن كل سنة\n\n**عند الاستقالة (المادة 85):**\n- أقل من سنتين: لا يستحق\n- 2-5 سنوات: ثلث المكافأة\n- 5-10 سنوات: ثلثا المكافأة\n- أكثر من 10 سنوات: المكافأة كاملة\n\n**المدة:** يُلزم صاحب العمل بدفعها خلال أسبوع (المادة 88).",
+                    "ما هي نسبة اشتراكات التأمينات الاجتماعية": "**نسب الاشتراك في التأمينات الاجتماعية (GOSI):**\n\n**السعوديون:**\n- المعاشات: 9.75% (الموظف) + 9.75% (صاحب العمل)\n- الأخطار المهنية: 2% (صاحب العمل)\n- ساند (التعطل): 0.75% + 0.75%\n- **إجمالي خصم الموظف: 10.5%**\n- **إجمالي على الشركة: 12.5%**\n\n**غير السعوديين:**\n- الأخطار المهنية فقط: 2% (صاحب العمل)\n- لا يوجد خصم على الموظف",
+                    "ما هي فترة التجربة وشروطها": "**المادة 53 من نظام العمل:**\n\n- **المدة الأساسية:** 90 يوماً كحد أقصى\n- **التمديد:** يمكن تمديدها إلى 180 يوماً بموافقة مكتوبة\n- **لا تشمل:** إجازة عيد الفطر والأضحى والإجازات المرضية\n- **حق الإنهاء:** لأي طرف إنهاء العقد خلالها بدون تعويض أو مكافأة\n- **لا تتكرر:** لا يجوز وضع فترة تجربة أكثر من مرة لدى نفس صاحب العمل",
+                    "ما هي حقوق المرأة العاملة في نظام العمل": "**حقوق المرأة في نظام العمل السعودي:**\n\n- **إجازة وضع:** 10 أسابيع (المادة 151)\n- **ساعة رضاعة:** ساعة يومياً لمدة 24 شهراً\n- **حماية من الفصل:** أثناء الحمل وإجازة الوضع\n- **إجازة وفاة زوج:** 4 أشهر و10 أيام (عدة)\n- **المساواة:** أجر متساوٍ للعمل المتساوي\n- **ظروف العمل:** بيئة آمنة ومناسبة",
+                }
+                # Search for instant answer
+                answer = None
+                q_clean = labor_q.strip().rstrip('؟?')
+                for k, v in INSTANT_ANSWERS.items():
+                    if k in q_clean or q_clean in k or any(w in q_clean for w in k.split()[-3:]):
+                        answer = v; break
+
+                if answer:
                     st.session_state.labor_chat.append({"role": "user", "content": labor_q})
-                    st.session_state.labor_chat.append({"role": "assistant", "content": instant})
+                    st.session_state.labor_chat.append({"role": "assistant", "content": answer})
                     st.rerun()
                 else:
                     with st.spinner("جاري تحليل القضية..."):
@@ -7761,14 +7771,23 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                 submitted = st.form_submit_button("📚 استشارة", type="primary", use_container_width=True)
 
             if submitted and hr_q:
-                instant = st.session_state._orchestrator._instant.get(hr_q.strip())
-                if not instant:
-                    for q, a in st.session_state._orchestrator._instant.items():
-                        if q in hr_q or hr_q.strip() in q:
-                            instant = a; break
-                if instant:
+                HR_INSTANT = {
+                    "كيف أبني خطة استقطاب فعالة": "**خطة استقطاب فعالة (Talent Acquisition Strategy):**\n\n**1. التحليل:**\n- تحديد الاحتياج الفعلي (Workforce Planning)\n- تحليل سوق العمل والرواتب\n\n**2. التصميم:**\n- وصف وظيفي واضح ومحدد\n- Employee Value Proposition (EVP)\n- قنوات الاستقطاب (LinkedIn, مواقع توظيف, تزكيات)\n\n**3. التنفيذ:**\n- ATS لتتبع المتقدمين\n- مقابلات منظمة (Structured Interviews)\n- تقييم الكفاءات\n\n**4. القياس:**\n- Time-to-Hire\n- Cost-per-Hire\n- Quality of Hire",
+                    "ما الفرق بين OKRs و KPIs": "**OKRs vs KPIs:**\n\n**KPIs (مؤشرات الأداء الرئيسية):**\n- تقيس الأداء المستمر\n- أرقام محددة (مثل: معدل دوران 15%)\n- ثابتة نسبياً\n\n**OKRs (الأهداف والنتائج الرئيسية):**\n- تحدد أهداف طموحة للمستقبل\n- هدف + 3-5 نتائج قابلة للقياس\n- تتغير كل ربع سنة\n- 70% إنجاز = ممتاز\n\n**مثال HR:**\n- **KPI:** معدل الدوران = 12%\n- **OKR:** هدف: تحسين الاحتفاظ\n  - خفض الدوران من 15% إلى 10%\n  - رفع رضا الموظفين إلى 85%\n  - تنفيذ برنامج تطوير لـ 50 موظف",
+                    "ما هو نموذج Phillips ROI للتدريب": "**نموذج Phillips ROI (5 مستويات):**\n\n**1. Reaction:** رضا المتدربين\n**2. Learning:** المعرفة المكتسبة\n**3. Application:** التطبيق في العمل\n**4. Impact:** التأثير على الأعمال\n**5. ROI:** العائد على الاستثمار\n\n**المعادلة:**\nROI % = (الفوائد - التكاليف) / التكاليف × 100\n\n**مثال:** تدريب 50,000 ريال أدى لزيادة إنتاجية 150,000 ريال\nROI = (150,000 - 50,000) / 50,000 × 100 = **200%**",
+                    "كيف أصمم هيكل رواتب تنافسي": "**تصميم هيكل رواتب تنافسي:**\n\n**1. التحليل:**\n- مسح رواتب السوق (Salary Survey)\n- تحديد P25, P50, P75 لكل وظيفة\n\n**2. الهيكل:**\n- درجات وظيفية (Job Grading)\n- نطاق راتب لكل درجة (Min-Mid-Max)\n- Compa-Ratio = الراتب الفعلي / وسط النطاق\n\n**3. السياسة:**\n- التوظيف عند Min-Mid\n- الزيادات السنوية 3-5%\n- مكافآت الأداء 10-20%\n\n**4. المراجعة:** سنوياً مع تحديث بيانات السوق",
+                    "كيف أحسب معدل دوران الموظفين وأحسّنه": "**معدل الدوران (Turnover Rate):**\n\n**المعادلة:**\nTurnover = عدد المغادرين / متوسط عدد الموظفين × 100\n\n**المعايير:**\n- أقل من 10%: ممتاز\n- 10-15%: جيد\n- 15-25%: يحتاج انتباه\n- أكثر من 25%: مشكلة\n\n**التحسين:**\n1. تحسين بيئة العمل\n2. رواتب تنافسية\n3. مسار وظيفي واضح\n4. تقدير وتحفيز\n5. مرونة العمل\n6. تطوير القيادات\n7. استبيانات رضا دورية",
+                    "ما هي أفضل ممارسات تجربة الموظف": "**تجربة الموظف (Employee Experience):**\n\n**1. مرحلة الاستقطاب:**\n- عملية توظيف سلسة\n- تواصل واضح\n\n**2. مرحلة التهيئة (Onboarding):**\n- خطة 30/60/90 يوم\n- Buddy system\n\n**3. مرحلة التطوير:**\n- تدريب مستمر\n- مسار وظيفي واضح\n\n**4. مرحلة الاحتفاظ:**\n- بيئة عمل محفزة\n- تقدير ومكافآت\n- مرونة العمل\n\n**5. مرحلة الانتقال:**\n- مقابلة خروج\n- شهادة خبرة\n- شبكة خريجين",
+                }
+                answer = None
+                q_clean = hr_q.strip().rstrip('؟?')
+                for k, v in HR_INSTANT.items():
+                    if k in q_clean or q_clean in k or any(w in q_clean for w in k.split()[-3:]):
+                        answer = v; break
+
+                if answer:
                     st.session_state.hr_chat.append({"role": "user", "content": hr_q})
-                    st.session_state.hr_chat.append({"role": "assistant", "content": instant})
+                    st.session_state.hr_chat.append({"role": "assistant", "content": answer})
                     st.rerun()
                 else:
                     with st.spinner("جاري البحث في المراجع..."):
