@@ -15,6 +15,492 @@ from email.mime.multipart import MIMEMultipart
 import openpyxl
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
+import hashlib, urllib.request
+
+# =====================================================================
+# ENTERPRISE ARCHITECTURE: 3 Core Modules
+# =====================================================================
+
+# ==================== 1. MODEL ORCHESTRATOR ====================
+class ModelOrchestrator:
+    """Independent orchestration layer for AI model management.
+    Handles: prompt building, model routing, context assembly, caching, error management."""
+
+    MODELS = {
+        'claude': {'url':'https://api.anthropic.com/v1/messages','model':'claude-3-5-sonnet-20241022','max_tokens':4000},
+        'groq': {'url':'https://api.groq.com/openai/v1/chat/completions','model':'llama-3.3-70b-versatile','max_tokens':4000},
+    }
+
+    # Prompt Templates (editable registry)
+    PROMPT_TEMPLATES = {
+        'labor_law': 'labor_system_prompt',
+        'hr_expert': 'hr_system_prompt',
+        'general': 'You are a helpful HR assistant. Answer in the same language as the question.',
+    }
+
+    def __init__(self):
+        self._cache = {}
+        self._call_count = 0
+        self._token_estimate = 0
+
+    def select_provider(self, question_type='general'):
+        """Smart model routing based on question type and availability."""
+        provider = st.session_state.get('ai_provider', 'auto')
+        claude_key = st.session_state.get('claude_api_key', '')
+        groq_key = st.session_state.get('groq_api_key', '')
+
+        if provider == 'auto':
+            # Route complex legal questions to Claude (stronger), general to Groq (free)
+            legal_kw = ['مادة','قانون','نظام العمل','تعويض','فصل','إنهاء','article','labor law','termination']
+            is_legal = any(kw in question_type.lower() for kw in legal_kw)
+            if is_legal and claude_key: return 'claude'
+            if groq_key: return 'groq'
+            if claude_key: return 'claude'
+            return None
+        if provider == 'claude' and claude_key: return 'claude'
+        if provider == 'groq' and groq_key: return 'groq'
+        return 'groq' if groq_key else ('claude' if claude_key else None)
+
+    def build_context(self, system_prompt, user_message, model_type='general'):
+        """Assemble full context: system prompt + RAG + learned + legal docs."""
+        enhanced = system_prompt
+
+        # Layer 1: RAG Knowledge Base
+        if hasattr(st.session_state, '_knowledge_engine'):
+            rag_ctx = st.session_state._knowledge_engine.search(user_message)
+            if rag_ctx:
+                enhanced += f"\n\n**RETRIEVED KNOWLEDGE:**\n{rag_ctx[:6000]}"
+
+        # Layer 2: Learned from past interactions
+        if hasattr(st.session_state, '_learning_system'):
+            learned = st.session_state._learning_system.get_relevant_history(user_message, model_type)
+            if learned:
+                enhanced += f"\n\n**LEARNED FROM PAST:**\n{learned[:2000]}"
+
+        # Layer 3: Legal documents
+        legal_ctx = st.session_state.get('legal_docs_context', '')
+        if legal_ctx:
+            enhanced += f"\n\n**LEGAL REFERENCES:**\n{legal_ctx[:6000]}"
+
+        # Truncate if needed
+        if len(enhanced) > 15000:
+            enhanced = enhanced[:15000] + "\n[Context truncated for length]"
+
+        return enhanced
+
+    def get_cache_key(self, message, model_type):
+        """Generate cache key for response caching."""
+        return hashlib.md5(f"{message[:100]}_{model_type}".encode()).hexdigest()
+
+    def call(self, system_prompt, user_message, chat_history=None, model_type='general'):
+        """Main orchestrated call with routing, context, caching, fallback."""
+        # Check cache
+        cache_key = self.get_cache_key(user_message, model_type)
+        if cache_key in self._cache:
+            return self._cache[cache_key], None
+
+        provider = self.select_provider(user_message)
+        if not provider:
+            return None, "يرجى إدخال API Key (Groq مجاني أو Claude)"
+
+        # Build enhanced context
+        enhanced_prompt = self.build_context(system_prompt, user_message, model_type)
+
+        # Build messages
+        messages = []
+        if chat_history:
+            for msg in chat_history[-10:]:
+                messages.append({"role": msg['role'], "content": msg['content']})
+        messages.append({"role": "user", "content": user_message})
+
+        # Estimate tokens
+        self._token_estimate += len(enhanced_prompt.split()) + len(user_message.split())
+
+        # Try primary provider, fallback to other
+        providers_to_try = [provider]
+        other = 'claude' if provider == 'groq' else 'groq'
+        other_key = st.session_state.get(f'{other}_api_key', '')
+        if other_key: providers_to_try.append(other)
+
+        for prov in providers_to_try:
+            result, error = self._call_provider(prov, enhanced_prompt, messages)
+            if result:
+                self._call_count += 1
+                # Cache successful response
+                self._cache[cache_key] = result
+                if len(self._cache) > 50: self._cache = dict(list(self._cache.items())[-50:])
+                # Save to learning system
+                if hasattr(st.session_state, '_learning_system'):
+                    st.session_state._learning_system.save_interaction(user_message, result, model_type)
+                return result, None
+        return None, error or "خطأ غير متوقع"
+
+    def _call_provider(self, provider, system_prompt, messages):
+        """Execute API call to specific provider."""
+        api_key = st.session_state.get(f'{provider}_api_key', '')
+        if not api_key: return None, f"مفتاح {provider} غير موجود"
+
+        config = self.MODELS[provider]
+
+        if provider == 'groq':
+            payload = json.dumps({
+                "model": config['model'], "max_tokens": config['max_tokens'],
+                "messages": [{"role":"system","content":system_prompt}] + messages,
+                "temperature": 0.3
+            })
+            headers = {'Content-Type':'application/json','Authorization':f'Bearer {api_key}'}
+        else:  # claude
+            # Try with and without web search
+            for use_web in [True, False]:
+                payload_dict = {
+                    "model": config['model'], "max_tokens": config['max_tokens'],
+                    "system": system_prompt, "messages": messages,
+                }
+                if use_web:
+                    payload_dict["tools"] = [{"type":"web_search_20250305","name":"web_search"}]
+                payload = json.dumps(payload_dict)
+                headers = {'Content-Type':'application/json','x-api-key':api_key,'anthropic-version':'2023-06-01'}
+                try:
+                    req = urllib.request.Request(config['url'], data=payload.encode('utf-8'), headers=headers, method='POST')
+                    with urllib.request.urlopen(req, timeout=90) as resp:
+                        result = json.loads(resp.read().decode())
+                        if provider == 'groq':
+                            text = result.get('choices',[{}])[0].get('message',{}).get('content','')
+                        else:
+                            text = "\n".join([b.get('text','') for b in result.get('content',[]) if b.get('type')=='text'])
+                        return text, None
+                except urllib.request.HTTPError as he:
+                    if use_web and he.code == 400: continue
+                    err = he.read().decode('utf-8',errors='ignore')[:200]
+                    return None, f"خطأ {he.code}: {err}"
+                except Exception as e:
+                    if use_web: continue
+                    return None, f"خطأ: {e}"
+            return None, "فشل الاتصال"
+
+        try:
+            req = urllib.request.Request(config['url'], data=payload.encode('utf-8'), headers=headers, method='POST')
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                result = json.loads(resp.read().decode())
+                text = result.get('choices',[{}])[0].get('message',{}).get('content','')
+                return text, None
+        except urllib.request.HTTPError as he:
+            err = he.read().decode('utf-8',errors='ignore')[:200]
+            if he.code == 429: return None, "rate_limit"
+            return None, f"خطأ {he.code}: {err}"
+        except Exception as e:
+            return None, f"خطأ: {e}"
+
+    def get_stats(self):
+        """Return orchestrator statistics."""
+        return {"calls": self._call_count, "cached": len(self._cache), "est_tokens": self._token_estimate}
+
+
+# ==================== 2. KNOWLEDGE ENGINE (Semantic RAG) ====================
+class KnowledgeEngine:
+    """Enterprise RAG with TF-IDF vectorization, versioning, and governance.
+    Upgrades keyword search to proper vector-based semantic retrieval."""
+
+    def __init__(self):
+        self._vectorizer = None
+        self._vectors = None
+        self._chunks = []
+        self._loaded = False
+
+    def _ensure_vectorizer(self):
+        """Lazy-load TF-IDF vectorizer."""
+        if self._vectorizer is None:
+            try:
+                from sklearn.feature_extraction.text import TfidfVectorizer
+                from sklearn.metrics.pairwise import cosine_similarity
+                self._vectorizer = TfidfVectorizer(max_features=5000, ngram_range=(1,2))
+                self._cosine = cosine_similarity
+            except ImportError:
+                self._vectorizer = "unavailable"
+
+    def load_from_db(self):
+        """Load chunks from database and build vector index."""
+        if self._loaded: return
+        self._loaded = True
+        try:
+            conn = get_conn(); c = conn.cursor()
+            c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_chunks",))
+            row = c.fetchone(); conn.close()
+            if row:
+                self._chunks = json.loads(row[0])
+                self._build_index()
+        except: pass
+
+    def _build_index(self):
+        """Build TF-IDF vector index from chunks."""
+        if not self._chunks: return
+        self._ensure_vectorizer()
+        if self._vectorizer == "unavailable": return
+        try:
+            texts = [ch.get('text','') for ch in self._chunks if ch.get('text','').strip()]
+            if texts:
+                self._vectors = self._vectorizer.fit_transform(texts)
+        except: pass
+
+    def search(self, query, top_k=5):
+        """Semantic search using TF-IDF cosine similarity (upgraded from keyword matching)."""
+        self.load_from_db()
+        if not self._chunks: return ""
+
+        # Try vector search first
+        if self._vectors is not None and self._vectorizer not in [None, "unavailable"]:
+            try:
+                query_vec = self._vectorizer.transform([query])
+                scores = self._cosine(query_vec, self._vectors).flatten()
+                top_indices = scores.argsort()[-top_k:][::-1]
+                results = []
+                for idx in top_indices:
+                    if scores[idx] > 0.05:  # Minimum relevance threshold
+                        ch = self._chunks[idx]
+                        results.append(f"[Source: {ch.get('source','')} | Score: {scores[idx]:.2f}]\n{ch['text']}")
+                if results:
+                    return "\n\n---\n".join(results)
+            except: pass
+
+        # Fallback to keyword search
+        query_words = set(query.lower().split())
+        scored = []
+        for ch in self._chunks:
+            chunk_words = set(ch.get('text','').lower().split())
+            match = len(query_words & chunk_words)
+            if match > 0:
+                score = match / max(len(query_words), 1)
+                scored.append((score, ch))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return "\n\n---\n".join([f"[{c[1].get('source','')}]\n{c[1]['text']}" for c in scored[:top_k]])
+
+    def ingest(self, text, source, doc_type="legal", version=None):
+        """Ingest document with chunking, versioning, and metadata."""
+        chunks = self._chunk_text(text)
+        ver = version or datetime.now().strftime("%Y%m%d_%H%M")
+        try:
+            conn = get_conn(); c = conn.cursor()
+            c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_chunks",))
+            row = c.fetchone()
+            existing = json.loads(row[0]) if row else []
+
+            # Version tracking - keep old versions
+            self._save_version(c, source, ver, len(chunks))
+
+            # Remove old chunks from same source (replace with new version)
+            existing = [ch for ch in existing if ch.get('source') != source]
+
+            # Add new chunks with metadata
+            for i, chunk in enumerate(chunks):
+                existing.append({
+                    "text": chunk, "source": source, "type": doc_type,
+                    "version": ver, "chunk_id": i,
+                    "added": datetime.now().strftime("%Y-%m-%d"),
+                    "hash": hashlib.md5(chunk.encode()).hexdigest()[:12]
+                })
+
+            _upsert_config(c, "rag_chunks", json.dumps(existing, ensure_ascii=False))
+            conn.commit(); conn.close()
+
+            # Rebuild index
+            self._chunks = existing
+            self._build_index()
+            return len(chunks)
+        except: return 0
+
+    def _chunk_text(self, text, chunk_size=500, overlap=50):
+        """Split text into overlapping chunks."""
+        chunks = []
+        words = text.split()
+        for i in range(0, len(words), chunk_size - overlap):
+            chunk = " ".join(words[i:i + chunk_size])
+            if chunk.strip(): chunks.append(chunk)
+        return chunks
+
+    def _save_version(self, cursor, source, version, n_chunks):
+        """Track document versions for governance."""
+        try:
+            cursor.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_versions",))
+            row = cursor.fetchone()
+            versions = json.loads(row[0]) if row else []
+            versions.append({"source":source,"version":version,"chunks":n_chunks,
+                "date":datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "user":st.session_state.get('user_name','النظام')})
+            if len(versions) > 200: versions = versions[-200:]
+            _upsert_config(cursor, "rag_versions", json.dumps(versions, ensure_ascii=False))
+        except: pass
+
+    def get_versions(self, source=None):
+        """Get version history for governance."""
+        try:
+            conn = get_conn(); c = conn.cursor()
+            c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_versions",))
+            row = c.fetchone(); conn.close()
+            versions = json.loads(row[0]) if row else []
+            if source: versions = [v for v in versions if v.get('source') == source]
+            return versions
+        except: return []
+
+    def get_stats(self):
+        """Knowledge base statistics."""
+        self.load_from_db()
+        sources = {}
+        for ch in self._chunks:
+            src = ch.get('source','unknown')
+            sources[src] = sources.get(src, 0) + 1
+        return {
+            "total_chunks": len(self._chunks),
+            "sources": len(sources), "source_detail": sources,
+            "total_words": sum(len(ch.get('text','').split()) for ch in self._chunks),
+            "vector_index": self._vectors is not None,
+            "versions": len(self.get_versions()),
+        }
+
+
+# ==================== 3. LEARNING SYSTEM ====================
+class LearningSystem:
+    """Continuous learning from user interactions with dataset building capability.
+    Tracks Q&A, feedback, builds fine-tuning datasets, analyzes patterns."""
+
+    def __init__(self):
+        self._history = None
+        self._loaded = False
+
+    def _load(self):
+        """Load interaction history from DB."""
+        if self._loaded: return
+        self._loaded = True
+        try:
+            conn = get_conn(); c = conn.cursor()
+            c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_qa_history",))
+            row = c.fetchone(); conn.close()
+            self._history = json.loads(row[0]) if row else []
+        except:
+            self._history = []
+
+    def save_interaction(self, question, answer, model_type, feedback=None):
+        """Save Q&A pair for learning."""
+        self._load()
+        self._history.append({
+            "q": question[:500], "a": answer[:1500], "model": model_type,
+            "feedback": feedback, "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "user": st.session_state.get('user_name',''),
+            "provider": st.session_state.get('ai_provider','auto'),
+            "q_hash": hashlib.md5(question.encode()).hexdigest()[:10]
+        })
+        if len(self._history) > 500: self._history = self._history[-500:]
+        self._save_to_db()
+
+    def set_feedback(self, index, feedback):
+        """Update feedback for a specific interaction."""
+        self._load()
+        if 0 <= index < len(self._history):
+            self._history[index]['feedback'] = feedback
+            self._save_to_db()
+
+    def _save_to_db(self):
+        """Persist history to database."""
+        try:
+            conn = get_conn(); c = conn.cursor()
+            _upsert_config(c, "rag_qa_history", json.dumps(self._history, ensure_ascii=False))
+            conn.commit(); conn.close()
+        except: pass
+
+    def get_relevant_history(self, query, model_type, top_k=3):
+        """Get relevant past Q&A for context injection (learning from past)."""
+        self._load()
+        relevant = [h for h in self._history if h.get('model') == model_type and h.get('feedback') != 'bad']
+        if not relevant: return ""
+
+        query_words = set(query.lower().split())
+        scored = []
+        for h in relevant:
+            q_words = set(h.get('q','').lower().split())
+            match = len(query_words & q_words)
+            if match > 1: scored.append((match, h))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        top = scored[:top_k]
+        if not top: return ""
+        return "\n\n".join([f"Q: {h[1]['q']}\nA: {h[1]['a'][:300]}" for h in top])
+
+    def build_finetune_dataset(self, min_feedback='good'):
+        """Build fine-tuning dataset from positively-rated interactions."""
+        self._load()
+        dataset = []
+        for h in self._history:
+            if h.get('feedback') == min_feedback:
+                dataset.append({
+                    "messages": [
+                        {"role": "user", "content": h['q']},
+                        {"role": "assistant", "content": h['a']}
+                    ],
+                    "model_type": h.get('model','general')
+                })
+        return dataset
+
+    def get_analytics(self):
+        """Comprehensive learning analytics."""
+        self._load()
+        if not self._history: return {}
+
+        total = len(self._history)
+        by_model = {}; by_feedback = {}; by_date = {}; by_user = {}
+        for h in self._history:
+            m = h.get('model','general'); by_model[m] = by_model.get(m,0)+1
+            f = h.get('feedback','none'); by_feedback[f] = by_feedback.get(f,0)+1
+            d = h.get('date','')[:10]; by_date[d] = by_date.get(d,0)+1
+            u = h.get('user',''); by_user[u] = by_user.get(u,0)+1
+
+        good = by_feedback.get('good', 0)
+        bad = by_feedback.get('bad', 0)
+        satisfaction = round(good / max(good+bad, 1) * 100, 1)
+
+        # Topic analysis
+        all_text = " ".join([h.get('q','') for h in self._history]).lower()
+        topics = {}
+        topic_kw = {
+            "نهاية الخدمة":["مكافأة","نهاية","خدمة","eos"],
+            "الفصل":["فصل","تعويض","77","إنهاء"],
+            "الإجازات":["إجازة","سنوية","مرضية"],
+            "الرواتب":["راتب","رواتب","بدل"],
+            "التأمينات":["تأمين","gosi"],
+            "التوظيف":["توظيف","استقطاب","recruitment"],
+            "التدريب":["تدريب","تطوير","roi"],
+            "الأداء":["أداء","تقييم","kpi"],
+        }
+        for topic, kws in topic_kw.items():
+            count = sum(1 for kw in kws if kw in all_text)
+            if count > 0: topics[topic] = count
+
+        finetune_ready = len(self.build_finetune_dataset())
+
+        return {
+            "total": total, "by_model": by_model, "by_feedback": by_feedback,
+            "by_date": by_date, "by_user": by_user, "satisfaction": satisfaction,
+            "topics": topics, "finetune_ready": finetune_ready,
+            "maturity": min(100, (total * 5 + good * 10 + finetune_ready * 20) // 10)
+        }
+
+    def get_history(self, limit=50):
+        """Get recent history."""
+        self._load()
+        return list(reversed(self._history[-limit:]))
+
+
+# =====================================================================
+# Initialize Architecture Singletons
+# =====================================================================
+@st.cache_resource
+def _init_orchestrator():
+    return ModelOrchestrator()
+
+@st.cache_resource
+def _init_knowledge():
+    return KnowledgeEngine()
+
+@st.cache_resource
+def _init_learning():
+    return LearningSystem()
 
 st.set_page_config(page_title="تحليلات HR | رسال الود", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
 
@@ -1891,6 +2377,12 @@ DISC_STYLES = {
 
 # ===== MAIN APP =====
 def main():
+    # Initialize Enterprise Architecture
+    if '_orchestrator' not in st.session_state:
+        st.session_state._orchestrator = _init_orchestrator()
+        st.session_state._knowledge_engine = _init_knowledge()
+        st.session_state._learning_system = _init_learning()
+
     # Auth check with session persistence
     if 'logged_in' not in st.session_state:
         st.session_state.logged_in = False
@@ -6647,233 +7139,23 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 - HR Analytics: Descriptive, Diagnostic, Predictive, Prescriptive"""
 
         def chunk_text(text, chunk_size=500, overlap=50):
-            """Split text into overlapping chunks for RAG"""
-            chunks = []
-            words = text.split()
-            for i in range(0, len(words), chunk_size - overlap):
-                chunk = " ".join(words[i:i + chunk_size])
-                if chunk.strip():
-                    chunks.append(chunk)
-            return chunks
+            return st.session_state._knowledge_engine._chunk_text(text, chunk_size, overlap)
 
         def search_knowledge_base(query, top_k=5):
-            """RAG Retrieval: search knowledge base for relevant chunks"""
-            try:
-                conn = get_conn()
-                c = conn.cursor()
-                c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_chunks",))
-                row = c.fetchone()
-                conn.close()
-                if not row: return ""
-                all_chunks = json.loads(row[0])
-
-                # Simple TF-IDF-like scoring
-                query_words = set(query.lower().split())
-                scored = []
-                for chunk in all_chunks:
-                    chunk_words = set(chunk.get('text','').lower().split())
-                    # Score = number of matching words / total query words
-                    match_count = len(query_words & chunk_words)
-                    if match_count > 0:
-                        score = match_count / max(len(query_words), 1)
-                        # Boost by source relevance
-                        if chunk.get('source','') in query.lower(): score *= 1.5
-                        scored.append((score, chunk))
-
-                scored.sort(key=lambda x: x[0], reverse=True)
-                top_chunks = scored[:top_k]
-                context = "\n\n---\n".join([f"[Source: {c[1].get('source','')}]\n{c[1]['text']}" for c in top_chunks])
-                return context
-            except:
-                return ""
+            return st.session_state._knowledge_engine.search(query, top_k)
 
         def save_to_knowledge_base(text, source, doc_type="legal"):
-            """RAG Indexing: chunk and save document to knowledge base"""
-            chunks = chunk_text(text)
-            try:
-                conn = get_conn()
-                c = conn.cursor()
-                c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_chunks",))
-                row = c.fetchone()
-                existing = json.loads(row[0]) if row else []
-
-                # Remove old chunks from same source
-                existing = [ch for ch in existing if ch.get('source') != source]
-
-                # Add new chunks
-                for chunk in chunks:
-                    existing.append({"text": chunk, "source": source, "type": doc_type,
-                        "added": datetime.now().strftime("%Y-%m-%d")})
-
-                _upsert_config(c, "rag_chunks", json.dumps(existing, ensure_ascii=False))
-                conn.commit()
-                conn.close()
-                return len(chunks)
-            except Exception as e:
-                return 0
+            return st.session_state._knowledge_engine.ingest(text, source, doc_type)
 
         def save_qa_pair(question, answer, model_type, feedback=None):
-            """Save Q&A for continuous learning"""
-            try:
-                conn = get_conn()
-                c = conn.cursor()
-                c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_qa_history",))
-                row = c.fetchone()
-                history = json.loads(row[0]) if row else []
-                history.append({
-                    "q": question[:500], "a": answer[:1000], "model": model_type,
-                    "feedback": feedback, "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "user": st.session_state.get('user_name','')
-                })
-                # Keep last 500 Q&A pairs
-                if len(history) > 500: history = history[-500:]
-                _upsert_config(c, "rag_qa_history", json.dumps(history, ensure_ascii=False))
-                conn.commit()
-                conn.close()
-            except: pass
+            st.session_state._learning_system.save_interaction(question, answer, model_type, feedback)
 
         def get_learned_context(query, model_type, top_k=3):
-            """Get relevant past Q&A pairs for learning context"""
-            try:
-                conn = get_conn()
-                c = conn.cursor()
-                c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_qa_history",))
-                row = c.fetchone()
-                conn.close()
-                if not row: return ""
-                history = json.loads(row[0])
-                # Filter by model type and positive feedback
-                relevant = [h for h in history if h.get('model') == model_type and h.get('feedback') != 'bad']
-                if not relevant: return ""
-
-                # Score by query similarity
-                query_words = set(query.lower().split())
-                scored = []
-                for h in relevant:
-                    q_words = set(h.get('q','').lower().split())
-                    match = len(query_words & q_words)
-                    if match > 1: scored.append((match, h))
-
-                scored.sort(key=lambda x: x[0], reverse=True)
-                top = scored[:top_k]
-                if not top: return ""
-                return "\n\n".join([f"Previous Q: {h[1]['q']}\nPrevious A: {h[1]['a'][:300]}" for h in top])
-            except:
-                return ""
+            return st.session_state._learning_system.get_relevant_history(query, model_type, top_k)
 
         def call_ai_api(system_prompt, user_message, chat_history=None, model_type="general", provider=None):
-            """Dual-provider AI call: Claude (Anthropic) or Llama (Groq) with RAG"""
-            import urllib.request
+            return st.session_state._orchestrator.call(system_prompt, user_message, chat_history, model_type)
 
-            # Auto-select provider if not specified
-            if provider is None:
-                provider = st.session_state.get('ai_provider', 'auto')
-
-            claude_key = st.session_state.get('claude_api_key', '')
-            groq_key = st.session_state.get('groq_api_key', '')
-
-            # Auto mode: try Groq first (free), fallback to Claude
-            if provider == 'auto':
-                if groq_key: provider = 'groq'
-                elif claude_key: provider = 'claude'
-                else: return None, "يرجى إدخال API Key (Groq مجاني أو Claude)"
-
-            if provider == 'claude' and not claude_key:
-                return None, "يرجى إدخال Claude API Key"
-            if provider == 'groq' and not groq_key:
-                return None, "يرجى إدخال Groq API Key (مجاني من console.groq.com)"
-
-            # RAG: Search knowledge base
-            rag_context = search_knowledge_base(user_message)
-            learned_context = get_learned_context(user_message, model_type)
-
-            enhanced_prompt = system_prompt
-            if rag_context:
-                enhanced_prompt += f"\n\n**RELEVANT KNOWLEDGE BASE DOCUMENTS:**\n{rag_context[:6000]}"
-            if learned_context:
-                enhanced_prompt += f"\n\n**LEARNED FROM PREVIOUS INTERACTIONS:**\n{learned_context[:2000]}"
-            legal_context = st.session_state.get('legal_docs_context', '')
-            if legal_context:
-                enhanced_prompt += f"\n\n**UPLOADED LEGAL REFERENCES:**\n{legal_context[:6000]}"
-            if len(enhanced_prompt) > 15000:
-                enhanced_prompt = enhanced_prompt[:15000] + "\n[Context truncated]"
-
-            messages = []
-            if chat_history:
-                for msg in chat_history[-10:]:
-                    messages.append({"role": msg['role'], "content": msg['content']})
-            messages.append({"role": "user", "content": user_message})
-
-            # ===== GROQ (Llama 3) =====
-            if provider == 'groq':
-                payload = json.dumps({
-                    "model": "llama-3.3-70b-versatile",
-                    "messages": [{"role": "system", "content": enhanced_prompt}] + messages,
-                    "max_tokens": 4000, "temperature": 0.3
-                })
-                try:
-                    req = urllib.request.Request("https://api.groq.com/openai/v1/chat/completions",
-                        data=payload.encode('utf-8'),
-                        headers={'Content-Type':'application/json','Authorization':f'Bearer {groq_key}'},
-                        method='POST')
-                    with urllib.request.urlopen(req, timeout=60) as resp:
-                        result = json.loads(resp.read().decode())
-                        text = result.get('choices', [{}])[0].get('message', {}).get('content', '')
-                        if text: save_qa_pair(user_message, text, model_type)
-                        return text, None
-                except urllib.request.HTTPError as he:
-                    err = he.read().decode('utf-8', errors='ignore')[:200]
-                    if he.code == 429:
-                        # Groq rate limit - fallback to Claude
-                        if claude_key:
-                            return call_ai_api(system_prompt, user_message, chat_history, model_type, 'claude')
-                        return None, f"⚠️ حد الاستخدام المجاني. انتظر دقيقة أو أضف Claude API Key"
-                    return None, f"خطأ Groq {he.code}: {err}"
-                except Exception as e:
-                    # Fallback to Claude
-                    if claude_key:
-                        return call_ai_api(system_prompt, user_message, chat_history, model_type, 'claude')
-                    return None, f"خطأ: {e}"
-
-            # ===== CLAUDE (Anthropic) =====
-            else:
-                for use_web in [True, False]:
-                    payload_dict = {
-                        "model": "claude-3-5-sonnet-20241022",
-                        "max_tokens": 4000, "system": enhanced_prompt, "messages": messages,
-                    }
-                    if use_web:
-                        payload_dict["tools"] = [{"type": "web_search_20250305", "name": "web_search"}]
-                    payload = json.dumps(payload_dict)
-                    try:
-                        req = urllib.request.Request("https://api.anthropic.com/v1/messages",
-                            data=payload.encode('utf-8'),
-                            headers={'Content-Type':'application/json','x-api-key':claude_key,'anthropic-version':'2023-06-01'},
-                            method='POST')
-                        with urllib.request.urlopen(req, timeout=90) as resp:
-                            result = json.loads(resp.read().decode())
-                            text_parts = [b.get('text','') for b in result.get('content',[]) if b.get('type')=='text']
-                            text = "\n".join(text_parts)
-                            if text: save_qa_pair(user_message, text, model_type)
-                            return text, None
-                    except urllib.request.HTTPError as he:
-                        if use_web and he.code == 400: continue
-                        err = he.read().decode('utf-8', errors='ignore')
-                        try: err_msg = json.loads(err).get('error',{}).get('message',err[:200])
-                        except: err_msg = err[:200]
-                        if he.code in [401, 429] and groq_key:
-                            return call_ai_api(system_prompt, user_message, chat_history, model_type, 'groq')
-                        if he.code == 429:
-                            return None, f"⚠️ انتهى رصيد Claude. أضف رصيد أو استخدم Groq (مجاني)"
-                        return None, f"خطأ {he.code}: {err_msg}"
-                    except Exception as e:
-                        if use_web: continue
-                        if groq_key:
-                            return call_ai_api(system_prompt, user_message, chat_history, model_type, 'groq')
-                        return None, f"خطأ: {e}"
-                return None, "خطأ غير متوقع"
-
-        # Backward compatibility
         def call_claude_api(system_prompt, user_message, chat_history=None, model_type="general"):
             return call_ai_api(system_prompt, user_message, chat_history, model_type)
 
