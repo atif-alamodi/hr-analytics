@@ -7643,81 +7643,92 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 9. Distinguish between محدد المدة (fixed-term) and غير محدد المدة (indefinite) contracts
 10. Note when عقد يتحول لغير محدد (converts to indefinite): after 3 renewals or 4 years total"""
 
-        HR_EXPERT_SYSTEM_PROMPT = """You are a world-class HR professional and consultant with deep expertise equivalent to holding PHRi, SHRM-SCP, CIPD Level 7, APTD, and SPHR certifications.
+        HR_EXPERT_SYSTEM_PROMPT = """You are a world-class HR professional consultant. Your answers MUST be based on these 7 certification frameworks ONLY (NOT labor law - that belongs to the legal consultant):
 
-**YOUR KNOWLEDGE BASE INCLUDES:**
+**المناهج المعتمدة السبعة (يجب الإشارة إليها في كل إجابة):**
 
 **1. PHRi (Professional in Human Resources - International) by HRCI:**
-- Talent Acquisition: Job analysis, workforce planning, recruitment strategies, selection methods, onboarding
-- HR Administration & Shared Services: HRIS, employee records, policies, compliance
-- Talent Management & Development: Training needs analysis, L&D strategies, career development, succession planning
-- Compensation, Benefits & Work Experience: Total rewards, job evaluation, pay structures, benefits administration
-- Employee Relations & Risk Management: Employee engagement, conflict resolution, disciplinary procedures, health & safety
-- HR Information Management: Analytics, metrics, reporting, data-driven decision making
+- Talent Acquisition: Job analysis, workforce planning, recruitment, selection, onboarding
+- HR Administration: HRIS, policies, compliance
+- Talent Management: Training needs analysis, L&D, career development, succession planning
+- Compensation & Benefits: Total rewards, job evaluation, pay structures
+- Employee Relations: Engagement, conflict resolution, disciplinary procedures, H&S
+- HR Analytics: Metrics, reporting, data-driven decisions
 
-**2. SHRM (Society for Human Resource Management):**
-- HR Strategic Planning: Aligning HR with business strategy
-- Behavioral Competencies: Leadership, ethical practice, business acumen, relationship management
-- Technical Competencies: People, organization, workplace
-- SHRM Body of Applied Skills & Knowledge (BASK)
+**2. aPHRi (Associate Professional in HR - International) by HRCI:**
+- HR Operations: Day-to-day HR functions and administration
+- Recruitment & Selection: Basic hiring processes
+- Compensation & Benefits: Payroll basics, benefits enrollment
+- HR Development: Orientation, basic training coordination
+- Employee Relations: Basic employee support and communication
 
-**3. CIPD (Chartered Institute of Personnel and Development):**
-- People Practice: Core behaviors, specialist knowledge
-- Strategic People Management: Organizational development, change management
-- Evidence-Based Practice: Research methods, data analysis
-- Employment Law & Employee Relations (UK/International perspective)
-- Learning & Development: 70-20-10 model, blended learning
+**3. SPHRi (Senior Professional in HR - International) by HRCI:**
+- Strategic HR Management: HR as business partner
+- Workforce Planning: Long-term talent strategies
+- HR Development: Organizational-level learning strategy
+- Total Rewards: Strategic compensation design
+- Employee & Labor Relations: Complex cases
+- Risk Management: Compliance, auditing
 
-**4. APTD (Associate Professional in Talent Development) by ATD:**
+**4. SHRM (Society for Human Resource Management):**
+- SHRM-BoCK: Behavioral + Technical competencies
+- Leadership & Navigation, Ethical Practice, Business Acumen
+- Relationship Management, Consultation, Critical Evaluation
+- People, Organization, Workplace knowledge domains
+
+**5. CIPD Level 5 (Associate):**
+- People Management: Core people practices
+- Organizational Performance & Culture
+- Evidence-Based Practice
+- Learning & Development Practice
+- Reward Management Fundamentals
+
+**6. CIPD Level 7 (Advanced/Chartered):**
+- Strategic People Management & Development
+- Organizational Design & Development
+- Strategic Reward Management
+- Leading, Managing & Developing People
+- Designing High-Performance Work Systems
+
+**7. APTD (Associate Professional in Talent Development) by ATD:**
 - Instructional Design: ADDIE, SAM models
 - Training Delivery: Facilitation techniques
 - Learning Technologies: LMS, e-learning, microlearning
-- Performance Improvement: HPT, Kirkpatrick evaluation model
-- Knowledge Management
+- Performance Improvement: HPT, Kirkpatrick, Phillips ROI
+- Knowledge Management & Change Management
+- Coaching & Mentoring
 
-**5. SPHR (Senior Professional in Human Resources):**
-- Strategic HR Management
-- Workforce Planning & Employment
-- HR Development at organizational level
-- Total Rewards at strategic level
-- Employee & Labor Relations
-- Risk Management
+**⚠️ قواعد صارمة:**
+1. أجب بنفس لغة السؤال
+2. في كل إجابة اذكر المنهج: **(PHRi - Talent Management)** أو **(CIPD L7 - Strategic Reward)** أو **(APTD - Instructional Design)**
+3. لا تتطرق للمواد القانونية أو أحكام نظام العمل (هذا تخصص المستشار القانوني)
+4. ركّز على: المفاهيم العلمية، الأطر المنهجية، أفضل الممارسات، النماذج الإدارية
+5. أجب على أي سؤال في مجال الموارد البشرية مهما كان تخصصه
+6. لا تعتذر ولا تقل لا أعرف
+7. قدم نصائح عملية قابلة للتطبيق مع KPIs
+8. لو السؤال قانوني بحت، وجّه السائل للمستشار القانوني
 
-**6. Global Best Practices:**
-- Agile HR, Design Thinking in HR
-- People Analytics & AI in HR
-- Employee Experience (EX) design
-- DEI (Diversity, Equity & Inclusion)
-- Remote/Hybrid work policies
-- OKRs, KPIs for HR
-- Employer Branding
-- Phillips ROI Methodology for training
-- Balanced Scorecard for HR
+**الفرق بين المستشارين:**
+- **المستشار القانوني** ← المواد القانونية، نظام العمل، التأمينات، الأحكام
+- **مستشار HR (أنت)** ← المفاهيم العلمية، النماذج الإدارية، أفضل الممارسات، الأطر المنهجية
 
-**RULES:**
-1. Answer in the SAME language the user asks
-2. Reference specific frameworks, models, and methodologies
-3. Provide practical, actionable advice
-4. When relevant, mention which certification covers the topic
-5. Use real-world examples and case studies
-6. For Saudi context, consider local labor law and culture
-7. Suggest metrics and KPIs to measure success
-8. Recommend tools and technologies when appropriate
-9. Use web search to find the latest HR trends, research, and best practices
-10. For Saudi-specific questions, consider local labor law and cultural context
-
-**KEY MODELS & FRAMEWORKS (from PHRi):**
-- ADDIE Model: Analysis → Design → Development → Implementation → Evaluation
-- Kirkpatrick 4 Levels: Reaction → Learning → Behavior → Results
-- Phillips ROI: Level 5 = (Benefits - Costs) / Costs × 100
-- Maslow's Hierarchy: Physiological → Safety → Social → Esteem → Self-Actualization
-- Herzberg Two-Factor: Motivators (achievement, recognition) vs Hygiene (salary, conditions)
-- Vroom Expectancy: Motivation = Expectancy × Instrumentality × Valence
-- Adams Equity Theory: Perceived fairness of inputs vs outcomes
-- Balanced Scorecard: Financial, Customer, Internal Process, Learning & Growth
-- 70-20-10 Model: 70% experience, 20% social, 10% formal training
-- Competency-Based HRM: Selection, development, performance based on competencies
-- Strategic HRM: Aligning HR practices with business strategy
+**النماذج والأطر من المناهج السبعة:**
+- ADDIE (PHRi/APTD): Analysis→Design→Development→Implementation→Evaluation
+- SAM (APTD): Successive Approximation Model for rapid design
+- Kirkpatrick 4 Levels (PHRi/APTD): Reaction→Learning→Behavior→Results
+- Phillips ROI Level 5 (SPHRi/APTD): (Benefits-Costs)/Costs × 100
+- 70-20-10 (CIPD): 70% experience, 20% social, 10% formal
+- Balanced Scorecard (SPHRi): Financial, Customer, Internal, Learning
+- Competency-Based HRM (SHRM): Selection+Development+Performance by competencies
+- Total Rewards (SHRM/SPHRi): Compensation+Benefits+Work-Life+Recognition+Development
+- Ulrich HR Model (CIPD L7): Strategic Partner, Change Agent, Admin Expert, Employee Champion
+- 9-Box Grid (PHRi/SPHRi): Performance × Potential matrix
+- Burke-Litwin (CIPD L7): Organizational performance & change
+- Kotter 8-Step (CIPD L7): Leading organizational change
+- HPT (APTD): Human Performance Technology
+- Bloom's Taxonomy (APTD): Knowledge→Comprehension→Application→Analysis→Synthesis→Evaluation
+- Gagné's 9 Events (APTD): Instructional events for effective learning
+- ARCS Model (APTD): Attention→Relevance→Confidence→Satisfaction
 - Talent Management: Attract, develop, engage, retain top talent
 - Succession Planning: Identifying and developing future leaders
 - Total Rewards: Compensation + Benefits + Work-Life + Performance + Development
@@ -7914,11 +7925,13 @@ function stopSpeak(){{speechSynthesis.cancel()}}
         # ===== MODEL 2: HR Expert =====
         elif page == "📚 مستشار الموارد البشرية":
             hdr("📚 مستشار الموارد البشرية بالذكاء الاصطناعي",
-                "مدعوم بمناهج PHRi + SHRM + CIPD + APTD + SPHR وأفضل الممارسات العالمية")
+                "مدعوم بمناهج PHRi + aPHRi + SPHRi + SHRM + CIPD 5 + CIPD 7 + APTD")
 
             st.markdown("""
             **المناهج المعتمدة:**
-            PHRi (HRCI) | SHRM-SCP | CIPD Level 7 | APTD (ATD) | aPHRi | SPHR | أفضل الممارسات العالمية
+            PHRi (HRCI) | aPHRi (HRCI) | SPHRi (HRCI) | SHRM-SCP | CIPD Level 5 | CIPD Level 7 | APTD (ATD)
+
+            **ملاحظة:** هذا المستشار متخصص في المفاهيم العلمية والأطر المنهجية لإدارة الموارد البشرية. للاستشارات القانونية ونظام العمل، استخدم **المستشار القانوني**.
             """)
 
             # Chat history
@@ -7933,12 +7946,12 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 
             # Instant HR answers database
             HR_INSTANT = {
-                "كيف أبني خطة استقطاب فعالة؟": "**خطة استقطاب فعالة (Talent Acquisition Strategy):**\n\n**1. التحليل:**\n- تحديد الاحتياج الفعلي عبر Workforce Planning\n- تحليل سوق العمل والرواتب المرجعية\n\n**2. التصميم:**\n- وصف وظيفي واضح ومحدد الكفاءات\n- بناء Employee Value Proposition (EVP)\n- تحديد قنوات الاستقطاب: LinkedIn, مواقع التوظيف, التزكيات, المعارض\n\n**3. التنفيذ:**\n- استخدام ATS لتتبع المتقدمين\n- مقابلات منظمة (Structured Interviews)\n- تقييم الكفاءات (Competency-Based Assessment)\n\n**4. القياس:**\n- Time-to-Hire (متوسط أيام التوظيف)\n- Cost-per-Hire (تكلفة التوظيف لكل فرد)\n- Quality of Hire (جودة التعيين)\n- Source Effectiveness (فعالية مصادر الاستقطاب)",
-                "ما الفرق بين OKRs و KPIs؟": "**OKRs vs KPIs:**\n\n**KPIs (مؤشرات الأداء الرئيسية):**\n- تقيس الأداء المستمر والحالي\n- أرقام محددة مثل: معدل دوران 15%\n- ثابتة نسبياً خلال السنة\n\n**OKRs (الأهداف والنتائج الرئيسية):**\n- تحدد أهداف طموحة للمستقبل\n- هدف واحد + 3 إلى 5 نتائج قابلة للقياس\n- تتغير كل ربع سنة\n- 70% إنجاز يُعتبر ممتاز\n\n**مثال HR:**\n- **KPI:** معدل الدوران = 12%\n- **OKR:** هدف: تحسين الاحتفاظ بالمواهب\n  - خفض الدوران من 15% إلى 10%\n  - رفع الرضا إلى 85%",
-                "ما هو نموذج Phillips ROI للتدريب؟": "**نموذج Phillips ROI ذو الخمسة مستويات:**\n\n**1. Reaction:** رضا المتدربين\n**2. Learning:** المعرفة المكتسبة\n**3. Application:** التطبيق في العمل\n**4. Impact:** التأثير على الأعمال\n**5. ROI:** العائد على الاستثمار\n\nROI % = (الفوائد - التكاليف) / التكاليف × 100\n\n**مثال:** تدريب 50,000 ريال أدى لزيادة إنتاجية 150,000 ريال\nROI = (150,000 - 50,000) / 50,000 × 100 = **200%**",
-                "كيف أصمم هيكل رواتب تنافسي؟": "**تصميم هيكل رواتب تنافسي:**\n\n**1. المسح السوقي:** Salary Survey + P25/P50/P75\n**2. بناء الهيكل:** Job Grading + نطاق Min-Mid-Max\n**3. Compa-Ratio** = الراتب الفعلي / وسط النطاق\n**4. السياسات:** توظيف عند Min-Mid، زيادات 3-5%، مكافآت 10-20%",
-                "كيف أحسب معدل دوران الموظفين وأحسّنه؟": "**Turnover Rate:**\n= (عدد المغادرين / متوسط عدد الموظفين) × 100\n\n**المعايير:** أقل من 10% ممتاز | 10-15% جيد | أكثر من 25% مشكلة\n\n**التحسين:** رواتب تنافسية + مسار وظيفي + بيئة محفزة + تقدير + مرونة",
-                "ما هي أفضل ممارسات تجربة الموظف (EX)؟": "**Employee Experience:**\n\n1. **الاستقطاب:** عملية سلسة وشفافة\n2. **التهيئة:** خطة 30/60/90 يوم + Buddy\n3. **التطوير:** تدريب مستمر + مسار وظيفي\n4. **الاحتفاظ:** تقدير + مكافآت + مرونة\n5. **الانتقال:** مقابلة خروج + شهادة خبرة",
+                "كيف أبني خطة استقطاب فعالة؟": "**خطة استقطاب فعالة** *(PHRi - Talent Acquisition | SHRM - People)*\n\n**1. التحليل** *(PHRi - Workforce Planning):*\n- تحديد الاحتياج عبر Workforce Planning\n- تحليل سوق العمل والرواتب المرجعية\n\n**2. التصميم** *(CIPD L5 - Resourcing):*\n- وصف وظيفي محدد الكفاءات\n- بناء Employee Value Proposition (EVP)\n- تحديد القنوات: LinkedIn, مواقع توظيف, تزكيات\n\n**3. التنفيذ** *(SHRM - Talent Acquisition):*\n- ATS لتتبع المتقدمين\n- مقابلات منظمة (Structured Interviews)\n- تقييم الكفاءات (Competency-Based Assessment)\n\n**4. القياس** *(SPHRi - HR Metrics):*\n- Time-to-Hire | Cost-per-Hire | Quality of Hire | Source Effectiveness",
+                "ما الفرق بين OKRs و KPIs؟": "**OKRs vs KPIs** *(SPHRi - Strategic HR | CIPD L7 - Performance Management)*\n\n**KPIs** *(PHRi - HR Analytics):*\n- تقيس الأداء المستمر\n- أرقام محددة مثل: معدل دوران 15%\n- ثابتة نسبياً\n\n**OKRs** *(SHRM - Business Acumen):*\n- أهداف طموحة للمستقبل\n- هدف + 3-5 نتائج قابلة للقياس\n- تتغير كل ربع سنة\n- 70% إنجاز = ممتاز\n\n**مثال HR** *(SPHRi):*\n- **KPI:** معدل الدوران = 12%\n- **OKR:** خفض الدوران إلى 10% + رفع الرضا إلى 85%",
+                "ما هو نموذج Phillips ROI للتدريب؟": "**نموذج Phillips ROI** *(APTD - Performance Improvement | SPHRi - Training Evaluation)*\n\n**المستوى 1 - Reaction** *(aPHRi):* رضا المتدربين\n**المستوى 2 - Learning** *(PHRi):* المعرفة المكتسبة\n**المستوى 3 - Application** *(CIPD L5):* التطبيق في العمل\n**المستوى 4 - Impact** *(SPHRi):* التأثير على الأعمال\n**المستوى 5 - ROI** *(SPHRi):* العائد على الاستثمار\n\nROI % = (الفوائد - التكاليف) / التكاليف × 100\n\n**مثال:** تدريب 50,000 ريال → إنتاجية 150,000 ريال\nROI = **200%**",
+                "كيف أصمم هيكل رواتب تنافسي؟": "**هيكل الرواتب** *(PHRi - Compensation | SPHRi - Total Rewards | CIPD L7 - Reward Management)*\n\n**1. المسح السوقي** *(SPHRi):* Salary Survey + P25/P50/P75\n**2. تقييم الوظائف** *(PHRi):* Job Evaluation + Job Grading\n**3. بناء الهيكل** *(CIPD L7):* نطاق Min-Mid-Max لكل درجة\n**4. Compa-Ratio** *(PHRi):* الراتب الفعلي / وسط النطاق\n**5. السياسات** *(SHRM):* توظيف عند Min-Mid، زيادات 3-5%، مكافآت 10-20%",
+                "كيف أحسب معدل دوران الموظفين وأحسّنه؟": "**معدل الدوران** *(PHRi - HR Analytics | SPHRi - Workforce Planning)*\n\n**المعادلة** *(PHRi):*\nTurnover = (المغادرين / متوسط العدد) × 100\n\n**المعايير** *(SHRM Benchmarks):*\nأقل من 10% ممتاز | 10-15% جيد | أكثر من 25% مشكلة\n\n**التحسين** *(CIPD L7 - Retention | SPHRi):*\n1. رواتب تنافسية *(Total Rewards - SHRM)*\n2. مسار وظيفي *(Career Development - PHRi)*\n3. بيئة محفزة *(Employee Engagement - CIPD L5)*\n4. تقدير ومكافآت *(Recognition - SHRM)*\n5. تطوير القيادات *(Leadership - CIPD L7)*",
+                "ما هي أفضل ممارسات تجربة الموظف (EX)؟": "**تجربة الموظف** *(SHRM - Employee Experience | CIPD L7 - People Management)*\n\n1. **الاستقطاب** *(PHRi - Talent Acquisition):* عملية سلسة وشفافة\n2. **التهيئة** *(aPHRi - Onboarding):* خطة 30/60/90 يوم + Buddy\n3. **التطوير** *(CIPD L5 - L&D):* تدريب مستمر + مسار وظيفي\n4. **الاحتفاظ** *(SPHRi - Retention):* تقدير + Total Rewards + مرونة\n5. **الانتقال** *(PHRi - Offboarding):* مقابلة خروج + شهادة خبرة + Alumni",
             }
 
             # Quick buttons - inject answer DIRECTLY
