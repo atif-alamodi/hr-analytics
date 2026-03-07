@@ -1064,6 +1064,9 @@ LABOR_KB = {
     "تدريب|تطوير|training|kirkpatrick|addie|roi التدريب|أطور|تأهيل|دورة|دورات": "**التدريب والتطوير:**\n- نموذج ADDIE: تحليل → تصميم → تطوير → تنفيذ → تقييم\n- Kirkpatrick: رد فعل → تعلم → سلوك → نتائج\n- Phillips ROI: (الفوائد - التكاليف) / التكاليف × 100\n- الميزانية المعيارية: 1-3% من إجمالي الرواتب\n\n**أساليب التطوير:**\n- تدريب رسمي (فصول/ورش)\n- تعلم إلكتروني (e-Learning)\n- التوجيه (Mentoring/Coaching)\n- التدوير الوظيفي (Job Rotation)\n- المشاريع والمهام الخاصة\n- التعلم الذاتي",
     "استقطاب|توظيف|recruitment|hiring|مقابلة|وظيفة شاغرة|أوظف|تعيين|موظف جديد": "**عملية التوظيف:**\n1. تحديد الاحتياج (Workforce Planning)\n2. الوصف الوظيفي\n3. الإعلان والاستقطاب\n4. فرز السير الذاتية\n5. المقابلات (هاتفية → شخصية → لجنة)\n6. التقييم والاختبارات\n7. العرض الوظيفي\n8. التعيين والتهيئة\n\n**مؤشرات:** Time-to-Hire | Cost-per-Hire | Quality of Hire",
     "خدمة|سنوات الخدمة|أقدمية|tenure": "**احتساب سنوات الخدمة:**\n- تبدأ من تاريخ المباشرة الفعلي\n- تشمل فترة التجربة\n- تشمل الإجازات المدفوعة\n- لا تشمل الإجازات بدون أجر (إلا بالاتفاق)\n\n**تؤثر على:**\n- مكافأة نهاية الخدمة\n- الإجازة السنوية (21 يوم أو 30 يوم)\n- المعاش التقاعدي",
+    "بحار|بحاره|بحري|سفن|ملاحة|maritime|عمال البحر|مكافآت البحاره": "**أحكام العمل البحري (الباب العاشر من نظام العمل):**\n\n**عقد العمل البحري (المادة 164):**\n- يجب أن يكون مكتوباً ومصدقاً من الجهة المختصة\n- يتضمن: اسم السفينة، تاريخ الالتحاق، الأجر، المدة\n\n**الأجور والمكافآت:**\n- يستحق البحار أجره كاملاً طوال مدة العقد\n- مكافأة نهاية الخدمة تُحسب وفق المادة 84 كبقية العمال\n- إذا غرقت السفينة: يستحق أجر شهرين إضافيين (المادة 177)\n- أجر إضافي عن العمل وقت الأخطار والإنقاذ\n\n**الإجازات:**\n- إجازة سنوية بنسبة يوم عن كل 15 يوم عمل بحري\n- إجازة شاطئية بعد كل رحلة طويلة\n\n**التعويضات:**\n- إصابة العمل: علاج كامل + أجر\n- الوفاة: تعويض الورثة\n- فقدان الأمتعة بسبب غرق السفينة: تعويض بحد أقصى أجر شهر\n\n**إنهاء العقد:**\n- لا يجوز فصل البحار أثناء الرحلة\n- يُعاد البحار إلى ميناء الشحن على نفقة صاحب العمل",
+    "عمالة منزلية|خادم|سائق|عامل منزلي|domestic": "**نظام العمالة المنزلية:**\n\n- ينظمه نظام خاص (لائحة العمالة المنزلية) وليس نظام العمل\n- فترة التجربة: 90 يوماً\n- ساعات العمل: لا تتجاوز 15 ساعة يومياً مع فترات راحة\n- يوم راحة أسبوعي\n- إجازة شهرية مدفوعة بعد سنتين\n- التأمين الطبي إلزامي\n- مكافأة نهاية خدمة: راتب شهر عن كل 4 سنوات\n\n**منصة مساند:** لاستقدام وإدارة العمالة المنزلية",
+    "إصابة عمل|إصابة مهنية|حادث عمل|سلامة|occupational": "**إصابات العمل (المادة 133-141):**\n\n- صاحب العمل يتحمل علاج المصاب بالكامل\n- أجر كامل خلال فترة العلاج (حتى سنة)\n- **عجز كلي:** 100% من الأجر كمعاش\n- **عجز جزئي:** نسبة من الأجر حسب نسبة العجز\n- **وفاة:** تعويض الورثة بأجر 3 سنوات (بحد أدنى 54,000 ريال)\n\n**واجبات صاحب العمل:** توفير وسائل السلامة + التدريب + التأمين",
 }
 
 def smart_local_answer(question, kb=None):
@@ -1095,43 +1098,89 @@ def smart_local_answer(question, kb=None):
     return best_answer if best_score >= 3 else None
 
 def get_best_kb_answer(question):
-    """Always returns an answer - never fails. Tries API first, then KB, then general."""
-    # 1. Try API via orchestrator
-    try:
-        if '_orchestrator' in st.session_state:
-            response, error = st.session_state._orchestrator.call(
-                "أنت مستشار قانوني وخبير موارد بشرية سعودي. أجب بالعربية بدقة مع ذكر المواد القانونية.",
-                question, model_type="labor")
-            if response and len(response) > 20:
-                return response
-    except: pass
+    """Call AI directly - simple and reliable."""
+    import urllib.request
+    errors = []
 
-    # 2. Try local KB
+    # 1. Try Groq DIRECTLY (no orchestrator, no layers)
+    groq_key = st.session_state.get('groq_api_key', '')
+    if not groq_key:
+        try: groq_key = st.secrets.get("groq", {}).get("api_key", "")
+        except: pass
+    if groq_key:
+        try:
+            payload = json.dumps({
+                "model": "llama-3.3-70b-versatile",
+                "messages": [
+                    {"role":"system","content":"أنت مستشار قانوني وخبير موارد بشرية سعودي متخصص. أجب دائماً بالعربية بدقة ووضوح مع ذكر المواد القانونية. لا تعتذر أبداً ولا تقل لا أعرف."},
+                    {"role":"user","content":question}
+                ],
+                "max_tokens": 2000, "temperature": 0.3
+            })
+            req = urllib.request.Request("https://api.groq.com/openai/v1/chat/completions",
+                data=payload.encode('utf-8'),
+                headers={'Content-Type':'application/json','Authorization':f'Bearer {groq_key}'},
+                method='POST')
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                result = json.loads(resp.read().decode())
+                text = result.get('choices',[{}])[0].get('message',{}).get('content','')
+                if text and len(text) > 10: return text
+        except Exception as e:
+            errors.append(f"Groq: {str(e)[:60]}")
+
+    # 2. Try Gemini DIRECTLY
+    gemini_key = st.session_state.get('gemini_api_key', '')
+    if not gemini_key:
+        try: gemini_key = st.secrets.get("gemini", {}).get("api_key", "")
+        except: pass
+    if gemini_key:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_key}"
+            payload = json.dumps({
+                "contents":[{"parts":[{"text":f"أنت مستشار قانوني سعودي. أجب بالعربية بدقة.\n\nالسؤال: {question}"}]}],
+                "generationConfig":{"maxOutputTokens":2000,"temperature":0.3}
+            })
+            req = urllib.request.Request(url, data=payload.encode('utf-8'),
+                headers={'Content-Type':'application/json'}, method='POST')
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                result = json.loads(resp.read().decode())
+                text = result.get('candidates',[{}])[0].get('content',{}).get('parts',[{}])[0].get('text','')
+                if text and len(text) > 10: return text
+        except Exception as e:
+            errors.append(f"Gemini: {str(e)[:60]}")
+
+    # 3. Try OpenRouter DIRECTLY
+    or_key = st.session_state.get('openrouter_api_key', '')
+    if not or_key:
+        try: or_key = st.secrets.get("openrouter", {}).get("api_key", "")
+        except: pass
+    if or_key:
+        try:
+            payload = json.dumps({
+                "model": "meta-llama/llama-3.3-70b-instruct:free",
+                "messages": [{"role":"user","content":f"أنت مستشار قانوني سعودي. أجب بالعربية.\n\n{question}"}],
+                "max_tokens": 1500
+            })
+            req = urllib.request.Request("https://openrouter.ai/api/v1/chat/completions",
+                data=payload.encode('utf-8'),
+                headers={'Content-Type':'application/json','Authorization':f'Bearer {or_key}',
+                    'HTTP-Referer':'https://hr-analytics-risal.streamlit.app'},
+                method='POST')
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                result = json.loads(resp.read().decode())
+                text = result.get('choices',[{}])[0].get('message',{}).get('content','')
+                if text and len(text) > 10: return text
+        except Exception as e:
+            errors.append(f"OpenRouter: {str(e)[:60]}")
+
+    # 4. Local KB fallback
     answer = smart_local_answer(question)
-    if answer:
-        return answer
+    if answer: return answer
 
-    # 3. Find closest topic even with low score
-    q = question.lower().strip()
-    best_score = 0
-    best_answer = None
-    for keywords, ans in LABOR_KB.items():
-        kw_list = [k.strip() for k in keywords.split('|')]
-        score = 0
-        for kw in kw_list:
-            if kw.lower() in q: score += 1
-            for word in q.split():
-                if len(word) > 2 and (word in kw.lower() or kw.lower() in word):
-                    score += 0.5
-        if score > best_score:
-            best_score = score
-            best_answer = ans
-
-    if best_answer and best_score > 0:
-        return f"**بناءً على أقرب موضوع في قاعدة المعرفة:**\n\n{best_answer}\n\n---\n*إذا كان سؤالك مختلفاً، يرجى إعادة صياغته بكلمات أوضح.*"
-
-    # 4. General helpful response - NEVER returns empty
-    return f"**شكراً لسؤالك:** \"{question}\"\n\nللإجابة الدقيقة، ننصح بـ:\n\n1. **مراجعة نظام العمل السعودي** عبر موقع وزارة الموارد البشرية\n2. **الاتصال بمكتب العمل** على الرقم الموحد 19911\n3. **منصة ودي** للاستشارات العمالية الإلكترونية\n4. **رفع وثائق** في قاعدة المعرفة RAG لتحسين إجابات النظام\n\n**المواضيع المتاحة:** التقاعد | التأمينات | المكافأة | الفصل | الاستقالة | الإجازات | ساعات العمل | الرواتب | العقود | نطاقات | التأمين الطبي | حقوق المرأة | الشكاوى | نقل الكفالة | التوظيف | التدريب"
+    # 5. Diagnostic - show what failed
+    keys_info = f"Groq: {'✅' if groq_key else '❌'} | Gemini: {'✅' if gemini_key else '❌'} | OpenRouter: {'✅' if or_key else '❌'}"
+    err_info = " | ".join(errors) if errors else "لا أخطاء"
+    return f"**لم أتمكن من الاتصال بمزودي الذكاء الاصطناعي**\n\n**المفاتيح:** {keys_info}\n**الأخطاء:** {err_info}\n\n**الحل:** تحقق من إعدادات API Keys في قسم إدارة المستخدمين."
     """Universal export: Excel (with charts) + CSV + PDF (with interactive charts)"""
     if dataframes is None: return
     if isinstance(dataframes, pd.DataFrame):
