@@ -1384,6 +1384,29 @@ def apply_reasoning_rules(analysis, advisor_type):
 
     return rules
 
+# --- Correct Legal Facts (injected into prompt to prevent hallucination) ---
+LEGAL_FACTS = {
+    "leave": "المادة 109: إجازة سنوية 21 يوم (أول 5 سنوات) ثم 30 يوم. المادة 110: يجوز تأجيلها بموافقة. المادة 112: إجازات خاصة: وفاة 5 أيام، زواج 5 أيام، مولود 3 أيام. المادة 113: مرضية 30 يوم كامل + 60 يوم 75% + 30 يوم بدون. المادة 115: حج 10-15 يوم لمرة واحدة.",
+    "training": "المادة 42: على صاحب العمل تأهيل عماله السعوديين. المادة 43: تدريب 12% من السعوديين سنوياً. المادة 44: الوزارة تحدد المهن. المادة 45: عقد التأهيل يتضمن المهنة والمدة والمراحل والمكافأة. المادة 46: إلزام المتدرب بالعمل أو رد التكاليف. المادة 47: إنهاء التدريب إذا ثبت عدم القدرة. المادة 48: النفقات على صاحب العمل.",
+    "termination": "المادة 74: حالات انتهاء العقد (اتفاق، انتهاء مدة، إرادة أحد الطرفين، قوة قاهرة، إغلاق، تقاعد). المادة 75: إشعار مسبق 60 يوم (أجر شهري) أو 30 يوم. المادة 77: تعويض فسخ غير مشروع: 15 يوم/سنة (غير محدد) أو المدة الباقية (محدد)، حد أدنى شهرين. المادة 80: فسخ مشروع بدون تعويض (اعتداء، إخلال، غياب 30 متفرقة أو 15 متتالية...). المادة 81: حق العامل بالترك (إخلال صاحب العمل، غش، اعتداء).",
+    "end_of_service": "المادة 84: مكافأة نهاية الخدمة: نصف شهر/سنة (أول 5) + شهر/سنة (بعدها). تُحسب على آخر أجر. المادة 85: عند الاستقالة: ثلث (2-5 سنوات)، ثلثان (5-10)، كاملة (10+). أقل من سنتين: لا شيء. المادة 88: التسوية خلال أسبوع.",
+    "resignation": "المادة 75: إشعار مسبق 60 يوم. المادة 81: ترك بدون إشعار إذا أخل صاحب العمل. المادة 85: مكافأة الاستقالة: ثلث (2-5)، ثلثان (5-10)، كاملة (10+). المادة 84: حساب المكافأة الأساسية. المادة 88: تسوية خلال أسبوع.",
+    "contracts": "المادة 50: عقد مكتوب من نسختين. المادة 51: يتضمن الاسم والجنسية والأجر ونوع العمل والمدة. المادة 53: فترة تجربة 90 يوم قابلة للتمديد لـ 180. المادة 55: يتحول لغير محدد بعد 3 تجديدات أو 4 سنوات.",
+    "wages": "المادة 89: يُدفع بالريال. المادة 90: التزام بالدفع في الموعد. المادة 92: لا يجوز خصم أكثر من نصف الأجر. المادة 94: حماية الأجر.",
+    "working_hours": "المادة 98: 8 ساعات/يوم أو 48/أسبوع. المادة 99: رمضان 6 ساعات/36 أسبوع. المادة 101: راحة نصف ساعة كل 5 ساعات. المادة 107: إضافي 150%.",
+    "probation": "المادة 53: فترة التجربة 90 يوم كحد أقصى، تمديد لـ 180 بموافقة كتابية. لا تدخل فيها إجازة العيدين والمرضية. لكلا الطرفين الإنهاء بدون تعويض أو مكافأة.",
+    "women": "المادة 151: إجازة وضع 10 أسابيع (4 قبل كحد أقصى). ساعة رضاعة يومياً لـ 24 شهر. حماية من الفصل أثناء الحمل والوضع وبعده 180 يوم. عدة 4 أشهر و10 أيام.",
+    "insurance": "GOSI: سعودي 10.5% خصم + 12.5% شركة. غير سعودي 2% أخطار فقط. ساند: 0.75%+0.75%. التقاعد: سن 60 + 120 شهر أو 300 شهر مبكر.",
+    "disciplinary": "المادة 66: لائحة جزاءات معتمدة. المادة 67: الجزاءات: إنذار، غرامة، تأجيل ترقية، إيقاف بدون أجر، فصل. المادة 69: لا يجوز جزاء بعد 30 يوم من اكتشاف المخالفة. المادة 71: التحقيق كتابياً.",
+    "safety": "المادة 133-141: صاحب العمل يتحمل العلاج. أجر كامل خلال العلاج (سنة). عجز كلي: معاش كامل. وفاة: تعويض أجر 3 سنوات (أدنى 54,000).",
+    "disputes": "المادة 215: هيئات تسوية خلافات عمالية. منصة ودي: تسوية ودية 21 يوم. المحكمة العمالية: بعد فشل التسوية. مدة التقادم: 12 شهر.",
+    "absence": "المادة 80: يحق لصاحب العمل الفصل بدون تعويض إذا تغيب العامل 30 يوم متفرقة أو 15 يوم متتالية في السنة، بعد إنذار كتابي.",
+    "certificate": "المادة 64: يلتزم صاحب العمل بإعطاء العامل شهادة خبرة مجاناً عند انتهاء العقد، تتضمن مدة الخدمة والمسمى والأجر.",
+    "transfer": "نظام تعاقدي جديد: نقل الخدمات عبر منصة قوى. العامل يحق له التنقل بعد انتهاء العقد. إشعار 90 يوم.",
+    "saudization": "نطاقات: بلاتيني (فوق المطلوب) > أخضر عالي > أخضر منخفض > أصفر > أحمر. النسب حسب النشاط والحجم.",
+    "medical": "CCHI: التأمين الصحي إلزامي على صاحب العمل لجميع العاملين ومعاليهم. الحد الأدنى للتغطية حسب وثيقة الضمان الصحي الموحدة.",
+}
+
 def build_reasoning_context(question, advisor_type, analysis, retrieved_context=""):
     """Build dynamic reasoning prompt based on analysis + rules."""
     rules = apply_reasoning_rules(analysis, advisor_type)
@@ -1395,7 +1418,13 @@ def build_reasoning_context(question, advisor_type, analysis, retrieved_context=
 
     if advisor_type == "legal":
         header = f"أنت المستشار القانوني لنظام العمل السعودي.\nالمسألة: {label} | المواد: {ref} | نوع التحليل: {mode}\n"
-        header += "❌ لا تذكر أي إطار منهجي أو مصطلح HR. فقط مواد قانونية.\n\n"
+        header += "❌ لا تذكر أي إطار منهجي أو مصطلح HR. فقط مواد قانونية.\n"
+        # Inject correct article facts to prevent hallucination
+        topic = analysis.get('topic','')
+        if topic in LEGAL_FACTS:
+            header += f"\n📋 **المواد الصحيحة لهذا الموضوع (استخدم هذه فقط):**\n{LEGAL_FACTS[topic]}\n\n⚠️ لا تستخدم أي أرقام مواد غير المذكورة أعلاه.\n\n"
+        else:
+            header += "\n"
 
         if mode == "legal_case_analysis":
             body = "اتبع هذا المنهج:\n🔍 **تحديد الواقعة القانونية:** حدد الوقائع الجوهرية\n📋 **التكييف القانوني:** كيّف الواقعة وحدد المواد المنطبقة\n⚖️ **تطبيق النص:** طبّق كل مادة على الوقائع\n👤 **حقوق الأطراف:** حقوق والتزامات كل طرف\n💡 **النتيجة:** الحكم القانوني المتوقع\n⚠️ **ملاحظات:** معلومات ناقصة أو احتمالات"
@@ -1491,23 +1520,20 @@ def validate_generated_answer(answer, analysis, advisor_type):
     return len(issues) == 0, issues
 
 def generate_advisor_answer(question, advisor_type, system_prompt=None):
-    """Full general reasoning pipeline for both advisors."""
+    """Full reasoning pipeline: analyze → rules → RAG → reason → generate → validate."""
     import requests as req_lib
 
-    # Step 1: Analyze
     analysis = analyze_question(question, advisor_type)
-
-    # Step 2: Rules
     rules = apply_reasoning_rules(analysis, advisor_type)
 
-    # Step 3: Retrieve
+    # Retrieve from RAG only
     retrieved = ""
     try:
         if '_knowledge_engine' in st.session_state:
             retrieved = st.session_state._knowledge_engine.search(question, advisor_type=advisor_type)
     except: pass
 
-    # Step 4: Build reasoning context
+    # Build reasoning context (LEGAL_FACTS injected automatically in build_reasoning_context)
     reasoning_prompt = build_reasoning_context(question, advisor_type, analysis, retrieved)
 
     # Step 5: Generate
@@ -1549,12 +1575,12 @@ def _call_llm_with_reasoning(question, reasoning_prompt, req_lib):
                 resp = req_lib.post("https://api.groq.com/openai/v1/chat/completions",
                     json={"model":"llama-3.3-70b-versatile","messages":[
                         {"role":"system","content":reasoning_prompt[:3000]},
-                        {"role":"user","content":question}],"max_tokens":2500,"temperature":0.2},
+                        {"role":"user","content":question}],"max_tokens":2500,"temperature":0.3},
                     headers={'Authorization':f'Bearer {api_key}'},timeout=30)
             elif prov == 'gemini':
                 resp = req_lib.post(f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}",
                     json={"contents":[{"parts":[{"text":f"{reasoning_prompt[:2500]}\n\nالسؤال: {question}"}]}],
-                        "generationConfig":{"maxOutputTokens":2000,"temperature":0.2}},timeout=30)
+                        "generationConfig":{"maxOutputTokens":2000,"temperature":0.3}},timeout=30)
             else:
                 resp = req_lib.post("https://openrouter.ai/api/v1/chat/completions",
                     json={"model":"meta-llama/llama-3.3-70b-instruct:free",
@@ -1569,27 +1595,24 @@ def _call_llm_with_reasoning(question, reasoning_prompt, req_lib):
         except: continue
     return None
 def get_best_kb_answer(question, system_prompt=None):
-    """Local KB FIRST (verified facts), then Reasoning Pipeline for new questions."""
+    """ALL questions go through Reasoning Pipeline. Local KB only if APIs fail."""
     consultant_type = "legal" if system_prompt and 'المستشار القانوني' in system_prompt else "hr"
 
-    # 1. LOCAL KB FIRST - verified correct facts
+    # 1. REASONING PIPELINE (always first - rich analytical answers)
+    answer = generate_advisor_answer(question, consultant_type, system_prompt)
+    if answer and len(answer) > 30:
+        auto_learn_from_answer(question, answer, consultant_type)
+        return answer
+
+    # 2. EMERGENCY FALLBACK only if all APIs fail
     if consultant_type == "legal":
         answer = smart_local_answer(question, LABOR_KB)
     else:
         answer = smart_local_answer(question, HR_KB)
     if answer: return answer
 
-    # 2. Reasoning Pipeline for questions not in KB
-    answer = generate_advisor_answer(question, consultant_type, system_prompt)
-    if answer and len(answer) > 30:
-        return answer
-
-    # 3. Diagnostic
-    k_status = []
-    for p in ['groq','gemini','openrouter']:
-        has = bool(st.session_state.get(f'{p}_api_key',''))
-        k_status.append(f"{p}: {'Y' if has else 'N'}")
-    return f"**لم أتمكن من الاتصال**\n\nالمفاتيح: {' | '.join(k_status)}"
+    k_status = [f"{p}: {'Y' if st.session_state.get(f'{p}_api_key','') else 'N'}" for p in ['groq','gemini','openrouter']]
+    return f"**لم أتمكن من الاتصال**\n\n{' | '.join(k_status)}"
 
 def auto_learn_from_answer(question, answer, consultant_type="legal"):
     """Save good AI answers and improve them over time."""
@@ -8339,18 +8362,17 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
                 for k, v in INSTANT_ANSWERS.items():
                     if labor_q.strip() == k or labor_q.strip().rstrip('؟?') == k.rstrip('؟?'):
                         answer = v; break
+                # Check INSTANT buttons only (exact match)
                 if not answer:
                     for k, v in INSTANT_ANSWERS.items():
                         if k.rstrip('؟?') in labor_q or labor_q.rstrip('؟?') in k:
                             answer = v; break
-                # Check LABOR_KB directly (guaranteed legal-only answers)
-                if not answer:
-                    answer = smart_local_answer(labor_q, LABOR_KB)
                 if answer:
                     st.session_state.labor_chat = [{"role":"user","content":labor_q},{"role":"assistant","content":answer}]
                     st.rerun()
                 else:
-                    with st.spinner("جاري تحليل القضية..."):
+                    # Full Reasoning Pipeline
+                    with st.spinner("جاري التحليل القانوني..."):
                         response = get_best_kb_answer(labor_q, LABOR_LAW_SYSTEM_PROMPT)
                         auto_learn_from_answer(labor_q, response, "legal")
                         st.session_state.labor_chat = [{"role":"user","content":labor_q},{"role":"assistant","content":response}]
@@ -8425,18 +8447,17 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
                 for k, v in HR_INSTANT.items():
                     if hr_q.strip() == k or hr_q.strip().rstrip('؟?') == k.rstrip('؟?'):
                         answer = v; break
+                # Check INSTANT buttons only
                 if not answer:
                     for k, v in HR_INSTANT.items():
                         if k.rstrip('؟?') in hr_q or hr_q.rstrip('؟?') in k:
                             answer = v; break
-                # Check HR_KB directly (guaranteed HR-only answers)
-                if not answer:
-                    answer = smart_local_answer(hr_q, HR_KB)
                 if answer:
                     st.session_state.hr_chat = [{"role":"user","content":hr_q},{"role":"assistant","content":answer}]
                     st.rerun()
                 else:
-                    with st.spinner("جاري البحث في المراجع..."):
+                    # Full Reasoning Pipeline
+                    with st.spinner("جاري التحليل المهني..."):
                         response = get_best_kb_answer(hr_q, HR_EXPERT_SYSTEM_PROMPT)
                         auto_learn_from_answer(hr_q, response, "hr")
                         st.session_state.hr_chat = [{"role":"user","content":hr_q},{"role":"assistant","content":response}]
