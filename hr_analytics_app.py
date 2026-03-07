@@ -8008,8 +8008,8 @@ GOSI: سعودي 10.5% خصم + 12.5% شركة | غير سعودي 2% شركة
 
             if submitted and labor_q:
                 st.session_state.labor_chat = []
-                # Check instant answers first
                 answer = None
+                # Check instant answers
                 for k, v in INSTANT_ANSWERS.items():
                     if labor_q.strip() == k or labor_q.strip().rstrip('؟?') == k.rstrip('؟?'):
                         answer = v; break
@@ -8017,11 +8017,13 @@ GOSI: سعودي 10.5% خصم + 12.5% شركة | غير سعودي 2% شركة
                     for k, v in INSTANT_ANSWERS.items():
                         if k.rstrip('؟?') in labor_q or labor_q.rstrip('؟?') in k:
                             answer = v; break
+                # Check LABOR_KB directly (guaranteed legal-only answers)
+                if not answer:
+                    answer = smart_local_answer(labor_q, LABOR_KB)
                 if answer:
                     st.session_state.labor_chat = [{"role":"user","content":labor_q},{"role":"assistant","content":answer}]
                     st.rerun()
                 else:
-                    # Always gets an answer - never fails
                     with st.spinner("جاري تحليل القضية..."):
                         response = get_best_kb_answer(labor_q, LABOR_LAW_SYSTEM_PROMPT)
                         auto_learn_from_answer(labor_q, response, "legal")
@@ -8082,6 +8084,7 @@ GOSI: سعودي 10.5% خصم + 12.5% شركة | غير سعودي 2% شركة
             if submitted and hr_q:
                 st.session_state.hr_chat = []
                 answer = None
+                # Check instant answers
                 for k, v in HR_INSTANT.items():
                     if hr_q.strip() == k or hr_q.strip().rstrip('؟?') == k.rstrip('؟?'):
                         answer = v; break
@@ -8089,6 +8092,9 @@ GOSI: سعودي 10.5% خصم + 12.5% شركة | غير سعودي 2% شركة
                     for k, v in HR_INSTANT.items():
                         if k.rstrip('؟?') in hr_q or hr_q.rstrip('؟?') in k:
                             answer = v; break
+                # Check HR_KB directly (guaranteed HR-only answers)
+                if not answer:
+                    answer = smart_local_answer(hr_q, HR_KB)
                 if answer:
                     st.session_state.hr_chat = [{"role":"user","content":hr_q},{"role":"assistant","content":answer}]
                     st.rerun()
