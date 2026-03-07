@@ -30,6 +30,7 @@ class ModelOrchestrator:
         'claude': {'url':'https://api.anthropic.com/v1/messages','model':'claude-3-5-sonnet-20241022','max_tokens':4000},
         'groq': {'url':'https://api.groq.com/openai/v1/chat/completions','model':'llama-3.3-70b-versatile','max_tokens':4000},
         'openrouter': {'url':'https://openrouter.ai/api/v1/chat/completions','model':'meta-llama/llama-3.3-70b-instruct:free','max_tokens':2000},
+        'huggingface': {'url':'https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3/v1/chat/completions','model':'mistralai/Mistral-7B-Instruct-v0.3','max_tokens':1500},
     }
 
     # Fallback models for OpenRouter
@@ -43,7 +44,7 @@ class ModelOrchestrator:
     }
 
     # Context size limits per provider
-    CONTEXT_LIMITS = {'claude': 15000, 'groq': 12000, 'openrouter': 4000}
+    CONTEXT_LIMITS = {'claude': 15000, 'groq': 12000, 'openrouter': 4000, 'huggingface': 3000}
 
     def __init__(self):
         self._cache = {}
@@ -68,6 +69,7 @@ class ModelOrchestrator:
         claude_key = st.session_state.get('claude_api_key', '')
         groq_key = st.session_state.get('groq_api_key', '')
         or_key = st.session_state.get('openrouter_api_key', '')
+        hf_key = st.session_state.get('huggingface_api_key', '')
         claude_ok = claude_key and not st.session_state.get('_claude_no_credit')
 
         if provider == 'auto':
@@ -75,13 +77,15 @@ class ModelOrchestrator:
             is_legal = any(kw in question_type.lower() for kw in legal_kw)
             if is_legal and claude_ok: return 'claude'
             if groq_key: return 'groq'
+            if hf_key: return 'huggingface'
             if or_key: return 'openrouter'
             if claude_ok: return 'claude'
             return None
         if provider == 'claude' and claude_ok: return 'claude'
         if provider == 'groq' and groq_key: return 'groq'
+        if provider == 'huggingface' and hf_key: return 'huggingface'
         if provider == 'openrouter' and or_key: return 'openrouter'
-        for p, k in [('groq',groq_key),('openrouter',or_key),('claude',claude_ok)]:
+        for p, k in [('groq',groq_key),('huggingface',hf_key),('openrouter',or_key),('claude',claude_ok)]:
             if k: return p
         return None
 
@@ -149,7 +153,7 @@ class ModelOrchestrator:
 
         # Try primary provider, fallback to others
         providers_to_try = [provider]
-        all_providers = ['groq','openrouter','claude']
+        all_providers = ['groq','huggingface','openrouter','claude']
         for p in all_providers:
             if p != provider and st.session_state.get(f'{p}_api_key',''):
                 providers_to_try.append(p)
@@ -180,7 +184,7 @@ class ModelOrchestrator:
         if provider == 'claude' and st.session_state.get('_claude_no_credit'):
             return None, "fallback"
 
-        if provider in ('groq', 'openrouter'):
+        if provider in ('groq', 'openrouter', 'huggingface'):
             models_to_try = self.OR_MODELS if provider == 'openrouter' else [config['model']]
             for model_name in models_to_try:
                 payload = json.dumps({
@@ -7575,22 +7579,21 @@ function stopSpeak(){{speechSynthesis.cancel()}}
         # API Keys check + auto-load (single check per session)
         if '_ai_keys_loaded' not in st.session_state:
             st.session_state._ai_keys_loaded = True
-            # Load all API keys from secrets
             try: st.session_state.claude_api_key = st.secrets.get("anthropic", {}).get("api_key", "")
             except: st.session_state.setdefault('claude_api_key', '')
             try: st.session_state.groq_api_key = st.secrets.get("groq", {}).get("api_key", "")
             except: st.session_state.setdefault('groq_api_key', '')
             try: st.session_state.openrouter_api_key = st.secrets.get("openrouter", {}).get("api_key", "")
             except: st.session_state.setdefault('openrouter_api_key', '')
-            # Load from DB if not in secrets
+            try: st.session_state.huggingface_api_key = st.secrets.get("huggingface", {}).get("api_key", "")
+            except: st.session_state.setdefault('huggingface_api_key', '')
             try:
                 conn = get_conn(); c = conn.cursor()
-                for pk, sk in [('claude_api_key','claude_api_key'),('groq_api_key','groq_api_key'),('openrouter_api_key','openrouter_api_key')]:
+                for pk in ['claude_api_key','groq_api_key','openrouter_api_key','huggingface_api_key']:
                     if not st.session_state.get(pk):
-                        c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", (sk,))
+                        c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", (pk,))
                         row = c.fetchone()
                         if row: st.session_state[pk] = row[0]
-                # Load legal docs context
                 legal_ctx = ""
                 for dk in ["labor_law","labor_regulations","social_insurance","health_insurance","minister_decisions"]:
                     c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", (f"legal_doc_{dk}",))
@@ -7603,21 +7606,21 @@ function stopSpeak(){{speechSynthesis.cancel()}}
         if 'ai_provider' not in st.session_state:
             st.session_state.ai_provider = 'auto'
 
-        # Check if any key is available
         has_claude = bool(st.session_state.get('claude_api_key'))
         has_groq = bool(st.session_state.get('groq_api_key'))
         has_or = bool(st.session_state.get('openrouter_api_key'))
+        has_hf = bool(st.session_state.get('huggingface_api_key'))
 
-        if not has_claude and not has_groq and not has_or:
+        if not has_claude and not has_groq and not has_or and not has_hf:
             st.warning("⚠️ يرجى إدخال API Key واحد على الأقل")
-            kc1, kc2, kc3 = st.columns(3)
+            kc1, kc2 = st.columns(2)
             with kc1:
-                st.markdown("### 🟢 Groq (مجاني)")
-                groq_input = st.text_input("🔑 Groq API Key:", type="password", key="groq_key_input",
-                    help="مجاني من https://console.groq.com/")
-                if groq_input:
-                    st.session_state.groq_api_key = groq_input; st.rerun()
-                st.caption("Llama 3.3 70B مجاني")
+                st.markdown("### 🤗 Hugging Face (مجاني)")
+                hf_input = st.text_input("🔑 HuggingFace Token:", type="password", key="hf_key_input",
+                    help="مجاني من https://huggingface.co/settings/tokens")
+                if hf_input:
+                    st.session_state.huggingface_api_key = hf_input; st.rerun()
+                st.caption("Mistral 7B مجاني + موثوق")
             with kc2:
                 st.markdown("### 🟠 OpenRouter (مجاني)")
                 or_input = st.text_input("🔑 OpenRouter Key:", type="password", key="or_key_input",
@@ -7625,23 +7628,26 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                 if or_input:
                     st.session_state.openrouter_api_key = or_input; st.rerun()
                 st.caption("Llama 3.3 70B مجاني")
-            with kc3:
-                st.markdown("### 🔵 Claude (مدفوع)")
-                claude_input = st.text_input("🔑 Claude Key:", type="password", key="claude_key_input",
-                    help="من https://console.anthropic.com/")
-                if claude_input:
-                    st.session_state.claude_api_key = claude_input; st.rerun()
-                st.caption("الأقوى، ~$3/مليون token")
-            st.info("💡 أضف في Streamlit Secrets:\n```\n[groq]\napi_key = \"gsk_...\"\n[openrouter]\napi_key = \"sk-or-...\"\n[anthropic]\napi_key = \"sk-ant-...\"\n```")
+            with st.expander("🔧 مزودين إضافيين"):
+                ec1, ec2 = st.columns(2)
+                with ec1:
+                    groq_input = st.text_input("🟢 Groq API Key:", type="password", key="groq_key_input")
+                    if groq_input: st.session_state.groq_api_key = groq_input; st.rerun()
+                with ec2:
+                    claude_input = st.text_input("🔵 Claude API Key:", type="password", key="claude_key_input")
+                    if claude_input: st.session_state.claude_api_key = claude_input; st.rerun()
+            st.info("💡 أضف في Streamlit Secrets:\n```\n[huggingface]\napi_key = \"hf_...\"\n[openrouter]\napi_key = \"sk-or-...\"\n[groq]\napi_key = \"gsk_...\"\n[anthropic]\napi_key = \"sk-ant-...\"\n```")
             return
 
         # Provider selector
         available_providers = ["🔄 تلقائي"]
-        if has_groq: available_providers.append("🟢 Groq (Llama)")
-        if has_or: available_providers.append("🟠 OpenRouter (Llama)")
+        if has_groq: available_providers.append("🟢 Groq")
+        if has_hf: available_providers.append("🤗 HuggingFace")
+        if has_or: available_providers.append("🟠 OpenRouter")
         if has_claude: available_providers.append("🔵 Claude")
         sel_provider = st.radio("🤖 المحرك:", available_providers, horizontal=True, key="provider_sel")
         if "Groq" in sel_provider: st.session_state.ai_provider = 'groq'
+        elif "HuggingFace" in sel_provider: st.session_state.ai_provider = 'huggingface'
         elif "OpenRouter" in sel_provider: st.session_state.ai_provider = 'openrouter'
         elif "Claude" in sel_provider: st.session_state.ai_provider = 'claude'
         else: st.session_state.ai_provider = 'auto'
@@ -8165,27 +8171,25 @@ function stopSpeak(){{speechSynthesis.cancel()}}
             # API Key management
             st.markdown("---")
             st.markdown("### 🔑 إعدادات API Keys")
-            kc1, kc2, kc3 = st.columns(3)
+            kc1, kc2 = st.columns(2)
             with kc1:
-                st.markdown("**🟢 Groq (مجاني)**")
-                cur_groq = st.session_state.get('groq_api_key','')
-                masked_g = f"gsk_...{cur_groq[-6:]}" if len(cur_groq)>8 else "غير مُعيّن"
-                st.caption(f"الحالي: {masked_g}")
-                new_groq = st.text_input("Groq API Key:", type="password", key="new_groq_key")
-                if st.button("💾 حفظ Groq", key="save_groq"):
-                    if new_groq:
-                        st.session_state.groq_api_key = new_groq
+                st.markdown("**🤗 Hugging Face (مجاني)**")
+                cur_hf = st.session_state.get('huggingface_api_key','')
+                st.caption(f"الحالي: {'hf_...'+cur_hf[-6:] if len(cur_hf)>8 else 'غير مُعيّن'}")
+                new_hf = st.text_input("HuggingFace Token:", type="password", key="new_hf_key")
+                if st.button("💾 حفظ HuggingFace", key="save_hf"):
+                    if new_hf:
+                        st.session_state.huggingface_api_key = new_hf
                         try:
                             conn = get_conn(); c = conn.cursor()
-                            _upsert_config(c, "groq_api_key", new_groq)
+                            _upsert_config(c, "huggingface_api_key", new_hf)
                             conn.commit(); conn.close()
                         except: pass
                         st.success("✅ تم الحفظ")
             with kc2:
                 st.markdown("**🟠 OpenRouter (مجاني)**")
                 cur_or = st.session_state.get('openrouter_api_key','')
-                masked_o = f"sk-or-...{cur_or[-6:]}" if len(cur_or)>8 else "غير مُعيّن"
-                st.caption(f"الحالي: {masked_o}")
+                st.caption(f"الحالي: {'sk-or-...'+cur_or[-6:] if len(cur_or)>8 else 'غير مُعيّن'}")
                 new_or = st.text_input("OpenRouter Key:", type="password", key="new_or_key")
                 if st.button("💾 حفظ OpenRouter", key="save_or"):
                     if new_or:
@@ -8196,7 +8200,22 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                             conn.commit(); conn.close()
                         except: pass
                         st.success("✅ تم الحفظ")
+            kc3, kc4 = st.columns(2)
             with kc3:
+                st.markdown("**🟢 Groq (مجاني)**")
+                cur_groq = st.session_state.get('groq_api_key','')
+                st.caption(f"الحالي: {'gsk_...'+cur_groq[-6:] if len(cur_groq)>8 else 'غير مُعيّن'}")
+                new_groq = st.text_input("Groq API Key:", type="password", key="new_groq_key")
+                if st.button("💾 حفظ Groq", key="save_groq"):
+                    if new_groq:
+                        st.session_state.groq_api_key = new_groq
+                        try:
+                            conn = get_conn(); c = conn.cursor()
+                            _upsert_config(c, "groq_api_key", new_groq)
+                            conn.commit(); conn.close()
+                        except: pass
+                        st.success("✅ تم الحفظ")
+            with kc4:
                 st.markdown("**🔵 Claude (مدفوع)**")
                 cur_claude = st.session_state.get('claude_api_key','')
                 masked_c = f"sk-ant-...{cur_claude[-8:]}" if len(cur_claude)>10 else "غير مُعيّن"
