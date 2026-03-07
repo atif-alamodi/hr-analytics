@@ -1307,9 +1307,8 @@ def get_best_kb_answer(question, system_prompt=None):
     return f"**لم أتمكن من الاتصال بمزودي الذكاء الاصطناعي**\n\n**المفاتيح:** {keys_info}\n**الأخطاء:** {err_info}"
 
 def auto_learn_from_answer(question, answer, consultant_type="legal"):
-    """Save good AI answers - skip filtered/redirect/error responses."""
+    """Save good AI answers and improve them over time."""
     if not answer or len(answer) < 50: return
-    # Don't save redirect messages or error messages
     skip_phrases = ["لم أتمكن", "يرجى استخدام", "المستشار القانوني ⚖️", "مستشار الموارد البشرية 📚", "المفاتيح:", "الأخطاء:"]
     if any(p in answer for p in skip_phrases): return
     try:
@@ -1318,13 +1317,71 @@ def auto_learn_from_answer(question, answer, consultant_type="legal"):
         row = c.fetchone()
         learned = json.loads(row[0]) if row else []
         q_hash = hashlib.md5(question.encode()).hexdigest()[:10]
-        if any(l.get('hash') == q_hash for l in learned): conn.close(); return
-        learned.append({"q": question[:200], "a": answer[:1500], "hash": q_hash,
-            "type": consultant_type, "date": datetime.now().strftime("%Y-%m-%d")})
+
+        # Check if similar question exists - IMPROVE the answer
+        for i, item in enumerate(learned):
+            if item.get('hash') == q_hash and item.get('type') == consultant_type:
+                # Merge: keep longer/better answer
+                old_len = len(item.get('a', ''))
+                if len(answer) > old_len:
+                    learned[i]['a'] = answer[:1500]
+                    learned[i]['updated'] = datetime.now().strftime("%Y-%m-%d")
+                    learned[i]['improvements'] = item.get('improvements', 0) + 1
+                _upsert_config(c, "rag_learned", json.dumps(learned, ensure_ascii=False))
+                conn.commit(); conn.close()
+                return
+
+        # New question - save it
+        learned.append({
+            "q": question[:200], "a": answer[:1500], "hash": q_hash,
+            "type": consultant_type, "date": datetime.now().strftime("%Y-%m-%d"),
+            "score": 0, "improvements": 0
+        })
         if len(learned) > 500: learned = learned[-500:]
         _upsert_config(c, "rag_learned", json.dumps(learned, ensure_ascii=False))
         conn.commit(); conn.close()
     except: pass
+
+def rate_answer(q_hash, rating, consultant_type):
+    """User rates answer: +1 good, -1 bad. Bad answers get removed."""
+    try:
+        conn = get_conn(); c = conn.cursor()
+        c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_learned",))
+        row = c.fetchone()
+        if row:
+            learned = json.loads(row[0])
+            for i, item in enumerate(learned):
+                if item.get('hash') == q_hash and item.get('type') == consultant_type:
+                    new_score = item.get('score', 0) + rating
+                    if new_score <= -2:
+                        learned.pop(i)  # Remove bad answers
+                    else:
+                        learned[i]['score'] = new_score
+                    break
+            _upsert_config(c, "rag_learned", json.dumps(learned, ensure_ascii=False))
+            conn.commit()
+        conn.close()
+    except: pass
+
+def get_learning_stats():
+    """Get learning system statistics."""
+    try:
+        conn = get_conn(); c = conn.cursor()
+        c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_learned",))
+        row = c.fetchone(); conn.close()
+        if row:
+            learned = json.loads(row[0])
+            legal = [l for l in learned if l.get('type') == 'legal']
+            hr = [l for l in learned if l.get('type') == 'hr']
+            good = [l for l in learned if l.get('score', 0) > 0]
+            improved = [l for l in learned if l.get('improvements', 0) > 0]
+            return {
+                "total": len(learned), "legal": len(legal), "hr": len(hr),
+                "good_rated": len(good), "improved": len(improved),
+                "avg_score": sum(l.get('score',0) for l in learned) / max(len(learned),1)
+            }
+    except: pass
+    return {"total":0,"legal":0,"hr":0,"good_rated":0,"improved":0,"avg_score":0}
 
 def export_widget(dataframes, title="تقرير", key_prefix="exp"):
     """Universal export: Excel (with charts) + CSV + PDF (with interactive charts)"""
@@ -7974,12 +8031,23 @@ GOSI: سعودي 10.5% خصم + 12.5% شركة | غير سعودي 2% شركة
             if 'labor_chat' not in st.session_state:
                 st.session_state.labor_chat = []
 
-            # Display chat history
-            for msg in st.session_state.labor_chat:
+            # Display chat history with feedback
+            for idx, msg in enumerate(st.session_state.labor_chat):
                 if msg['role'] == 'user':
                     st.markdown(f"<div style='background:#1e3a5f;color:white;padding:12px;border-radius:10px;margin:8px 0'>👤 {msg['content']}</div>", unsafe_allow_html=True)
                 else:
                     st.markdown(f"<div style='background:#f0f4f8;color:#333;padding:12px;border-radius:10px;margin:8px 0;border-right:4px solid #0F4C5C'>⚖️ {msg['content']}</div>", unsafe_allow_html=True)
+                    fc1, fc2, fc3 = st.columns([1,1,8])
+                    q_text = st.session_state.labor_chat[idx-1]['content'] if idx > 0 else ""
+                    q_hash = hashlib.md5(q_text.encode()).hexdigest()[:10] if q_text else ""
+                    with fc1:
+                        if st.button("👍", key=f"lg_{idx}", help="إجابة مفيدة"):
+                            rate_answer(q_hash, 1, "legal")
+                            st.toast("✅ شكراً لتقييمك")
+                    with fc2:
+                        if st.button("👎", key=f"lb_{idx}", help="إجابة غير دقيقة"):
+                            rate_answer(q_hash, -1, "legal")
+                            st.toast("📝 سيتم تحسين الإجابة")
 
             # Instant answers database
             INSTANT_ANSWERS = {
@@ -8051,11 +8119,22 @@ GOSI: سعودي 10.5% خصم + 12.5% شركة | غير سعودي 2% شركة
             if 'hr_chat' not in st.session_state:
                 st.session_state.hr_chat = []
 
-            for msg in st.session_state.hr_chat:
+            for idx, msg in enumerate(st.session_state.hr_chat):
                 if msg['role'] == 'user':
                     st.markdown(f"<div style='background:#1e3a5f;color:white;padding:12px;border-radius:10px;margin:8px 0'>👤 {msg['content']}</div>", unsafe_allow_html=True)
                 else:
                     st.markdown(f"<div style='background:#f0faf5;color:#333;padding:12px;border-radius:10px;margin:8px 0;border-right:4px solid #2A9D8F'>📚 {msg['content']}</div>", unsafe_allow_html=True)
+                    fc1, fc2, fc3 = st.columns([1,1,8])
+                    q_text = st.session_state.hr_chat[idx-1]['content'] if idx > 0 else ""
+                    q_hash = hashlib.md5(q_text.encode()).hexdigest()[:10] if q_text else ""
+                    with fc1:
+                        if st.button("👍", key=f"hg_{idx}", help="إجابة مفيدة"):
+                            rate_answer(q_hash, 1, "hr")
+                            st.toast("✅ شكراً لتقييمك")
+                    with fc2:
+                        if st.button("👎", key=f"hb_{idx}", help="إجابة غير دقيقة"):
+                            rate_answer(q_hash, -1, "hr")
+                            st.toast("📝 سيتم تحسين الإجابة")
 
             # Instant HR answers database
             HR_INSTANT = {
@@ -8253,15 +8332,83 @@ GOSI: سعودي 10.5% خصم + 12.5% شركة | غير سعودي 2% شركة
                         st.success(f"✅ {doc_name}: {n} جزء")
 
         elif page == "📊 التعلم والتحسين":
-            hdr("📊 التعلم المستمر والتحسين","تحليل أداء النموذج وتحسينه من تفاعلات المستخدمين")
+            hdr("📊 التعلم المستمر والتحسين","نظام تعلم ذاتي يتحسن مع كل سؤال")
 
-            # Load Q&A history
+            # RAG Learning Stats
+            stats = get_learning_stats()
+            st.markdown("### 🧠 إحصائيات التعلم الذاتي")
+            k1,k2,k3,k4,k5 = st.columns(5)
+            with k1: kpi("📦 إجمالي المعرفة المكتسبة", str(stats['total']))
+            with k2: kpi("⚖️ معرفة قانونية", str(stats['legal']))
+            with k3: kpi("📚 معرفة HR", str(stats['hr']))
+            with k4: kpi("👍 مُقيّمة إيجابياً", str(stats['good_rated']))
+            with k5: kpi("🔄 تم تحسينها", str(stats['improved']))
+
+            if stats['total'] > 0:
+                st.progress(min(stats['avg_score'] / 5 + 0.5, 1.0), text=f"متوسط جودة الإجابات: {stats['avg_score']:.1f}/5")
+
+            # Learning mechanism explanation
+            with st.expander("🔍 كيف يتعلم النظام؟"):
+                st.markdown("""
+                **آلية التعلم المستمر:**
+
+                1. **التعلم من الإجابات:** كل إجابة جديدة تُحفظ مع تصنيفها (قانوني/HR)
+                2. **التقييم:** أزرار 👍/👎 ترفع أو تخفض جودة الإجابة
+                3. **التحسين التلقائي:** الإجابات المحسّنة تحل محل القديمة
+                4. **الحذف الذاتي:** الإجابات التي تحصل على -2 تُحذف تلقائياً
+                5. **الفصل:** الإجابات القانونية لا تظهر في مستشار HR والعكس
+                """)
+
+            # Show learned Q&A pairs
+            st.markdown("### 📚 المعرفة المكتسبة")
             try:
-                conn = get_conn()
-                c = conn.cursor()
+                conn = get_conn(); c = conn.cursor()
+                c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_learned",))
+                row = c.fetchone(); conn.close()
+                if row:
+                    learned = json.loads(row[0])
+                    if learned:
+                        tab1, tab2 = st.tabs(["⚖️ قانوني", "📚 HR"])
+                        with tab1:
+                            legal_items = [l for l in learned if l.get('type') == 'legal']
+                            for item in legal_items[-10:]:
+                                score = item.get('score', 0)
+                                score_icon = "🟢" if score > 0 else ("🔴" if score < 0 else "⚪")
+                                with st.expander(f"{score_icon} {item.get('q','')[:60]}"):
+                                    st.markdown(item.get('a','')[:500])
+                                    st.caption(f"تاريخ: {item.get('date','')} | تقييم: {score} | تحسينات: {item.get('improvements',0)}")
+                            if not legal_items:
+                                st.info("لم تُكتسب معرفة قانونية بعد")
+                        with tab2:
+                            hr_items = [l for l in learned if l.get('type') == 'hr']
+                            for item in hr_items[-10:]:
+                                score = item.get('score', 0)
+                                score_icon = "🟢" if score > 0 else ("🔴" if score < 0 else "⚪")
+                                with st.expander(f"{score_icon} {item.get('q','')[:60]}"):
+                                    st.markdown(item.get('a','')[:500])
+                                    st.caption(f"تاريخ: {item.get('date','')} | تقييم: {score} | تحسينات: {item.get('improvements',0)}")
+                            if not hr_items:
+                                st.info("لم تُكتسب معرفة HR بعد")
+
+                        # Cleanup button
+                        if st.button("🧹 تنظيف الإجابات السيئة (تقييم أقل من 0)", key="clean_bad"):
+                            clean = [l for l in learned if l.get('score', 0) >= 0]
+                            removed = len(learned) - len(clean)
+                            conn = get_conn(); c = conn.cursor()
+                            _upsert_config(c, "rag_learned", json.dumps(clean, ensure_ascii=False))
+                            conn.commit(); conn.close()
+                            st.success(f"✅ تم حذف {removed} إجابة سيئة")
+                            st.rerun()
+            except: pass
+
+            st.markdown("---")
+
+            # Original Q&A history
+            st.markdown("### 💬 سجل المحادثات")
+            try:
+                conn = get_conn(); c = conn.cursor()
                 c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_qa_history",))
-                row = c.fetchone()
-                conn.close()
+                row = c.fetchone(); conn.close()
                 qa_history = json.loads(row[0]) if row else []
             except:
                 qa_history = []
