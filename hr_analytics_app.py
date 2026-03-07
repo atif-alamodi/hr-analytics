@@ -43,8 +43,8 @@ class ModelOrchestrator:
         'general': 'You are a helpful HR assistant. Answer in the same language as the question.',
     }
 
-    # Context size limits per provider
-    CONTEXT_LIMITS = {'claude': 15000, 'groq': 12000, 'openrouter': 6000, 'huggingface': 3000}
+    # Context size limits per provider (chars) - generous to avoid truncating expert prompts
+    CONTEXT_LIMITS = {'claude': 30000, 'groq': 25000, 'openrouter': 12000, 'huggingface': 6000}
 
     def __init__(self):
         self._cache = {}
@@ -90,30 +90,43 @@ class ModelOrchestrator:
         return None
 
     def build_context(self, system_prompt, user_message, model_type='general', provider='claude'):
-        """Assemble full context: system prompt + RAG + learned + legal docs."""
+        """Assemble full context: system prompt + RAG + learned + legal docs.
+        CRITICAL: Never truncate the system prompt - it contains the expert knowledge."""
         max_ctx = self.CONTEXT_LIMITS.get(provider, 8000)
-        enhanced = system_prompt[:max_ctx // 2]  # Reserve half for added context
 
-        # Layer 1: RAG Knowledge Base
-        if hasattr(st.session_state, '_knowledge_engine'):
-            rag_ctx = st.session_state._knowledge_engine.search(user_message)
-            if rag_ctx:
-                enhanced += f"\n\n**RETRIEVED KNOWLEDGE:**\n{rag_ctx[:6000]}"
+        # Keep the FULL system prompt - this is the expert knowledge that drives correct answers
+        enhanced = system_prompt
 
-        # Layer 2: Learned from past interactions
-        if hasattr(st.session_state, '_learning_system'):
-            learned = st.session_state._learning_system.get_relevant_history(user_message, model_type)
-            if learned:
-                enhanced += f"\n\n**LEARNED FROM PAST:**\n{learned[:2000]}"
+        # Calculate remaining budget for additional context
+        remaining = max(0, max_ctx - len(enhanced))
 
-        # Layer 3: Legal documents
-        legal_ctx = st.session_state.get('legal_docs_context', '')
-        if legal_ctx:
-            enhanced += f"\n\n**LEGAL REFERENCES:**\n{legal_ctx[:6000]}"
+        # Layer 1: RAG Knowledge Base (most relevant supplementary info)
+        if remaining > 500:
+            try:
+                if hasattr(st.session_state, '_knowledge_engine'):
+                    rag_ctx = st.session_state._knowledge_engine.search(user_message)
+                    if rag_ctx:
+                        rag_budget = min(len(rag_ctx), remaining // 2)
+                        enhanced += f"\n\n**مراجع إضافية:**\n{rag_ctx[:rag_budget]}"
+                        remaining -= rag_budget
+            except: pass
 
-        # Truncate if needed
-        if len(enhanced) > max_ctx:
-            enhanced = enhanced[:max_ctx] + "\n[Context truncated]"
+        # Layer 2: Legal documents (if available and space permits)
+        if remaining > 500:
+            legal_ctx = st.session_state.get('legal_docs_context', '')
+            if legal_ctx:
+                legal_budget = min(len(legal_ctx), remaining // 2)
+                enhanced += f"\n\n**نصوص قانونية:**\n{legal_ctx[:legal_budget]}"
+                remaining -= legal_budget
+
+        # Layer 3: Learned from past interactions (lowest priority, smallest budget)
+        if remaining > 300:
+            try:
+                if hasattr(st.session_state, '_learning_system'):
+                    learned = st.session_state._learning_system.get_relevant_history(user_message, model_type)
+                    if learned:
+                        enhanced += f"\n\n**من تجارب سابقة:**\n{learned[:min(1000, remaining)]}"
+            except: pass
 
         return enhanced
 
@@ -7560,23 +7573,27 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 
 **نطاقات:** برنامج السعودة يصنف المنشآت (بلاتيني/أخضر/أصفر/أحمر) حسب نسبة السعودة.
 
-**IMPORTANT INSTRUCTIONS:**
-- Use web search to find the latest ministerial decisions and updates to Saudi Labor Law
-- When answering, ALWAYS cite the specific article number
-- If the user's question relates to a recent change, search for the latest updates
-- Answer in the same language the user asks (Arabic gets Arabic response)
+**تعليمات مهمة للإجابة:**
 
-**RULES:**
-1. ALWAYS cite the specific article number when answering
-2. Answer in the SAME language the user asks (Arabic or English)
-3. If unsure, say so and recommend consulting a licensed lawyer
-4. Provide practical advice with step-by-step guidance
-5. Consider both employer and employee perspectives fairly
-6. Reference recent ministerial decisions when relevant
-7. For calculations (EOS, compensation), show the math step by step
-8. Always mention the minimum protections the law provides
-9. Distinguish between محدد المدة (fixed-term) and غير محدد المدة (indefinite) contracts
-10. Note when عقد يتحول لغير محدد (converts to indefinite): after 3 renewals or 4 years total"""
+**أولاً - فهم السؤال:**
+- اقرأ السؤال بعناية وحدد الموضوع القانوني المطلوب
+- إذا كان السؤال يتضمن حالة عملية (مثل: "تم فصلي بعد 3 سنوات")، استخرج المعطيات: نوع العقد، مدة الخدمة، سبب الإنهاء
+- إذا كان السؤال عاماً، قدم إجابة شاملة مع ذكر جميع الحالات المحتملة
+
+**ثانياً - بناء الإجابة:**
+1. ابدأ بذكر المادة أو المواد القانونية المتعلقة بالسؤال مع نصها
+2. اشرح كيف تنطبق المادة على حالة السائل
+3. إذا كان هناك حساب (مكافأة، تعويض)، أظهر الخطوات بالأرقام
+4. اذكر حقوق الطرفين (العامل وصاحب العمل)
+5. أضف نصيحة عملية في النهاية
+
+**ثالثاً - قواعد ثابتة:**
+- أجب دائماً بنفس لغة السؤال (عربي يحصل على إجابة عربية، إنجليزي يحصل على إنجليزية)
+- اذكر رقم المادة القانونية دائماً عند الاستشهاد
+- فرّق بين العقد محدد المدة وغير محدد المدة
+- إذا لم تكن متأكداً من معلومة، صرّح بذلك وأوصِ بمراجعة محامٍ مرخص
+- لا تخترع مواد قانونية غير موجودة - التزم بالمواد المذكورة أعلاه فقط
+- اذكر متى يتحول العقد المحدد لغير محدد: بعد 3 تجديدات أو 4 سنوات"""
 
         HR_EXPERT_SYSTEM_PROMPT = """You are a world-class HR professional and consultant with deep expertise equivalent to holding PHRi, SHRM-SCP, CIPD Level 7, APTD, and SPHR certifications.
 
@@ -7629,17 +7646,21 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 - Phillips ROI Methodology for training
 - Balanced Scorecard for HR
 
-**RULES:**
-1. Answer in the SAME language the user asks
-2. Reference specific frameworks, models, and methodologies
-3. Provide practical, actionable advice
-4. When relevant, mention which certification covers the topic
-5. Use real-world examples and case studies
-6. For Saudi context, consider local labor law and culture
-7. Suggest metrics and KPIs to measure success
-8. Recommend tools and technologies when appropriate
-9. Use web search to find the latest HR trends, research, and best practices
-10. For Saudi-specific questions, consider local labor law and cultural context
+**تعليمات مهمة للإجابة:**
+
+**أولاً - فهم السؤال:**
+- حدد المجال المطلوب: استقطاب، تدريب، تعويضات، أداء، علاقات عمل، تحليلات HR
+- إذا كان السؤال عملياً (مثل: "كيف أبني")، قدم خطوات تنفيذية واضحة
+- إذا كان السؤال نظرياً (مثل: "ما الفرق")، قدم مقارنة منظمة
+
+**ثانياً - بناء الإجابة:**
+1. أجب بنفس لغة السؤال (عربي بالعربي، إنجليزي بالإنجليزي)
+2. استشهد بالنماذج والأطر العلمية المناسبة (مثل: Kirkpatrick, ADDIE, Phillips ROI)
+3. قدم نصائح عملية قابلة للتنفيذ مع أمثلة واقعية
+4. اذكر مؤشرات الأداء (KPIs) لقياس النجاح
+5. راعِ السياق السعودي (نظام العمل، الثقافة المحلية) عند الحاجة
+6. اقترح أدوات وتقنيات حديثة عند المناسبة
+7. لا تخترع معلومات - التزم بالمعرفة المهنية المعتمدة
 
 **KEY MODELS & FRAMEWORKS (from PHRi):**
 - ADDIE Model: Analysis → Design → Development → Implementation → Evaluation
