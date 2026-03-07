@@ -27,6 +27,7 @@ class ModelOrchestrator:
     Handles: prompt building, model routing, context assembly, caching, error management."""
 
     MODELS = {
+        'gemini': {'url':'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent','model':'gemini-2.0-flash','max_tokens':4096},
         'claude': {'url':'https://api.anthropic.com/v1/messages','model':'claude-sonnet-4-20250514','max_tokens':4096},
         'groq': {'url':'https://api.groq.com/openai/v1/chat/completions','model':'llama-3.3-70b-versatile','max_tokens':4096},
         'openrouter': {'url':'https://openrouter.ai/api/v1/chat/completions','model':'meta-llama/llama-3.3-70b-instruct:free','max_tokens':2048},
@@ -44,7 +45,7 @@ class ModelOrchestrator:
     }
 
     # Context size limits per provider (chars) - generous to avoid truncating expert prompts
-    CONTEXT_LIMITS = {'claude': 30000, 'groq': 25000, 'openrouter': 12000, 'huggingface': 6000}
+    CONTEXT_LIMITS = {'gemini': 50000, 'claude': 30000, 'groq': 25000, 'openrouter': 12000, 'huggingface': 6000}
 
     def __init__(self):
         self._cache = {}
@@ -64,8 +65,10 @@ class ModelOrchestrator:
         }
 
     def select_provider(self, question_type='general'):
-        """Smart model routing based on question type and availability."""
+        """Smart model routing based on question type and availability.
+        Gemini is the PRIMARY provider (fast + Google Search grounding)."""
         provider = st.session_state.get('ai_provider', 'auto')
+        gemini_key = st.session_state.get('gemini_api_key', '')
         claude_key = st.session_state.get('claude_api_key', '')
         groq_key = st.session_state.get('groq_api_key', '')
         or_key = st.session_state.get('openrouter_api_key', '')
@@ -73,19 +76,19 @@ class ModelOrchestrator:
         claude_ok = claude_key and not st.session_state.get('_claude_no_credit')
 
         if provider == 'auto':
-            legal_kw = ['مادة','قانون','نظام العمل','تعويض','فصل','إنهاء','article','labor law','termination']
-            is_legal = any(kw in question_type.lower() for kw in legal_kw)
-            if is_legal and claude_ok: return 'claude'
+            # Gemini is always preferred (fast, free tier, Google Search grounding)
+            if gemini_key: return 'gemini'
             if groq_key: return 'groq'
-            if hf_key: return 'huggingface'
-            if or_key: return 'openrouter'
             if claude_ok: return 'claude'
+            if or_key: return 'openrouter'
+            if hf_key: return 'huggingface'
             return None
+        if provider == 'gemini' and gemini_key: return 'gemini'
         if provider == 'claude' and claude_ok: return 'claude'
         if provider == 'groq' and groq_key: return 'groq'
         if provider == 'huggingface' and hf_key: return 'huggingface'
         if provider == 'openrouter' and or_key: return 'openrouter'
-        for p, k in [('groq',groq_key),('huggingface',hf_key),('openrouter',or_key),('claude',claude_ok)]:
+        for p, k in [('gemini',gemini_key),('groq',groq_key),('openrouter',or_key),('claude',claude_ok),('huggingface',hf_key)]:
             if k: return p
         return None
 
@@ -166,7 +169,7 @@ class ModelOrchestrator:
 
         # Try primary provider, fallback to others
         providers_to_try = [provider]
-        all_providers = ['groq','huggingface','openrouter','claude']
+        all_providers = ['gemini','groq','claude','openrouter','huggingface']
         for p in all_providers:
             if p != provider and st.session_state.get(f'{p}_api_key',''):
                 providers_to_try.append(p)
@@ -178,12 +181,28 @@ class ModelOrchestrator:
                 self._call_count += 1
                 self._cache[cache_key] = result
                 if len(self._cache) > 50: self._cache = dict(list(self._cache.items())[-50:])
+                # Save interaction for learning
                 if hasattr(st.session_state, '_learning_system'):
-                    st.session_state._learning_system.save_interaction(user_message, result, model_type)
+                    st.session_state._learning_system.save_interaction(user_message, result, model_type, provider=prov)
+                # Auto-learn: save high-quality AI responses into RAG knowledge base
+                self._auto_learn_to_rag(user_message, result, model_type)
                 return result, None
             if error != "fallback":
                 last_error = error
         return None, last_error or "⚠️ لم يتمكن أي مزود من الإجابة. تحقق من مفاتيح API."
+
+    def _auto_learn_to_rag(self, question, answer, model_type):
+        """Auto-save high-quality AI answers into RAG knowledge base for continuous learning."""
+        try:
+            if not answer or len(answer) < 100:
+                return
+            if not hasattr(st.session_state, '_knowledge_engine'):
+                return
+            # Build a Q&A document for RAG ingestion
+            qa_doc = f"سؤال: {question}\n\nالإجابة:\n{answer}"
+            source = f"AI-{model_type}-{datetime.now().strftime('%Y%m%d')}"
+            st.session_state._knowledge_engine.ingest(qa_doc, source, doc_type="ai_learned")
+        except: pass
 
     def _call_provider(self, provider, system_prompt, messages):
         """Execute API call to specific provider."""
@@ -197,68 +216,160 @@ class ModelOrchestrator:
         if provider == 'claude' and st.session_state.get('_claude_no_credit'):
             return None, "fallback"
 
-        if provider in ('groq', 'openrouter', 'huggingface'):
-            models_to_try = self.OR_MODELS if provider == 'openrouter' else [config['model']]
-            for model_name in models_to_try:
-                payload = json.dumps({
-                    "model": model_name, "max_tokens": config['max_tokens'],
-                    "messages": [{"role":"system","content":system_prompt}] + messages,
-                    "temperature": 0.3
-                })
-                headers = {'Content-Type':'application/json','Authorization':f'Bearer {api_key}'}
-                if provider == 'openrouter':
-                    headers['HTTP-Referer'] = 'https://hr-analytics-risal.streamlit.app'
-                    headers['X-Title'] = 'HR Analytics Platform'
-                try:
-                    timeout = 25 if provider == 'openrouter' else 45
-                    req = urllib.request.Request(config['url'], data=payload.encode('utf-8'), headers=headers, method='POST')
-                    with urllib.request.urlopen(req, timeout=timeout) as resp:
-                        result = json.loads(resp.read().decode())
-                        text = result.get('choices',[{}])[0].get('message',{}).get('content','')
-                        if text: return text, None
-                except:
-                    continue  # Try next model
+        if provider == 'gemini':
+            return self._call_gemini(api_key, config, system_prompt, messages)
+        elif provider in ('groq', 'openrouter', 'huggingface'):
+            return self._call_openai_compat(provider, api_key, config, system_prompt, messages)
+        else:  # claude
+            return self._call_claude(api_key, config, system_prompt, messages)
+
+    def _call_gemini(self, api_key, config, system_prompt, messages):
+        """Call Google Gemini API with Google Search grounding for real-time answers."""
+        url = f"{config['url']}?key={api_key}"
+
+        # Build Gemini contents format
+        contents = []
+        for msg in messages:
+            role = "user" if msg['role'] == 'user' else "model"
+            contents.append({"role": role, "parts": [{"text": msg['content']}]})
+
+        # Gemini payload with Google Search grounding enabled
+        payload = json.dumps({
+            "contents": contents,
+            "systemInstruction": {"parts": [{"text": system_prompt}]},
+            "generationConfig": {
+                "maxOutputTokens": config['max_tokens'],
+                "temperature": 0.3,
+            },
+            "tools": [{"google_search": {}}],
+        })
+
+        headers = {'Content-Type': 'application/json'}
+        try:
+            req = urllib.request.Request(url, data=payload.encode('utf-8'), headers=headers, method='POST')
+            with urllib.request.urlopen(req, timeout=45) as resp:
+                result = json.loads(resp.read().decode())
+                candidates = result.get('candidates', [])
+                if not candidates:
+                    return None, "fallback"
+                parts = candidates[0].get('content', {}).get('parts', [])
+                text = "\n".join([p.get('text', '') for p in parts if p.get('text')])
+
+                # Extract Google Search grounding sources
+                grounding_meta = candidates[0].get('groundingMetadata', {})
+                sources = self._extract_gemini_sources(grounding_meta)
+                if sources and text:
+                    text += f"\n\n---\n📚 **المصادر:**\n{sources}"
+
+                if text and len(text) > 10:
+                    return text, None
+                return None, "fallback"
+        except urllib.request.HTTPError as he:
+            try: err_body = he.read().decode('utf-8', errors='ignore')[:500]
+            except: err_body = ""
+            if he.code == 429:
+                return None, "fallback"  # Rate limited, try next provider
+            return None, "fallback"
+        except:
             return None, "fallback"
 
-        else:  # claude
-            # Try without web search first (faster), then with web search as fallback
-            for use_web in [False, True]:
-                payload_dict = {
-                    "model": config['model'], "max_tokens": config['max_tokens'],
-                    "system": system_prompt, "messages": messages,
-                    "temperature": 0.3,
-                }
-                if use_web:
-                    payload_dict["tools"] = [{"type":"web_search_20250305","name":"web_search"}]
-                payload = json.dumps(payload_dict)
-                headers = {'Content-Type':'application/json','x-api-key':api_key,'anthropic-version':'2023-06-01'}
-                try:
-                    timeout = 60 if not use_web else 75
-                    req = urllib.request.Request(config['url'], data=payload.encode('utf-8'), headers=headers, method='POST')
-                    with urllib.request.urlopen(req, timeout=timeout) as resp:
-                        result = json.loads(resp.read().decode())
-                        text = "\n".join([b.get('text','') for b in result.get('content',[]) if b.get('type')=='text'])
-                        if text and len(text) > 10:
-                            return text, None
-                        # If empty response without web search, try with web search
-                        if not use_web:
-                            continue
-                        return None, "fallback"
-                except urllib.request.HTTPError as he:
-                    try: err_body = he.read().decode('utf-8',errors='ignore')[:300]
-                    except: err_body = ""
-                    # No credit - remember and fallback
-                    if 'credit' in err_body.lower() or 'balance' in err_body.lower():
-                        st.session_state['_claude_no_credit'] = True
-                        return None, "fallback"
-                    # Web search not supported or other 400 error - retry without/with
-                    if he.code == 400:
+    def _extract_gemini_sources(self, grounding_meta):
+        """Extract and format source citations from Gemini grounding metadata."""
+        if not grounding_meta:
+            return ""
+        sources_list = []
+        # Extract from groundingChunks
+        chunks = grounding_meta.get('groundingChunks', [])
+        for chunk in chunks:
+            web = chunk.get('web', {})
+            title = web.get('title', '')
+            uri = web.get('uri', '')
+            if title and uri:
+                sources_list.append(f"- [{title}]({uri})")
+            elif uri:
+                sources_list.append(f"- {uri}")
+        # Extract from searchEntryPoint if no chunks
+        if not sources_list:
+            support = grounding_meta.get('groundingSupports', [])
+            for s in support:
+                segment = s.get('segment', {})
+                if segment.get('text'):
+                    indices = s.get('groundingChunkIndices', [])
+                    if indices and chunks:
+                        for idx in indices:
+                            if idx < len(chunks):
+                                web = chunks[idx].get('web', {})
+                                if web.get('uri'):
+                                    sources_list.append(f"- {web.get('title', web['uri'])}")
+        # Deduplicate
+        seen = set()
+        unique = []
+        for s in sources_list:
+            if s not in seen:
+                seen.add(s)
+                unique.append(s)
+        return "\n".join(unique[:5])  # Max 5 sources
+
+    def _call_openai_compat(self, provider, api_key, config, system_prompt, messages):
+        """Call OpenAI-compatible APIs (Groq, OpenRouter, HuggingFace)."""
+        models_to_try = self.OR_MODELS if provider == 'openrouter' else [config['model']]
+        for model_name in models_to_try:
+            payload = json.dumps({
+                "model": model_name, "max_tokens": config['max_tokens'],
+                "messages": [{"role":"system","content":system_prompt}] + messages,
+                "temperature": 0.3
+            })
+            headers = {'Content-Type':'application/json','Authorization':f'Bearer {api_key}'}
+            if provider == 'openrouter':
+                headers['HTTP-Referer'] = 'https://hr-analytics-risal.streamlit.app'
+                headers['X-Title'] = 'HR Analytics Platform'
+            try:
+                timeout = 25 if provider == 'openrouter' else 45
+                req = urllib.request.Request(config['url'], data=payload.encode('utf-8'), headers=headers, method='POST')
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    result = json.loads(resp.read().decode())
+                    text = result.get('choices',[{}])[0].get('message',{}).get('content','')
+                    if text: return text, None
+            except:
+                continue
+        return None, "fallback"
+
+    def _call_claude(self, api_key, config, system_prompt, messages):
+        """Call Claude/Anthropic API."""
+        for use_web in [False, True]:
+            payload_dict = {
+                "model": config['model'], "max_tokens": config['max_tokens'],
+                "system": system_prompt, "messages": messages,
+                "temperature": 0.3,
+            }
+            if use_web:
+                payload_dict["tools"] = [{"type":"web_search_20250305","name":"web_search"}]
+            payload = json.dumps(payload_dict)
+            headers = {'Content-Type':'application/json','x-api-key':api_key,'anthropic-version':'2023-06-01'}
+            try:
+                timeout = 60 if not use_web else 75
+                req = urllib.request.Request(config['url'], data=payload.encode('utf-8'), headers=headers, method='POST')
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    result = json.loads(resp.read().decode())
+                    text = "\n".join([b.get('text','') for b in result.get('content',[]) if b.get('type')=='text'])
+                    if text and len(text) > 10:
+                        return text, None
+                    if not use_web:
                         continue
                     return None, "fallback"
-                except:
-                    if not use_web: continue
+            except urllib.request.HTTPError as he:
+                try: err_body = he.read().decode('utf-8',errors='ignore')[:300]
+                except: err_body = ""
+                if 'credit' in err_body.lower() or 'balance' in err_body.lower():
+                    st.session_state['_claude_no_credit'] = True
                     return None, "fallback"
-            return None, "fallback"
+                if he.code == 400:
+                    continue
+                return None, "fallback"
+            except:
+                if not use_web: continue
+                return None, "fallback"
+        return None, "fallback"
 
     def get_stats(self):
         """Return orchestrator statistics."""
@@ -447,14 +558,14 @@ class LearningSystem:
         except:
             self._history = []
 
-    def save_interaction(self, question, answer, model_type, feedback=None):
+    def save_interaction(self, question, answer, model_type, feedback=None, provider=None):
         """Save Q&A pair for learning."""
         self._load()
         self._history.append({
-            "q": question[:500], "a": answer[:1500], "model": model_type,
+            "q": question[:500], "a": answer[:2000], "model": model_type,
             "feedback": feedback, "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "user": st.session_state.get('user_name',''),
-            "provider": st.session_state.get('ai_provider','auto'),
+            "provider": provider or st.session_state.get('ai_provider','auto'),
             "q_hash": hashlib.md5(question.encode()).hexdigest()[:10]
         })
         if len(self._history) > 500: self._history = self._history[-500:]
@@ -7716,6 +7827,8 @@ function stopSpeak(){{speechSynthesis.cancel()}}
         # API Keys check + auto-load (single check per session)
         if '_ai_keys_loaded' not in st.session_state:
             st.session_state._ai_keys_loaded = True
+            try: st.session_state.gemini_api_key = st.secrets.get("gemini", {}).get("api_key", "")
+            except: st.session_state.setdefault('gemini_api_key', '')
             try: st.session_state.claude_api_key = st.secrets.get("anthropic", {}).get("api_key", "")
             except: st.session_state.setdefault('claude_api_key', '')
             try: st.session_state.groq_api_key = st.secrets.get("groq", {}).get("api_key", "")
@@ -7726,7 +7839,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
             except: st.session_state.setdefault('huggingface_api_key', '')
             try:
                 conn = get_conn(); c = conn.cursor()
-                for pk in ['claude_api_key','groq_api_key','openrouter_api_key','huggingface_api_key']:
+                for pk in ['gemini_api_key','claude_api_key','groq_api_key','openrouter_api_key','huggingface_api_key']:
                     if not st.session_state.get(pk):
                         c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", (pk,))
                         row = c.fetchone()
@@ -7743,21 +7856,28 @@ function stopSpeak(){{speechSynthesis.cancel()}}
         if 'ai_provider' not in st.session_state:
             st.session_state.ai_provider = 'auto'
 
+        has_gemini = bool(st.session_state.get('gemini_api_key'))
         has_claude = bool(st.session_state.get('claude_api_key'))
         has_groq = bool(st.session_state.get('groq_api_key'))
         has_or = bool(st.session_state.get('openrouter_api_key'))
         has_hf = bool(st.session_state.get('huggingface_api_key'))
 
-        if not has_claude and not has_groq and not has_or and not has_hf:
+        if not has_gemini and not has_claude and not has_groq and not has_or and not has_hf:
             st.warning("⚠️ يرجى إدخال API Key واحد على الأقل")
+            st.markdown("### 🔷 Google Gemini (مُوصى به - مجاني)")
+            gemini_input = st.text_input("🔑 Gemini API Key:", type="password", key="gemini_key_input",
+                help="مجاني من https://aistudio.google.com/apikey")
+            if gemini_input:
+                st.session_state.gemini_api_key = gemini_input; st.rerun()
+            st.caption("⚡ Gemini 2.0 Flash - سريع جداً + بحث Google مدمج + مجاني")
+            st.markdown("---")
             kc1, kc2 = st.columns(2)
             with kc1:
-                st.markdown("### 🤗 Hugging Face (مجاني)")
-                hf_input = st.text_input("🔑 HuggingFace Token:", type="password", key="hf_key_input",
-                    help="مجاني من https://huggingface.co/settings/tokens")
-                if hf_input:
-                    st.session_state.huggingface_api_key = hf_input; st.rerun()
-                st.caption("Mistral 7B مجاني + موثوق")
+                st.markdown("### 🟢 Groq (مجاني + سريع)")
+                groq_input = st.text_input("🔑 Groq API Key:", type="password", key="groq_key_input",
+                    help="مجاني من https://console.groq.com/")
+                if groq_input: st.session_state.groq_api_key = groq_input; st.rerun()
+                st.caption("Llama 3.3 70B - أسرع استجابة")
             with kc2:
                 st.markdown("### 🟠 OpenRouter (مجاني)")
                 or_input = st.text_input("🔑 OpenRouter Key:", type="password", key="or_key_input",
@@ -7768,22 +7888,24 @@ function stopSpeak(){{speechSynthesis.cancel()}}
             with st.expander("🔧 مزودين إضافيين"):
                 ec1, ec2 = st.columns(2)
                 with ec1:
-                    groq_input = st.text_input("🟢 Groq API Key:", type="password", key="groq_key_input")
-                    if groq_input: st.session_state.groq_api_key = groq_input; st.rerun()
+                    hf_input = st.text_input("🤗 HuggingFace Token:", type="password", key="hf_key_input")
+                    if hf_input: st.session_state.huggingface_api_key = hf_input; st.rerun()
                 with ec2:
                     claude_input = st.text_input("🔵 Claude API Key:", type="password", key="claude_key_input")
                     if claude_input: st.session_state.claude_api_key = claude_input; st.rerun()
-            st.info("💡 أضف في Streamlit Secrets:\n```\n[huggingface]\napi_key = \"hf_...\"\n[openrouter]\napi_key = \"sk-or-...\"\n[groq]\napi_key = \"gsk_...\"\n[anthropic]\napi_key = \"sk-ant-...\"\n```")
+            st.info("💡 أضف في Streamlit Secrets:\n```\n[gemini]\napi_key = \"AIza...\"\n[groq]\napi_key = \"gsk_...\"\n[openrouter]\napi_key = \"sk-or-...\"\n[anthropic]\napi_key = \"sk-ant-...\"\n```")
             return
 
         # Provider selector
         available_providers = ["🔄 تلقائي"]
+        if has_gemini: available_providers.append("🔷 Gemini")
         if has_groq: available_providers.append("🟢 Groq")
-        if has_hf: available_providers.append("🤗 HuggingFace")
         if has_or: available_providers.append("🟠 OpenRouter")
         if has_claude: available_providers.append("🔵 Claude")
+        if has_hf: available_providers.append("🤗 HuggingFace")
         sel_provider = st.radio("🤖 المحرك:", available_providers, horizontal=True, key="provider_sel")
-        if "Groq" in sel_provider: st.session_state.ai_provider = 'groq'
+        if "Gemini" in sel_provider: st.session_state.ai_provider = 'gemini'
+        elif "Groq" in sel_provider: st.session_state.ai_provider = 'groq'
         elif "HuggingFace" in sel_provider: st.session_state.ai_provider = 'huggingface'
         elif "OpenRouter" in sel_provider: st.session_state.ai_provider = 'openrouter'
         elif "Claude" in sel_provider: st.session_state.ai_provider = 'claude'
@@ -7792,11 +7914,11 @@ function stopSpeak(){{speechSynthesis.cancel()}}
         # ===== MODEL 1: Labor Law Consultant =====
         if page == "⚖️ مستشار القضايا العمالية":
             hdr("⚖️ مستشار القضايا العمالية بالذكاء الاصطناعي",
-                "مدعوم بنظام العمل السعودي + التأمينات + الضمان الصحي + قرارات وزارة الموارد البشرية")
+                "مدعوم بـ Google Gemini + بحث Google + نظام العمل السعودي + التأمينات + الضمان الصحي")
 
             st.markdown("""
             **المصادر المعتمدة:**
-            نظام العمل (245 مادة) | اللائحة التنفيذية | نظام التأمينات الاجتماعية (GOSI) | نظام الضمان الصحي (CCHI) | قرارات وزير الموارد البشرية
+            🔷 Google Gemini + بحث Google المباشر | نظام العمل (245 مادة) | اللائحة التنفيذية | GOSI | CCHI | قرارات وزارة الموارد البشرية
             """)
 
             # Chat history
@@ -7872,11 +7994,11 @@ function stopSpeak(){{speechSynthesis.cancel()}}
         # ===== MODEL 2: HR Expert =====
         elif page == "📚 مستشار الموارد البشرية":
             hdr("📚 مستشار الموارد البشرية بالذكاء الاصطناعي",
-                "مدعوم بمناهج PHRi + SHRM + CIPD + APTD + SPHR وأفضل الممارسات العالمية")
+                "مدعوم بـ Google Gemini + بحث Google + مناهج PHRi + SHRM + CIPD + APTD + SPHR")
 
             st.markdown("""
             **المناهج المعتمدة:**
-            PHRi (HRCI) | SHRM-SCP | CIPD Level 7 | APTD (ATD) | aPHRi | SPHR | أفضل الممارسات العالمية
+            🔷 Google Gemini + بحث Google المباشر | PHRi (HRCI) | SHRM-SCP | CIPD Level 7 | APTD | SPHR | أفضل الممارسات العالمية
             """)
 
             # Chat history
