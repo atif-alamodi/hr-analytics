@@ -286,17 +286,22 @@ class ModelOrchestrator:
 
 # ==================== 2. KNOWLEDGE ENGINE (Semantic RAG) ====================
 class KnowledgeEngine:
-    """Enterprise RAG with TF-IDF vectorization, versioning, and governance.
-    Upgrades keyword search to proper vector-based semantic retrieval."""
+    """Enterprise RAG with per-advisor vector indices and full semantic search."""
 
     def __init__(self):
         self._vectorizer = None
         self._vectors = None
+        self._cosine = None
         self._chunks = []
         self._loaded = False
+        self._legal_vect = None
+        self._legal_vectors = None
+        self._legal_chunks = []
+        self._hr_vect = None
+        self._hr_vectors = None
+        self._hr_chunks = []
 
     def _ensure_vectorizer(self):
-        """Lazy-load TF-IDF vectorizer."""
         if self._vectorizer is None:
             try:
                 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -307,7 +312,6 @@ class KnowledgeEngine:
                 self._vectorizer = "unavailable"
 
     def load_from_db(self):
-        """Load chunks from database and build vector index."""
         if self._loaded: return
         self._loaded = True
         try:
@@ -316,59 +320,75 @@ class KnowledgeEngine:
             row = c.fetchone(); conn.close()
             if row:
                 self._chunks = json.loads(row[0])
-                self._build_index()
+                self._legal_chunks = [ch for ch in self._chunks if ch.get('advisor_type','') == 'legal' or ch.get('type','') == 'legal']
+                self._hr_chunks = [ch for ch in self._chunks if ch.get('advisor_type','') == 'hr' or ch.get('type','') == 'hr']
+                self._build_all_indices()
         except: pass
 
-    def _build_index(self):
-        """Build TF-IDF vector index from chunks."""
-        if not self._chunks: return
+    def _build_all_indices(self):
+        """Build separate persistent vector indices for legal and HR."""
         self._ensure_vectorizer()
         if self._vectorizer == "unavailable": return
         try:
-            texts = [ch.get('text','') for ch in self._chunks if ch.get('text','').strip()]
-            if texts:
-                self._vectors = self._vectorizer.fit_transform(texts)
+            from sklearn.feature_extraction.text import TfidfVectorizer
+            from sklearn.metrics.pairwise import cosine_similarity
+            self._cosine = cosine_similarity
+            legal_texts = [ch.get('text','') for ch in self._legal_chunks if ch.get('text','').strip()]
+            if legal_texts:
+                self._legal_vect = TfidfVectorizer(max_features=5000, ngram_range=(1,2))
+                self._legal_vectors = self._legal_vect.fit_transform(legal_texts)
+            hr_texts = [ch.get('text','') for ch in self._hr_chunks if ch.get('text','').strip()]
+            if hr_texts:
+                self._hr_vect = TfidfVectorizer(max_features=5000, ngram_range=(1,2))
+                self._hr_vectors = self._hr_vect.fit_transform(hr_texts)
+            all_texts = [ch.get('text','') for ch in self._chunks if ch.get('text','').strip()]
+            if all_texts:
+                self._vectors = self._vectorizer.fit_transform(all_texts)
         except: pass
 
+    def _build_index(self):
+        self._build_all_indices()
+
     def search(self, query, top_k=5, advisor_type=None):
-        """Semantic search filtered by advisor_type (legal/hr)."""
+        """Full vector search using pre-built per-advisor index."""
         self.load_from_db()
         if not self._chunks: return ""
 
-        # Filter chunks by advisor_type BEFORE scoring
-        if advisor_type:
-            chunks_to_search = [ch for ch in self._chunks if ch.get('type','') == advisor_type or ch.get('advisor_type','') == advisor_type]
+        # Select pre-built index per advisor
+        if advisor_type == "legal" and self._legal_vectors is not None:
+            chunks = self._legal_chunks; vectors = self._legal_vectors; vect = self._legal_vect
+        elif advisor_type == "hr" and self._hr_vectors is not None:
+            chunks = self._hr_chunks; vectors = self._hr_vectors; vect = self._hr_vect
+        elif self._vectors is not None:
+            chunks = self._chunks; vectors = self._vectors; vect = self._vectorizer
         else:
-            chunks_to_search = self._chunks
+            chunks = self._chunks; vectors = None; vect = None
 
-        if not chunks_to_search: return ""
+        if not chunks: return ""
 
-        # Try vector search on filtered chunks
-        if self._vectors is not None and self._vectorizer not in [None, "unavailable"] and not advisor_type:
+        # Vector search (primary)
+        if vectors is not None and vect is not None and self._cosine is not None:
             try:
-                query_vec = self._vectorizer.transform([query])
-                scores = self._cosine(query_vec, self._vectors).flatten()
+                valid_chunks = [ch for ch in chunks if ch.get('text','').strip()]
+                query_vec = vect.transform([query])
+                scores = self._cosine(query_vec, vectors).flatten()
                 top_indices = scores.argsort()[-top_k:][::-1]
                 results = []
                 for idx in top_indices:
-                    if scores[idx] > 0.05:
-                        ch = self._chunks[idx]
-                        if advisor_type and ch.get('type','') != advisor_type and ch.get('advisor_type','') != advisor_type:
-                            continue
-                        results.append(f"[Source: {ch.get('source','')}]\n{ch['text']}")
+                    if idx < len(valid_chunks) and scores[idx] > 0.02:
+                        results.append(f"[{valid_chunks[idx].get('source','')}]\n{valid_chunks[idx]['text']}")
                 if results:
-                    return "\n\n---\n".join(results[:top_k])
+                    return "\n\n---\n".join(results)
             except: pass
 
-        # Keyword search on filtered chunks
+        # Keyword fallback (only if vector completely unavailable)
         query_words = set(query.lower().split())
         scored = []
-        for ch in chunks_to_search:
+        for ch in chunks:
             chunk_words = set(ch.get('text','').lower().split())
             match = len(query_words & chunk_words)
             if match > 0:
-                score = match / max(len(query_words), 1)
-                scored.append((score, ch))
+                scored.append((match / max(len(query_words),1), ch))
         scored.sort(key=lambda x: x[0], reverse=True)
         return "\n\n---\n".join([f"[{c[1].get('source','')}]\n{c[1]['text']}" for c in scored[:top_k]])
 
@@ -1595,24 +1615,26 @@ def _call_llm_with_reasoning(question, reasoning_prompt, req_lib):
         except: continue
     return None
 def get_best_kb_answer(question, system_prompt=None):
-    """ALL questions go through Reasoning Pipeline. Local KB only if APIs fail."""
+    """ALL questions go through Reasoning Pipeline. No shallow fallback."""
     consultant_type = "legal" if system_prompt and 'المستشار القانوني' in system_prompt else "hr"
 
-    # 1. REASONING PIPELINE (always first - rich analytical answers)
+    # REASONING PIPELINE ONLY (no smart_local_answer interception)
     answer = generate_advisor_answer(question, consultant_type, system_prompt)
     if answer and len(answer) > 30:
         auto_learn_from_answer(question, answer, consultant_type)
         return answer
 
-    # 2. EMERGENCY FALLBACK only if all APIs fail
-    if consultant_type == "legal":
-        answer = smart_local_answer(question, LABOR_KB)
-    else:
-        answer = smart_local_answer(question, HR_KB)
-    if answer: return answer
-
-    k_status = [f"{p}: {'Y' if st.session_state.get(f'{p}_api_key','') else 'N'}" for p in ['groq','gemini','openrouter']]
-    return f"**لم أتمكن من الاتصال**\n\n{' | '.join(k_status)}"
+    # If API failed, return diagnostic (NOT a shallow KB answer)
+    k_status = []
+    for p in ['groq','gemini','openrouter']:
+        has = bool(st.session_state.get(f'{p}_api_key',''))
+        k_status.append(f"{p}: {'✅' if has else '❌'}")
+    return (f"**لم يتمكن النظام من توليد إجابة تحليلية**\n\n"
+            f"المزودين: {' | '.join(k_status)}\n\n"
+            f"**الحلول:**\n"
+            f"1. تأكد من إضافة مفتاح Groq في الإعدادات\n"
+            f"2. أعد المحاولة بعد لحظات\n"
+            f"3. أعد صياغة السؤال بشكل أوضح")
 
 def auto_learn_from_answer(question, answer, consultant_type="legal"):
     """Save good AI answers and improve them over time."""
@@ -8357,26 +8379,11 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
 
             if submitted and labor_q:
                 st.session_state.labor_chat = []
-                answer = None
-                # Check instant answers
-                for k, v in INSTANT_ANSWERS.items():
-                    if labor_q.strip() == k or labor_q.strip().rstrip('؟?') == k.rstrip('؟?'):
-                        answer = v; break
-                # Check INSTANT buttons only (exact match)
-                if not answer:
-                    for k, v in INSTANT_ANSWERS.items():
-                        if k.rstrip('؟?') in labor_q or labor_q.rstrip('؟?') in k:
-                            answer = v; break
-                if answer:
-                    st.session_state.labor_chat = [{"role":"user","content":labor_q},{"role":"assistant","content":answer}]
+                with st.spinner("جاري التحليل القانوني..."):
+                    response = get_best_kb_answer(labor_q, LABOR_LAW_SYSTEM_PROMPT)
+                    auto_learn_from_answer(labor_q, response, "legal")
+                    st.session_state.labor_chat = [{"role":"user","content":labor_q},{"role":"assistant","content":response}]
                     st.rerun()
-                else:
-                    # Full Reasoning Pipeline
-                    with st.spinner("جاري التحليل القانوني..."):
-                        response = get_best_kb_answer(labor_q, LABOR_LAW_SYSTEM_PROMPT)
-                        auto_learn_from_answer(labor_q, response, "legal")
-                        st.session_state.labor_chat = [{"role":"user","content":labor_q},{"role":"assistant","content":response}]
-                        st.rerun()
 
             # Clear chat
             if st.session_state.labor_chat and st.button("🗑️ مسح المحادثة", key="labor_clear"):
@@ -8442,26 +8449,11 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
 
             if submitted and hr_q:
                 st.session_state.hr_chat = []
-                answer = None
-                # Check instant answers
-                for k, v in HR_INSTANT.items():
-                    if hr_q.strip() == k or hr_q.strip().rstrip('؟?') == k.rstrip('؟?'):
-                        answer = v; break
-                # Check INSTANT buttons only
-                if not answer:
-                    for k, v in HR_INSTANT.items():
-                        if k.rstrip('؟?') in hr_q or hr_q.rstrip('؟?') in k:
-                            answer = v; break
-                if answer:
-                    st.session_state.hr_chat = [{"role":"user","content":hr_q},{"role":"assistant","content":answer}]
+                with st.spinner("جاري التحليل المهني..."):
+                    response = get_best_kb_answer(hr_q, HR_EXPERT_SYSTEM_PROMPT)
+                    auto_learn_from_answer(hr_q, response, "hr")
+                    st.session_state.hr_chat = [{"role":"user","content":hr_q},{"role":"assistant","content":response}]
                     st.rerun()
-                else:
-                    # Full Reasoning Pipeline
-                    with st.spinner("جاري التحليل المهني..."):
-                        response = get_best_kb_answer(hr_q, HR_EXPERT_SYSTEM_PROMPT)
-                        auto_learn_from_answer(hr_q, response, "hr")
-                        st.session_state.hr_chat = [{"role":"user","content":hr_q},{"role":"assistant","content":response}]
-                        st.rerun()
 
             if st.session_state.hr_chat and st.button("🗑️ مسح المحادثة", key="hr_clear"):
                 st.session_state.hr_chat = []
