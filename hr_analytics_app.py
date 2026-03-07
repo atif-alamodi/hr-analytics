@@ -7558,7 +7558,14 @@ function stopSpeak(){{speechSynthesis.cancel()}}
             return st.session_state._learning_system.get_relevant_history(query, model_type, top_k)
 
         def call_ai_api(system_prompt, user_message, chat_history=None, model_type="general", provider=None):
-            return st.session_state._orchestrator.call(system_prompt, user_message, chat_history, model_type)
+            try:
+                if '_orchestrator' not in st.session_state:
+                    st.session_state._orchestrator = _init_orchestrator()
+                    st.session_state._knowledge_engine = _init_knowledge()
+                    st.session_state._learning_system = _init_learning()
+                return st.session_state._orchestrator.call(system_prompt, user_message, chat_history, model_type)
+            except Exception as e:
+                return None, f"⚠️ يرجى المحاولة مرة أخرى"
 
         def call_claude_api(system_prompt, user_message, chat_history=None, model_type="general"):
             return call_ai_api(system_prompt, user_message, chat_history, model_type)
@@ -7690,7 +7697,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                         st.session_state.labor_chat.append({"role": "assistant", "content": response})
                         st.rerun()
                     else:
-                        st.error(error)
+                        st.warning("⚠️ يرجى المحاولة مرة أخرى أو تحقق من إعدادات API في إدارة المستخدمين")
 
             # Clear chat
             if st.session_state.labor_chat and st.button("🗑️ مسح المحادثة", key="labor_clear"):
@@ -7748,7 +7755,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                         st.session_state.hr_chat.append({"role": "assistant", "content": response})
                         st.rerun()
                     else:
-                        st.error(error)
+                        st.warning("⚠️ يرجى المحاولة مرة أخرى أو تحقق من إعدادات API في إدارة المستخدمين")
 
             if st.session_state.hr_chat and st.button("🗑️ مسح المحادثة", key="hr_clear"):
                 st.session_state.hr_chat = []
