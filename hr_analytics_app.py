@@ -29,7 +29,7 @@ class ModelOrchestrator:
     MODELS = {
         'claude': {'url':'https://api.anthropic.com/v1/messages','model':'claude-3-5-sonnet-20241022','max_tokens':4000},
         'groq': {'url':'https://api.groq.com/openai/v1/chat/completions','model':'llama-3.3-70b-versatile','max_tokens':4000},
-        'openrouter': {'url':'https://openrouter.ai/api/v1/chat/completions','model':'meta-llama/llama-3.3-70b-instruct:free','max_tokens':4000},
+        'openrouter': {'url':'https://openrouter.ai/api/v1/chat/completions','model':'meta-llama/llama-3.3-70b-instruct:free','max_tokens':2000},
     }
 
     # Prompt Templates (editable registry)
@@ -38,6 +38,9 @@ class ModelOrchestrator:
         'hr_expert': 'hr_system_prompt',
         'general': 'You are a helpful HR assistant. Answer in the same language as the question.',
     }
+
+    # Context size limits per provider
+    CONTEXT_LIMITS = {'claude': 15000, 'groq': 12000, 'openrouter': 6000}
 
     def __init__(self):
         self._cache = {}
@@ -67,9 +70,10 @@ class ModelOrchestrator:
             if k: return p
         return None
 
-    def build_context(self, system_prompt, user_message, model_type='general'):
+    def build_context(self, system_prompt, user_message, model_type='general', provider='claude'):
         """Assemble full context: system prompt + RAG + learned + legal docs."""
-        enhanced = system_prompt
+        max_ctx = self.CONTEXT_LIMITS.get(provider, 8000)
+        enhanced = system_prompt[:max_ctx // 2]  # Reserve half for added context
 
         # Layer 1: RAG Knowledge Base
         if hasattr(st.session_state, '_knowledge_engine'):
@@ -89,8 +93,8 @@ class ModelOrchestrator:
             enhanced += f"\n\n**LEGAL REFERENCES:**\n{legal_ctx[:6000]}"
 
         # Truncate if needed
-        if len(enhanced) > 15000:
-            enhanced = enhanced[:15000] + "\n[Context truncated for length]"
+        if len(enhanced) > max_ctx:
+            enhanced = enhanced[:max_ctx] + "\n[Context truncated]"
 
         return enhanced
 
@@ -109,8 +113,8 @@ class ModelOrchestrator:
         if not provider:
             return None, "يرجى إدخال API Key (Groq مجاني أو Claude)"
 
-        # Build enhanced context
-        enhanced_prompt = self.build_context(system_prompt, user_message, model_type)
+        # Build enhanced context (size depends on provider)
+        enhanced_prompt = self.build_context(system_prompt, user_message, model_type, provider)
 
         # Build messages
         messages = []
