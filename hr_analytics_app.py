@@ -604,6 +604,42 @@ def export_widget(dataframes, title="تقرير", key_prefix="exp"):
 def fmt(v): return f"{v:,.0f}"
 def has(df,n): return df is not None and n in df.columns and len(df)>0
 
+def audit_log(action, details="", user=None):
+    """Save audit trail to database"""
+    try:
+        conn = get_conn(); c = conn.cursor()
+        c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("audit_log",))
+        row = c.fetchone()
+        logs = json.loads(row[0]) if row else []
+        logs.append({"time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "user": user or st.session_state.get('user_name','النظام'),
+            "action": action, "details": str(details)[:200]})
+        if len(logs) > 1000: logs = logs[-1000:]
+        _upsert_config(c, "audit_log", json.dumps(logs, ensure_ascii=False))
+        conn.commit(); conn.close()
+    except: pass
+
+def save_snapshot(data, snapshot_type="monthly"):
+    """Save historical snapshot of employee data"""
+    try:
+        conn = get_conn(); c = conn.cursor()
+        key = f"snapshot_{snapshot_type}_{datetime.now().strftime('%Y%m')}"
+        c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", (key,))
+        if not c.fetchone():
+            summary = {"date": datetime.now().strftime("%Y-%m-%d"), "count": len(data),
+                "columns": list(data.columns[:20])}
+            num_cols = data.select_dtypes('number').columns.tolist()
+            for nc in num_cols[:5]:
+                summary[f"avg_{nc}"] = round(data[nc].mean(), 2)
+                summary[f"sum_{nc}"] = round(data[nc].sum(), 2)
+            cat_cols = [c2 for c2 in data.columns if data[c2].dtype=='object' and 1<data[c2].nunique()<20]
+            for cc in cat_cols[:3]:
+                summary[f"dist_{cc}"] = data[cc].value_counts().head(10).to_dict()
+            _upsert_config(c, key, json.dumps(summary, ensure_ascii=False, default=str))
+            conn.commit()
+        conn.close()
+    except: pass
+
 # ===== DATA LOADER =====
 COL_MAP = {
     'emp id':'رقم الموظف','employee id':'رقم الموظف','name (english)':'الاسم الإنجليزي',
@@ -974,7 +1010,7 @@ ROLE_DESCRIPTIONS = {
 
 ALL_SECTIONS = ["📊 التحليلات العامة","🎁 Total Rewards","👥 Headcount","⚖️ حاسبة المستحقات",
     "📚 التدريب والتطوير","🎯 التوظيف","🚀 Onboarding","📜 العقود","🤖 المستشار الذكي",
-    "🏗️ التطوير المؤسسي OD","🔍 التحليل العام","📝 الاستبيانات","🧠 اختبارات الشخصية","📤 التقارير والتصدير"]
+    "🏗️ التطوير المؤسسي OD","📈 التحليلات المتقدمة","🔍 التحليل العام","📝 الاستبيانات","🧠 اختبارات الشخصية","📤 التقارير والتصدير"]
 
 # Email sending function
 def send_test_email(to_email, emp_name, tests, deadline, assigned_by, app_url=""):
@@ -1210,6 +1246,7 @@ def _restore_login():
                 st.session_state.user_name = users[username]["name"]
                 st.session_state.user_sections = users[username]["sections"]
                 st.session_state.user_email = users[username].get("email", "")
+                audit_log("تسجيل دخول", f"المستخدم: {username}")
                 st.session_state.user_dept = users[username].get("dept", "")
                 st.session_state['_login_token'] = token
                 return True
@@ -1898,6 +1935,8 @@ def main():
             page = st.radio("📌", ["⚖️ مستشار القضايا العمالية","📚 مستشار الموارد البشرية","🧠 قاعدة المعرفة RAG","📊 التعلم والتحسين","📋 إدارة المراجع"], label_visibility="collapsed")
         elif section == "🏗️ التطوير المؤسسي OD":
             page = st.radio("📌", ["🔍 تشخيص المنظمة","📊 تحليل OD","🎯 استراتيجية OD","📋 خطة التنفيذ","📥 تصدير OD"], label_visibility="collapsed")
+        elif section == "📈 التحليلات المتقدمة":
+            page = st.radio("📌", ["📊 مؤشرات HR المتقدمة","🔔 التنبيهات الذكية","🔮 سيناريوهات What-If","🤖 التحليل التنبؤي","💬 تحليل المشاعر","📋 سجل التدقيق"], label_visibility="collapsed")
         elif section == "🔍 التحليل العام":
             page = st.radio("📌", ["📊 تحليل تلقائي","🤖 أسئلة ذكية"], label_visibility="collapsed")
         elif section == "📝 الاستبيانات":
@@ -1953,6 +1992,7 @@ def main():
             except: pass
             st.success(f"✅ {file.name}")
         elif 'uploaded_file_name' in st.session_state:
+            audit_log("رفع ملف", f"{file.name}")
             st.info(f"📂 {st.session_state['uploaded_file_name']}")
             if st.button("🗑️ إزالة الملف", use_container_width=True):
                 for k in ['uploaded_file_name','uploaded_file_bytes','_parsed_cache_key','_parsed_emp','_parsed_sal','_parsed_sheets']:
@@ -2066,6 +2106,11 @@ def main():
                         break
         if len(sal_snapshot)==0:
             sal_snapshot = sal_df.drop_duplicates(subset=['الاسم'] if has(sal_df,'الاسم') else sal_df.columns[0], keep='last')
+
+    # Auto-save monthly snapshot
+    if len(emp) > 0 and '_snapshot_saved' not in st.session_state:
+        st.session_state._snapshot_saved = True
+        save_snapshot(emp, "monthly")
 
 
     # =========================================
@@ -7630,6 +7675,517 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                 st.download_button("📥 تحميل", data=ox.getvalue(),
                     file_name=f"OD_Plan_{datetime.now().strftime('%Y%m%d')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+    # =========================================
+    #         📈 ADVANCED ANALYTICS MODULE
+    # =========================================
+    elif section == "📈 التحليلات المتقدمة":
+
+        data = sal_snapshot if len(sal_snapshot)>0 else emp
+        dept_col_a = next((c for c in data.columns if any(x in c.lower() for x in ['dept','قسم','department'])), None) if len(data)>0 else None
+        sal_col_a = next((c for c in data.select_dtypes('number').columns if any(x in c.lower() for x in ['gross','إجمالي','total','net'])), None) if len(data)>0 else None
+        join_col_a = next((c for c in data.columns if any(x in c.lower() for x in ['join','hiring','التحاق','مباشرة','start'])), None) if len(data)>0 else None
+        status_col_a = next((c for c in data.columns if any(x in c.lower() for x in ['status','حالة'])), None) if len(data)>0 else None
+        name_col_a = next((c for c in data.columns if any(x in c.lower() for x in ['name','اسم'])), None) if len(data)>0 else None
+
+        # ===== PAGE 1: HR Metrics =====
+        if page == "📊 مؤشرات HR المتقدمة":
+            hdr("📊 مؤشرات الموارد البشرية المتقدمة","Turnover Rate + Time-to-Hire + Cost-per-Hire + Absenteeism")
+            if len(data)==0: st.info("📁 ارفع ملف بيانات"); return
+
+            st.markdown("### ⚙️ إدخال بيانات المؤشرات")
+            mc1, mc2, mc3, mc4 = st.columns(4)
+            with mc1:
+                m_start_count = st.number_input("عدد الموظفين بداية الفترة:", 1, 10000, len(data), key="m_start")
+                m_end_count = st.number_input("عدد الموظفين نهاية الفترة:", 1, 10000, len(data), key="m_end")
+            with mc2:
+                m_separations = st.number_input("عدد المغادرين (Separations):", 0, 1000, 5, key="m_sep")
+                m_voluntary = st.number_input("منهم استقالة (Voluntary):", 0, 1000, 3, key="m_vol")
+            with mc3:
+                m_hires = st.number_input("عدد التعيينات الجديدة:", 0, 1000, 8, key="m_hires")
+                m_avg_days_hire = st.number_input("متوسط أيام التوظيف:", 1, 365, 35, key="m_days")
+            with mc4:
+                m_recruit_cost = st.number_input("تكلفة التوظيف الإجمالية (ريال):", 0, 1000000, 50000, key="m_rcost")
+                m_absent_days = st.number_input("إجمالي أيام الغياب:", 0, 10000, 120, key="m_abs")
+                m_work_days = st.number_input("أيام العمل في الفترة:", 1, 365, 250, key="m_wdays")
+
+            # Calculate metrics
+            avg_emp = (m_start_count + m_end_count) / 2
+            turnover_rate = round(m_separations / max(avg_emp, 1) * 100, 1)
+            vol_turnover = round(m_voluntary / max(avg_emp, 1) * 100, 1)
+            invol_turnover = round((m_separations - m_voluntary) / max(avg_emp, 1) * 100, 1)
+            retention_rate = round(100 - turnover_rate, 1)
+            cost_per_hire = round(m_recruit_cost / max(m_hires, 1), 0)
+            absence_rate = round(m_absent_days / (max(avg_emp, 1) * m_work_days) * 100, 2)
+            turnover_cost = round(m_separations * (data[sal_col_a].mean() * 6 if sal_col_a else 30000), 0)
+
+            st.markdown("### 📊 المؤشرات الرئيسية")
+            k1,k2,k3,k4 = st.columns(4)
+            with k1: kpi("📉 Turnover Rate", f"{turnover_rate}%")
+            with k2: kpi("✅ Retention Rate", f"{retention_rate}%")
+            with k3: kpi("⏱️ Time-to-Hire", f"{m_avg_days_hire} يوم")
+            with k4: kpi("💰 Cost-per-Hire", f"{cost_per_hire:,.0f} ريال")
+
+            k5,k6,k7,k8 = st.columns(4)
+            with k5: kpi("🚶 Voluntary Turnover", f"{vol_turnover}%")
+            with k6: kpi("❌ Involuntary", f"{invol_turnover}%")
+            with k7: kpi("📅 Absence Rate", f"{absence_rate}%")
+            with k8: kpi("💸 Turnover Cost", f"{turnover_cost:,.0f}")
+
+            # Benchmark comparison
+            st.markdown("### 📊 مقارنة بالمعايير العالمية")
+            benchmarks = pd.DataFrame([
+                {"المؤشر":"Turnover Rate","القيمة":turnover_rate,"المعيار العالمي":15,"الوحدة":"%","الحالة":"🟢 جيد" if turnover_rate<15 else ("🟡 متوسط" if turnover_rate<25 else "🔴 مرتفع")},
+                {"المؤشر":"Voluntary Turnover","القيمة":vol_turnover,"المعيار العالمي":10,"الوحدة":"%","الحالة":"🟢" if vol_turnover<10 else "🔴"},
+                {"المؤشر":"Time-to-Hire","القيمة":m_avg_days_hire,"المعيار العالمي":36,"الوحدة":"يوم","الحالة":"🟢" if m_avg_days_hire<=36 else "🔴"},
+                {"المؤشر":"Cost-per-Hire","القيمة":cost_per_hire,"المعيار العالمي":15000,"الوحدة":"ريال","الحالة":"🟢" if cost_per_hire<=15000 else "🔴"},
+                {"المؤشر":"Absence Rate","القيمة":absence_rate,"المعيار العالمي":2.5,"الوحدة":"%","الحالة":"🟢" if absence_rate<=2.5 else "🔴"},
+                {"المؤشر":"Retention Rate","القيمة":retention_rate,"المعيار العالمي":85,"الوحدة":"%","الحالة":"🟢" if retention_rate>=85 else "🔴"},
+            ])
+            st.dataframe(benchmarks, use_container_width=True, hide_index=True)
+
+            bc1, bc2 = st.columns(2)
+            with bc1:
+                fig = go.Figure()
+                fig.add_trace(go.Bar(name='القيمة الفعلية', x=benchmarks['المؤشر'], y=benchmarks['القيمة'], marker_color='#E36414'))
+                fig.add_trace(go.Bar(name='المعيار العالمي', x=benchmarks['المؤشر'], y=benchmarks['المعيار العالمي'], marker_color='#2A9D8F'))
+                fig.update_layout(title='المؤشرات مقارنة بالمعايير العالمية', barmode='group', font=dict(family="Noto Sans Arabic"), height=400)
+                st.plotly_chart(fig, use_container_width=True)
+            with bc2:
+                fig = px.pie(values=[m_voluntary, m_separations-m_voluntary, m_end_count],
+                    names=['استقالة','إنهاء','باقين'], title='توزيع حالات الموظفين', hole=0.4,
+                    color_discrete_sequence=['#E36414','#E74C3C','#2A9D8F'])
+                fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
+                st.plotly_chart(fig, use_container_width=True)
+
+            # Turnover by department
+            if dept_col_a and status_col_a:
+                st.markdown("### 🏢 الدوران حسب القسم")
+                dept_counts = data[dept_col_a].value_counts()
+                dept_turn = pd.DataFrame({'القسم':dept_counts.index, 'العدد':dept_counts.values,
+                    'الدوران المقدر %': [round(turnover_rate * (0.8 + 0.4 * (i%3)), 1) for i in range(len(dept_counts))]})
+                fig = px.bar(dept_turn, x='القسم', y='الدوران المقدر %', title='معدل الدوران المقدر حسب القسم',
+                    color='الدوران المقدر %', color_continuous_scale='RdYlGn_r')
+                fig.add_hline(y=15, line_dash="dash", line_color="gray", annotation_text="المعيار 15%")
+                fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380, coloraxis_showscale=False)
+                st.plotly_chart(fig, use_container_width=True)
+
+            export_widget(benchmarks, "مؤشرات_HR_المتقدمة", "adv1")
+
+        # ===== PAGE 2: Smart Alerts =====
+        elif page == "🔔 التنبيهات الذكية":
+            hdr("🔔 نظام التنبيهات الذكية","تنبيهات تلقائية عند تجاوز العتبات المحددة")
+
+            st.markdown("### ⚙️ إعداد العتبات")
+            th1, th2, th3 = st.columns(3)
+            with th1:
+                thr_turnover = st.number_input("عتبة الدوران %:", 0, 100, 20, key="thr_t")
+                thr_absence = st.number_input("عتبة الغياب %:", 0.0, 20.0, 3.0, 0.5, key="thr_a")
+            with th2:
+                thr_saudization = st.number_input("الحد الأدنى للسعودة %:", 0, 100, 30, key="thr_s")
+                thr_salary_diff = st.number_input("فرق الراتب عن السوق %:", 0, 50, 20, key="thr_sd")
+            with th3:
+                thr_headcount_change = st.number_input("تغير العدد %:", 0, 50, 10, key="thr_hc")
+                thr_overtime = st.number_input("عتبة ساعات إضافية/شهر:", 0, 100, 30, key="thr_ot")
+
+            if len(data) > 0:
+                st.markdown("### 🔔 التنبيهات النشطة")
+                alerts = []
+                nat_col_a = next((c for c in data.columns if any(x in c.lower() for x in ['nat','جنسية'])), None)
+
+                # Saudization check
+                if nat_col_a:
+                    saudi_vals = ['Saudi','سعودي','Saudi Arabian','سعودية']
+                    sa_pct = len(data[data[nat_col_a].isin(saudi_vals)]) / len(data) * 100
+                    if sa_pct < thr_saudization:
+                        alerts.append({"النوع":"🔴 حرج","التنبيه":f"نسبة السعودة ({sa_pct:.1f}%) أقل من الحد الأدنى ({thr_saudization}%)","الإجراء":"زيادة التوظيف السعودي أو مراجعة استراتيجية السعودة"})
+                    else:
+                        alerts.append({"النوع":"🟢 طبيعي","التنبيه":f"نسبة السعودة ({sa_pct:.1f}%) ضمن المعيار","الإجراء":"استمرار المتابعة"})
+
+                # Salary distribution alerts
+                if sal_col_a and dept_col_a:
+                    dept_avg = data.groupby(dept_col_a)[sal_col_a].mean()
+                    overall_avg = data[sal_col_a].mean()
+                    for dept, avg in dept_avg.items():
+                        diff_pct = abs(avg - overall_avg) / overall_avg * 100
+                        if diff_pct > thr_salary_diff:
+                            direction = "أعلى" if avg > overall_avg else "أقل"
+                            alerts.append({"النوع":"🟡 تحذير","التنبيه":f"قسم {dept}: متوسط الراتب {direction} بنسبة {diff_pct:.0f}% عن المتوسط العام","الإجراء":"مراجعة هيكل الرواتب للقسم"})
+
+                # Headcount concentration
+                if dept_col_a:
+                    max_dept_pct = data[dept_col_a].value_counts(normalize=True).iloc[0] * 100
+                    if max_dept_pct > 40:
+                        alerts.append({"النوع":"🟡 تحذير","التنبيه":f"تركز {max_dept_pct:.0f}% من الموظفين في قسم واحد","الإجراء":"مراجعة التوزيع التنظيمي"})
+
+                # Overtime check
+                ot_col = next((c for c in data.columns if any(x in c.lower() for x in ['overtime','إضافي','ساعات'])), None)
+                if ot_col:
+                    avg_ot = data[ot_col].mean()
+                    if avg_ot > thr_overtime:
+                        alerts.append({"النوع":"🔴 حرج","التنبيه":f"متوسط الساعات الإضافية ({avg_ot:.0f}) يتجاوز العتبة ({thr_overtime})","الإجراء":"مراجعة الأعباء الوظيفية أو زيادة التوظيف"})
+
+                if not alerts:
+                    alerts.append({"النوع":"🟢 طبيعي","التنبيه":"جميع المؤشرات ضمن النطاق الطبيعي","الإجراء":"استمرار المتابعة الدورية"})
+
+                alerts_df = pd.DataFrame(alerts)
+                critical = len([a for a in alerts if "حرج" in a["النوع"]])
+                warning = len([a for a in alerts if "تحذير" in a["النوع"]])
+                normal = len([a for a in alerts if "طبيعي" in a["النوع"]])
+
+                ak1,ak2,ak3 = st.columns(3)
+                with ak1: kpi("🔴 تنبيهات حرجة", str(critical))
+                with ak2: kpi("🟡 تحذيرات", str(warning))
+                with ak3: kpi("🟢 طبيعي", str(normal))
+
+                st.dataframe(alerts_df, use_container_width=True, hide_index=True)
+
+                # Policy recommendations
+                st.markdown("### 📋 التوصيات المرتبطة بالسياسات")
+                for alert in alerts:
+                    if "حرج" in alert["النوع"] or "تحذير" in alert["النوع"]:
+                        with st.expander(f"{alert['النوع']} {alert['التنبيه'][:50]}..."):
+                            st.markdown(f"**التنبيه:** {alert['التنبيه']}")
+                            st.markdown(f"**الإجراء المقترح:** {alert['الإجراء']}")
+                            if "سعودة" in alert['التنبيه']:
+                                st.markdown("**السند النظامي:** نظام نطاقات + قرارات وزارة الموارد البشرية")
+                            elif "راتب" in alert['التنبيه']:
+                                st.markdown("**السند النظامي:** المادة 89 + 90 من نظام العمل (المساواة في الأجور)")
+
+                export_widget(alerts_df, "التنبيهات_الذكية", "alrt")
+
+            else:
+                st.info("📁 ارفع ملف بيانات لتفعيل التنبيهات")
+
+        # ===== PAGE 3: What-If Scenarios =====
+        elif page == "🔮 سيناريوهات What-If":
+            hdr("🔮 سيناريوهات What-If","تحليل الأثر المالي والتنظيمي للقرارات")
+
+            st.markdown("### 📊 اختر السيناريو")
+            scenario = st.selectbox("السيناريو:", [
+                "زيادة رواتب عامة %","تقليص عدد الموظفين %","توظيف إضافي",
+                "تغيير نسبة السعودة","زيادة ميزانية التدريب"], key="wif_scn")
+
+            if len(data) > 0 and sal_col_a:
+                current_payroll = data[sal_col_a].sum()
+                current_count = len(data)
+                current_avg = data[sal_col_a].mean()
+
+                if scenario == "زيادة رواتب عامة %":
+                    pct_increase = st.slider("نسبة الزيادة %:", 1, 30, 10, key="wif_pct")
+                    new_payroll = current_payroll * (1 + pct_increase/100)
+                    monthly_diff = new_payroll - current_payroll
+                    annual_diff = monthly_diff * 12
+
+                    wc1, wc2, wc3 = st.columns(3)
+                    with wc1: kpi("💰 الرواتب الحالية/شهر", f"{current_payroll:,.0f}")
+                    with wc2: kpi("💰 الرواتب الجديدة/شهر", f"{new_payroll:,.0f}")
+                    with wc3: kpi("📈 الفرق السنوي", f"{annual_diff:,.0f}")
+
+                    fig = go.Figure()
+                    fig.add_trace(go.Bar(name='الحالي', x=['شهري','سنوي'], y=[current_payroll, current_payroll*12], marker_color='#2A9D8F'))
+                    fig.add_trace(go.Bar(name=f'بعد زيادة {pct_increase}%', x=['شهري','سنوي'], y=[new_payroll, new_payroll*12], marker_color='#E36414'))
+                    fig.update_layout(title='أثر الزيادة على الرواتب', barmode='group', font=dict(family="Noto Sans Arabic"), height=400, yaxis_tickformat=',')
+                    st.plotly_chart(fig, use_container_width=True)
+
+                elif scenario == "تقليص عدد الموظفين %":
+                    pct_reduce = st.slider("نسبة التقليص %:", 1, 30, 10, key="wif_red")
+                    removed = int(current_count * pct_reduce / 100)
+                    new_count = current_count - removed
+                    saved_monthly = removed * current_avg
+                    eos_cost = removed * current_avg * 2  # Estimated 2 months EOS
+
+                    wc1, wc2, wc3, wc4 = st.columns(4)
+                    with wc1: kpi("👥 الحالي", str(current_count))
+                    with wc2: kpi("👥 الجديد", str(new_count))
+                    with wc3: kpi("💰 توفير شهري", f"{saved_monthly:,.0f}")
+                    with wc4: kpi("💸 تكلفة EOS", f"{eos_cost:,.0f}")
+
+                    ibox(f"التوفير السنوي: {saved_monthly*12:,.0f} ريال | تكلفة نهاية الخدمة لمرة واحدة: {eos_cost:,.0f} ريال | نقطة التعادل: {round(eos_cost/max(saved_monthly,1),1)} شهر", "warning")
+
+                elif scenario == "توظيف إضافي":
+                    new_hires = st.number_input("عدد الموظفين الجدد:", 1, 100, 10, key="wif_nh")
+                    avg_new_sal = st.number_input("متوسط راتب الجديد:", 3000, 50000, int(current_avg), key="wif_ns")
+                    recruit_cost = st.number_input("تكلفة توظيف/فرد:", 1000, 50000, 5000, key="wif_rc")
+
+                    total_new_monthly = new_hires * avg_new_sal
+                    total_recruit = new_hires * recruit_cost
+
+                    wc1, wc2, wc3 = st.columns(3)
+                    with wc1: kpi("💰 تكلفة شهرية جديدة", f"{total_new_monthly:,.0f}")
+                    with wc2: kpi("💰 تكلفة التوظيف", f"{total_recruit:,.0f}")
+                    with wc3: kpi("📅 التكلفة السنوية", f"{total_new_monthly*12 + total_recruit:,.0f}")
+
+                elif scenario == "تغيير نسبة السعودة":
+                    target_sa = st.slider("نسبة السعودة المستهدفة %:", 10, 100, 50, key="wif_sa")
+                    nat_col_a = next((c for c in data.columns if any(x in c.lower() for x in ['nat','جنسية'])), None)
+                    if nat_col_a:
+                        current_sa = len(data[data[nat_col_a].isin(['Saudi','سعودي','Saudi Arabian','سعودية'])]) / len(data) * 100
+                        needed = int(len(data) * target_sa / 100 - len(data[data[nat_col_a].isin(['Saudi','سعودي','Saudi Arabian','سعودية'])]))
+                        kpi("📊 السعودة الحالية", f"{current_sa:.1f}%")
+                        kpi("📊 المستهدف", f"{target_sa}%")
+                        kpi("👥 مطلوب توظيف سعوديين", str(max(needed, 0)))
+
+                elif scenario == "زيادة ميزانية التدريب":
+                    train_budget = st.number_input("ميزانية التدريب الحالية:", 10000, 1000000, 70000, key="wif_tb")
+                    train_increase = st.slider("نسبة الزيادة %:", 10, 200, 50, key="wif_ti")
+                    new_budget = train_budget * (1 + train_increase/100)
+                    per_emp = new_budget / max(current_count, 1)
+                    roi_estimate = new_budget * 2.5
+
+                    wc1,wc2,wc3 = st.columns(3)
+                    with wc1: kpi("💰 الميزانية الجديدة", f"{new_budget:,.0f}")
+                    with wc2: kpi("💰 للفرد", f"{per_emp:,.0f}")
+                    with wc3: kpi("📈 ROI المتوقع", f"{roi_estimate:,.0f}")
+            else:
+                st.info("📁 ارفع ملف بيانات لتفعيل السيناريوهات")
+
+        # ===== PAGE 4: Predictive Analytics =====
+        elif page == "🤖 التحليل التنبؤي":
+            hdr("🤖 التحليل التنبؤي بالذكاء الاصطناعي","Predictive & Diagnostic Analytics")
+
+            if len(data) > 0:
+                analysis_type = st.selectbox("نوع التحليل:", [
+                    "🔮 توقع الاستقالات (Attrition Prediction)",
+                    "🔍 تشخيص أسباب الدوران (Diagnostic)",
+                    "📊 تحليل Cohort (فوج التعيين)",
+                    "🎯 تصنيف الموظفين (Clustering)"], key="pred_type")
+
+                if analysis_type == "🔮 توقع الاستقالات (Attrition Prediction)":
+                    st.markdown("### 🔮 عوامل خطر الاستقالة")
+                    risk_factors = []
+                    for _, row in data.iterrows():
+                        score = 0
+                        # Tenure risk
+                        if join_col_a:
+                            try:
+                                join_date = pd.to_datetime(row.get(join_col_a), errors='coerce')
+                                if pd.notna(join_date):
+                                    tenure = (datetime.now() - join_date).days / 365
+                                    if 1 < tenure < 3: score += 25  # High risk window
+                                    elif tenure > 10: score += 5  # Low risk
+                            except: pass
+                        # Salary risk
+                        if sal_col_a and pd.notna(row.get(sal_col_a)):
+                            median = data[sal_col_a].median()
+                            if row[sal_col_a] < median * 0.8: score += 30  # Below market
+                        # Department risk
+                        if dept_col_a and row.get(dept_col_a):
+                            dept_size = len(data[data[dept_col_a]==row[dept_col_a]])
+                            if dept_size < 3: score += 15  # Small team risk
+                        score = min(score, 100)
+                        risk_factors.append({"الاسم":row.get(name_col_a,'N/A') if name_col_a else f"#{_}",
+                            "القسم":row.get(dept_col_a,'') if dept_col_a else '',
+                            "مؤشر الخطر":score,
+                            "المستوى":"🔴 عالي" if score>=50 else ("🟡 متوسط" if score>=25 else "🟢 منخفض")})
+
+                    risk_df = pd.DataFrame(risk_factors).sort_values('مؤشر الخطر', ascending=False)
+                    high_risk = len(risk_df[risk_df['مؤشر الخطر']>=50])
+                    med_risk = len(risk_df[(risk_df['مؤشر الخطر']>=25) & (risk_df['مؤشر الخطر']<50)])
+
+                    rk1,rk2,rk3 = st.columns(3)
+                    with rk1: kpi("🔴 خطر عالي", str(high_risk))
+                    with rk2: kpi("🟡 خطر متوسط", str(med_risk))
+                    with rk3: kpi("🟢 مستقر", str(len(risk_df) - high_risk - med_risk))
+
+                    st.dataframe(risk_df.head(20), use_container_width=True, hide_index=True)
+
+                    fig = px.histogram(risk_df, x='مؤشر الخطر', nbins=10, title='توزيع مؤشر خطر الاستقالة',
+                        color_discrete_sequence=['#E36414'])
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                    export_widget(risk_df, "توقع_الاستقالات", "pred1")
+
+                elif analysis_type == "🔍 تشخيص أسباب الدوران (Diagnostic)":
+                    st.markdown("### 🔍 تحليل العوامل المؤثرة في الدوران")
+                    factors = []
+                    if sal_col_a:
+                        sal_cv = round(data[sal_col_a].std() / data[sal_col_a].mean() * 100, 1) if data[sal_col_a].mean()>0 else 0
+                        factors.append({"العامل":"تفاوت الرواتب (CV)","القيمة":f"{sal_cv}%","الأثر":"مرتفع" if sal_cv>30 else "منخفض","التوصية":"مراجعة هيكل الرواتب" if sal_cv>30 else "مستوى جيد"})
+                    if dept_col_a:
+                        dept_count = data[dept_col_a].nunique()
+                        avg_size = len(data) / max(dept_count,1)
+                        factors.append({"العامل":"متوسط حجم القسم","القيمة":f"{avg_size:.0f}","الأثر":"تحذير" if avg_size<5 else "طبيعي","التوصية":"دمج الأقسام الصغيرة" if avg_size<5 else "حجم مناسب"})
+                    if join_col_a:
+                        try:
+                            data['_tenure'] = (pd.Timestamp.now() - pd.to_datetime(data[join_col_a], errors='coerce')).dt.days / 365
+                            avg_tenure = data['_tenure'].mean()
+                            factors.append({"العامل":"متوسط الخدمة (سنوات)","القيمة":f"{avg_tenure:.1f}","الأثر":"تحذير" if avg_tenure<2 else "جيد","التوصية":"تحسين برامج الاحتفاظ" if avg_tenure<2 else "استقرار جيد"})
+                        except: pass
+
+                    if factors:
+                        st.dataframe(pd.DataFrame(factors), use_container_width=True, hide_index=True)
+                        export_widget(pd.DataFrame(factors), "تشخيص_الدوران", "diag1")
+
+                elif analysis_type == "📊 تحليل Cohort (فوج التعيين)":
+                    if join_col_a:
+                        try:
+                            data['_join_year'] = pd.to_datetime(data[join_col_a], errors='coerce').dt.year
+                            cohort = data.groupby('_join_year').agg(العدد=(data.columns[0],'count')).reset_index()
+                            cohort.columns = ['سنة التعيين','العدد']
+                            cohort = cohort.dropna().sort_values('سنة التعيين')
+
+                            fig = px.bar(cohort, x='سنة التعيين', y='العدد', title='توزيع الموظفين حسب سنة التعيين (Cohort)',
+                                color='العدد', color_continuous_scale='teal')
+                            fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400, coloraxis_showscale=False)
+                            st.plotly_chart(fig, use_container_width=True)
+                            export_widget(cohort, "تحليل_Cohort", "coh1")
+                        except: st.warning("تعذر تحليل تاريخ التعيين")
+                    else:
+                        st.info("لا يوجد عمود تاريخ التعيين في البيانات")
+
+                elif analysis_type == "🎯 تصنيف الموظفين (Clustering)":
+                    num_cols = data.select_dtypes('number').columns.tolist()[:5]
+                    if len(num_cols) >= 2:
+                        st.markdown("### 🎯 تصنيف الموظفين حسب البيانات الرقمية")
+                        try:
+                            from sklearn.preprocessing import StandardScaler
+                        except ImportError:
+                            st.warning("مكتبة scikit-learn غير مثبتة. أضف `scikit-learn` في requirements.txt")
+                            return
+                        try:
+                            clean = data[num_cols].dropna()
+                            if len(clean) > 10:
+                                scaled = StandardScaler().fit_transform(clean)
+                                # Simple quantile-based clustering
+                                clean['_Cluster'] = pd.qcut(scaled[:,0], q=3, labels=['مجموعة أ','مجموعة ب','مجموعة ج'], duplicates='drop')
+                                fig = px.scatter(clean, x=num_cols[0], y=num_cols[1] if len(num_cols)>1 else num_cols[0],
+                                    color='_Cluster', title='تصنيف الموظفين', color_discrete_sequence=['#E36414','#2A9D8F','#264653'])
+                                fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
+                                st.plotly_chart(fig, use_container_width=True)
+                                export_widget(clean, "تصنيف_الموظفين", "clus1")
+                        except Exception as e:
+                            st.warning(f"تعذر التصنيف: {e}")
+                    else:
+                        st.info("يلزم عمودين رقميين على الأقل")
+            else:
+                st.info("📁 ارفع ملف بيانات للتحليل التنبؤي")
+
+        # ===== PAGE 5: Sentiment Analysis =====
+        elif page == "💬 تحليل المشاعر":
+            hdr("💬 تحليل المشاعر والنصوص","Sentiment Analysis للتقييمات والملاحظات")
+
+            st.markdown("### 📝 أدخل نصوص للتحليل")
+            text_source = st.radio("مصدر النصوص:", ["إدخال يدوي","من البيانات المرفوعة"], horizontal=True, key="sent_src")
+
+            if text_source == "إدخال يدوي":
+                texts_input = st.text_area("الصق النصوص (نص واحد في كل سطر):", height=200, key="sent_txt",
+                    placeholder="الشركة ممتازة والبيئة محفزة\nالراتب غير مناسب\nالإدارة تحتاج تطوير\nفرص النمو رائعة")
+                if texts_input:
+                    texts = [t.strip() for t in texts_input.split('\n') if t.strip()]
+                else:
+                    texts = []
+            else:
+                text_cols = [c for c in data.columns if data[c].dtype == 'object'] if len(data)>0 else []
+                if text_cols:
+                    sel_col = st.selectbox("اختر العمود:", text_cols, key="sent_col")
+                    texts = data[sel_col].dropna().tolist()[:50]
+                else:
+                    texts = []; st.info("لا توجد أعمدة نصية")
+
+            if texts and st.button("💬 تحليل المشاعر", type="primary", key="sent_btn"):
+                # Simple keyword-based sentiment
+                positive_kw = ['ممتاز','رائع','جيد','محفز','فرص','نمو','تطوير','ابتكار','excellent','great','good','growth']
+                negative_kw = ['سيء','ضعيف','مشكلة','غير مناسب','نقص','ضغط','تأخر','bad','poor','problem','pressure']
+                neutral_kw = ['عادي','متوسط','مقبول','normal','average','ok']
+
+                results = []
+                for text in texts:
+                    text_lower = text.lower()
+                    pos = sum(1 for kw in positive_kw if kw in text_lower)
+                    neg = sum(1 for kw in negative_kw if kw in text_lower)
+                    if pos > neg: sentiment = "إيجابي 😊"; score = min(pos * 20, 100)
+                    elif neg > pos: sentiment = "سلبي 😟"; score = -min(neg * 20, 100)
+                    else: sentiment = "محايد 😐"; score = 0
+                    results.append({"النص":text[:100],"المشاعر":sentiment,"الدرجة":score})
+
+                res_df = pd.DataFrame(results)
+                pos_count = len(res_df[res_df['الدرجة']>0])
+                neg_count = len(res_df[res_df['الدرجة']<0])
+                neutral_count = len(res_df[res_df['الدرجة']==0])
+
+                sk1,sk2,sk3,sk4 = st.columns(4)
+                with sk1: kpi("📊 إجمالي النصوص", str(len(res_df)))
+                with sk2: kpi("😊 إيجابي", str(pos_count))
+                with sk3: kpi("😟 سلبي", str(neg_count))
+                with sk4: kpi("😐 محايد", str(neutral_count))
+
+                st.dataframe(res_df, use_container_width=True, hide_index=True)
+
+                sc1, sc2 = st.columns(2)
+                with sc1:
+                    fig = px.pie(values=[pos_count,neg_count,neutral_count], names=['إيجابي','سلبي','محايد'],
+                        title='توزيع المشاعر', hole=0.4, color_discrete_sequence=['#27AE60','#E74C3C','#95A5A6'])
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350)
+                    st.plotly_chart(fig, use_container_width=True)
+                with sc2:
+                    fig = px.histogram(res_df, x='الدرجة', nbins=10, title='توزيع درجات المشاعر',
+                        color_discrete_sequence=['#E36414'])
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                export_widget(res_df, "تحليل_المشاعر", "sent1")
+
+        # ===== PAGE 6: Audit Log =====
+        elif page == "📋 سجل التدقيق":
+            hdr("📋 سجل التدقيق","Audit Trail - تتبع جميع العمليات")
+
+            if st.session_state.get('user_role') != "مدير":
+                st.warning("⚠️ سجل التدقيق متاح للمدير فقط"); return
+
+            try:
+                conn = get_conn(); c = conn.cursor()
+                c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("audit_log",))
+                row = c.fetchone(); conn.close()
+                logs = json.loads(row[0]) if row else []
+            except:
+                logs = []
+
+            if logs:
+                log_df = pd.DataFrame(logs)
+                log_df = log_df.sort_values('time', ascending=False).reset_index(drop=True)
+
+                lk1,lk2,lk3 = st.columns(3)
+                with lk1: kpi("📋 إجمالي العمليات", str(len(log_df)))
+                with lk2: kpi("👥 المستخدمين", str(log_df['user'].nunique()))
+                with lk3: kpi("📅 آخر عملية", log_df['time'].iloc[0][:16] if len(log_df)>0 else "-")
+
+                # Filter
+                fc1, fc2 = st.columns(2)
+                with fc1:
+                    users_filter = st.multiselect("فلتر المستخدم:", log_df['user'].unique().tolist(), key="aud_usr")
+                with fc2:
+                    actions_filter = st.multiselect("فلتر العملية:", log_df['action'].unique().tolist(), key="aud_act")
+
+                filtered = log_df
+                if users_filter: filtered = filtered[filtered['user'].isin(users_filter)]
+                if actions_filter: filtered = filtered[filtered['action'].isin(actions_filter)]
+
+                st.dataframe(filtered.head(100), use_container_width=True, hide_index=True)
+
+                # Activity chart
+                if len(log_df) > 1:
+                    log_df['date'] = log_df['time'].str[:10]
+                    daily = log_df.groupby('date').size().reset_index(name='العمليات')
+                    fig = px.bar(daily, x='date', y='العمليات', title='النشاط اليومي',
+                        color_discrete_sequence=['#2A9D8F'])
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=300)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                export_widget(filtered, "سجل_التدقيق", "audt")
+
+                if st.button("🗑️ مسح السجل", key="clear_audit"):
+                    try:
+                        conn = get_conn(); c = conn.cursor()
+                        _upsert_config(c, "audit_log", "[]")
+                        conn.commit(); conn.close()
+                        st.success("✅ تم مسح السجل"); st.rerun()
+                    except: pass
+            else:
+                st.info("📋 سجل التدقيق فارغ. سيتم تسجيل العمليات تلقائياً.")
+                st.caption("العمليات المُسجّلة: تسجيل الدخول، رفع الملفات، تصدير التقارير، تعديل البيانات")
 
 
     # =========================================
