@@ -157,8 +157,9 @@ class ModelOrchestrator:
         """Generate cache key for response caching."""
         return hashlib.md5(f"{message[:100]}_{model_type}".encode()).hexdigest()
 
-    def call(self, system_prompt, user_message, chat_history=None, model_type='general'):
-        """Main orchestrated call with reasoning pipeline: analyze → context → call → validate."""
+    def call(self, system_prompt, user_message, chat_history=None, model_type='general', asking_party=None):
+        """Main orchestrated call with full reasoning pipeline:
+        analyze → confidence → context → call → validate → warnings → return."""
         # Check instant cached responses from the correct domain (< 1 second)
         instant_db = self._instant_labor if model_type == 'labor' else self._instant_hr if model_type == 'hr_expert' else {}
         for q, a in instant_db.items():
@@ -176,10 +177,17 @@ class ModelOrchestrator:
 
         # Step 1: Analyze question with reasoning layer (for labor/hr_expert only)
         analysis = None
+        reasoning = None
         if model_type in ('labor', 'hr_expert'):
             try:
                 reasoning = ReasoningLayer()
-                analysis = reasoning.analyze_question(user_message, model_type)
+                analysis = reasoning.analyze_question(user_message, model_type, asking_party)
+
+                # Step 1b: Compute confidence from structured retrieval
+                if hasattr(st.session_state, '_knowledge_engine'):
+                    retrieval_results = st.session_state._knowledge_engine.search_structured(
+                        user_message, top_k=5, model_type=model_type)
+                    reasoning.compute_confidence(analysis, retrieval_results, model_type)
             except: pass
 
         # Step 2: Build enhanced context with reasoning (size depends on provider)
@@ -207,15 +215,25 @@ class ModelOrchestrator:
         for prov in providers_to_try:
             result, error = self._call_provider(prov, enhanced_prompt, messages)
             if result:
-                # Step 3: Validate answer with reasoning layer
-                if analysis:
+                # Step 3: Validate answer with reasoning layer (citation verification + quality)
+                answer_warnings = []
+                if analysis and reasoning:
                     try:
-                        reasoning = ReasoningLayer()
-                        is_valid, issues = reasoning.validate_generated_answer(result, analysis, model_type)
+                        is_valid, issues, warnings = reasoning.validate_generated_answer(result, analysis, model_type)
+                        answer_warnings = warnings
                         if not is_valid and prov == providers_to_try[0] and len(providers_to_try) > 1:
-                            # Try next provider if validation fails on primary
+                            # Try next provider if validation fails on primary (hallucinated articles, etc.)
                             continue
+                        # If invalid on last provider, append issues as disclaimer
+                        if not is_valid:
+                            disclaimer = "\n\n---\n**تنبيه:** " + " | ".join(issues)
+                            result += disclaimer
                     except: pass
+
+                # Append warnings as notes (non-blocking)
+                if answer_warnings:
+                    notes = "\n".join([f"- {w}" for w in answer_warnings])
+                    result += f"\n\n---\n**ملاحظات التحقق:**\n{notes}"
 
                 self._call_count += 1
                 self._cache[cache_key] = result
@@ -949,7 +967,72 @@ class LearningSystem:
 # ==================== 4. REASONING LAYER ====================
 class ReasoningLayer:
     """Advanced reasoning pipeline for both Legal and HR advisors.
-    Provides: question analysis, reasoning rules, context building, answer validation."""
+    Provides: question analysis, asking-party identification, reasoning rules,
+    context building, citation verification, confidence scoring, answer validation."""
+
+    # ---- Known/Approved Legal References ----
+    # Only these article numbers may be cited. Any article not in this set is flagged.
+    KNOWN_LABOR_ARTICLES = {
+        '2','3','5','6','7','10','11','12','15','22','23','25','26','27','28','29','30','31','32','33',
+        '37','38','39','40','41','42','43','44','45','46','47','48','49',
+        '50','51','52','53','54','55','56','57','58','59','60','61','62','63','64',
+        '65','66','67','68','69','70','71','72','73','74','75','76','77','78','79','80','81','82','83',
+        '84','85','86','87','88','89','90','91','92','93','94','95','96','97',
+        '98','99','100','101','102','103','104','105','106','107','108','109','110','111','112','113',
+        '114','115','116','117','118','119','120','121','122','123','124','125','126','127','128','129',
+        '130','131','132','133','134','135','136','137','138','139','140','141','142','143','144','145',
+        '146','147','148','149','150','151','152','153','154','155','156','157','158','159','160',
+        '161','162','163','164','165','166','167','168','169','170','171','172','173','174','175',
+        '176','177','178','179','180','181','182','183','184','185','186','187','188','189','190',
+        '191','192','193','194','195','196','197','198','199','200','201','202','203','204','205',
+        '206','207','208','209','210','211','212','213','214','215','216','217','218','219','220',
+        '221','222','223','224','225','226','227','228','229','230','231','232','233','234','235',
+        '236','237','238','239','240','241','242','243','244','245',
+    }
+
+    KNOWN_LEGAL_SOURCES = {
+        'نظام العمل', 'نظام العمل السعودي', 'اللائحة التنفيذية لنظام العمل',
+        'نظام التأمينات الاجتماعية', 'اللائحة التنفيذية للتأمينات الاجتماعية',
+        'نظام الضمان الصحي التعاوني', 'اللائحة التنفيذية للضمان الصحي',
+        'قرارات وزارية', 'وزارة الموارد البشرية', 'MHRSD',
+        'GOSI', 'CCHI', 'التأمينات الاجتماعية', 'ساند',
+        'نطاقات', 'برنامج حماية الأجور', 'مبادرة تحسين العلاقة التعاقدية',
+        'لائحة السلامة والصحة المهنية',
+    }
+
+    # ---- Known/Approved HR Frameworks ----
+    KNOWN_HR_FRAMEWORKS = {
+        'ADDIE', 'SAM', 'Kirkpatrick', 'Phillips ROI', '70-20-10',
+        'SMART', 'MBO', 'BARS', '360-Degree', 'BSC', 'Balanced Scorecard',
+        'Compa-Ratio', 'Total Rewards', 'Salary Survey', 'Point Factor',
+        'EVP', 'ATS', 'Assessment Center', 'Structured Interview',
+        'Gallup Q12', 'eNPS', 'Pulse Survey', 'Stay Interview',
+        '9-Box Grid', 'Gap Analysis', 'Dual Track',
+        'Kotter', 'ADKAR', 'Lewin',
+        'Maslow', 'Herzberg', 'Vroom', 'Adams Equity',
+        'SHRM', 'SHRM-SCP', 'SHRM-CP', 'SHRM BASK',
+        'PHRi', 'HRCI', 'SPHR', 'aPHR',
+        'CIPD', 'CIPD Level 5', 'CIPD Level 7',
+        'ATD', 'APTD', 'CPTD',
+        'OKR', 'OKRs', 'KPI', 'KPIs',
+        'HPT', 'Human Performance Technology',
+        'Agile HR', 'Design Thinking',
+        'People Analytics', 'Predictive Analytics',
+        'DEI', 'ERGs',
+        'Competency-Based HRM', 'Strategic HRM',
+        'Talent Management', 'Succession Planning',
+        'Job Evaluation', 'Job Analysis', 'Job Grading',
+        'Performance Appraisal', 'Critical Incidents',
+        'Employee Engagement', 'Employee Experience',
+        'Change Management', 'Organizational Development',
+        'Workforce Planning', 'Manpower Planning',
+        'Learning Management System', 'LMS',
+        'Microlearning', 'Blended Learning', 'e-Learning',
+        'Mentoring', 'Coaching', 'Job Rotation',
+        'Onboarding', 'Offboarding',
+        'Employer Branding',
+        'HRIS', 'HCM',
+    }
 
     # Legal topic categories with associated keywords and article references
     LABOR_TOPICS = {
@@ -1091,8 +1174,55 @@ class ReasoningLayer:
         },
     }
 
-    def analyze_question(self, question, advisor_type):
-        """Analyze the question to extract intent, topics, entities, and complexity.
+    # ---- Asking-Party Detection ----
+    PARTY_SIGNALS = {
+        'employee': {
+            'ar': ['حقوقي','تم فصلي','فُصلت','تم طردي','مستحقاتي','راتبي','إجازتي',
+                   'عقدي','خدمتي','أنا موظف','أنا عامل','صاحب عملي','الشركة فصلتني',
+                   'تم إنهاء عقدي','حقي','أستقيل','استقلت','تعويضي','مكافأتي',
+                   'تم خصم','لم أحصل','حرمت من','حالتي','ظرفي','مشكلتي'],
+            'en': ['my rights','i was fired','i was terminated','my salary','my contract',
+                   'my leave','i am an employee','my employer','i want to resign','my benefits'],
+        },
+        'employer': {
+            'ar': ['موظف عندي','أريد فصل','إنهاء عقد موظف','هل يحق لي فصل',
+                   'كصاحب عمل','شركتي','منشأتي','موظفي','عندي موظف','أريد إنهاء',
+                   'هل يجوز لي','أرغب بفصل','موظف رفض','موظف غاب','عامل لم يلتزم'],
+            'en': ['my employee','i want to terminate','as an employer','my company',
+                   'can i fire','employee refused','my staff'],
+        },
+        'hr_officer': {
+            'ar': ['قسم الموارد البشرية','كمسؤول موارد بشرية','إدارة شؤون الموظفين',
+                   'سياسة الشركة','نظام الحضور','كيف أطبق','كيف ننفذ','إجراءات الشركة',
+                   'تقييم الأداء','خطة التوظيف','هيكل الرواتب','تدريب الموظفين',
+                   'كمختص موارد بشرية','hr department','في قسم hr','كمدير موارد بشرية'],
+            'en': ['hr department','as hr','hr policy','hr officer','hr manager',
+                   'how do we implement','company policy','onboarding process'],
+        },
+        'manager': {
+            'ar': ['كمدير','فريقي','أحد موظفيي','في إدارتي','أدير فريق',
+                   'موظف في فريقي','كقائد فريق','أشرف على','تحت إشرافي'],
+            'en': ['my team','as a manager','my direct report','i manage','my department',
+                   'team member','i supervise'],
+        },
+    }
+
+    def _detect_asking_party(self, q_lower):
+        """Auto-detect the asking party from question language cues.
+        Returns: employee, employer, hr_officer, manager, or neutral."""
+        scores = {}
+        for party, signals in self.PARTY_SIGNALS.items():
+            score = 0
+            for kw in signals.get('ar', []) + signals.get('en', []):
+                if kw.lower() in q_lower:
+                    score += 2
+            scores[party] = score
+
+        best = max(scores, key=scores.get) if scores else 'neutral'
+        return best if scores.get(best, 0) >= 2 else 'neutral'
+
+    def analyze_question(self, question, advisor_type, asking_party=None):
+        """Analyze the question to extract intent, topics, entities, asking party, and complexity.
         Returns a structured analysis dict used by subsequent pipeline stages."""
         q_lower = question.lower().strip()
         # Remove common Arabic prefixes for better matching
@@ -1110,6 +1240,8 @@ class ReasoningLayer:
             'intent': 'informational',  # informational, calculation, comparison, procedural, case_analysis
             'complexity': 'simple',     # simple, moderate, complex
             'entities': {},
+            'asking_party': asking_party or self._detect_asking_party(q_lower),
+            'confidence': {'retrieval': 0.0, 'evidence': 0.0, 'overall': 0.0},
         }
 
         # Detect intent
@@ -1191,11 +1323,48 @@ class ReasoningLayer:
         return rules
 
     def _apply_labor_rules(self, analysis):
-        """Legal advisor reasoning rules."""
+        """Legal advisor reasoning rules — party-aware and structured."""
         rules = []
         intent = analysis.get('intent', 'informational')
         topics = [t['id'] for t in analysis.get('topics', [])]
         entities = analysis.get('entities', {})
+        party = analysis.get('asking_party', 'neutral')
+
+        # Party-aware rules
+        party_rules = {
+            'employee': [
+                "السائل موظف/عامل: ابدأ بشرح حقوقه القانونية أولاً",
+                "وضّح التزامات صاحب العمل تجاهه",
+                "اذكر الخطوات العملية التي يجب أن يتخذها لحماية حقوقه",
+                "اذكر الجهة المختصة التي يمكنه اللجوء إليها (مكتب العمل، منصة ودي، المحكمة العمالية)",
+            ],
+            'employer': [
+                "السائل صاحب عمل: ابدأ بشرح التزاماته القانونية أولاً",
+                "وضّح حقوقه القانونية كصاحب عمل",
+                "اذكر الإجراءات النظامية المطلوبة وعواقب مخالفتها",
+                "حذّره من المخالفات التي قد تعرضه لعقوبات أو تعويضات",
+            ],
+            'hr_officer': [
+                "السائل مسؤول موارد بشرية: قدم الإجابة من منظور تنفيذي وإداري",
+                "اذكر الإجراءات الإدارية والنماذج المطلوبة",
+                "وضّح حقوق والتزامات كلا الطرفين (العامل وصاحب العمل)",
+                "اقترح أفضل الممارسات للامتثال القانوني",
+            ],
+            'manager': [
+                "السائل مدير: وضّح صلاحياته وحدودها القانونية",
+                "اذكر الإجراءات التي يجب اتباعها عبر إدارة الموارد البشرية",
+                "وضّح حقوق الموظف التي يجب مراعاتها",
+            ],
+        }
+        if party in party_rules:
+            rules.extend(party_rules[party])
+        else:
+            rules.append("لم يتضح صفة السائل: وضّح حقوق والتزامات جميع الأطراف")
+
+        # Anti-hallucination rules
+        rules.append("لا تذكر أي مادة قانونية إلا إذا كانت موجودة فعلاً في نظام العمل السعودي (245 مادة)")
+        rules.append("إذا لم تكن متأكداً من رقم المادة بالضبط، قل ذلك صراحة ولا تخترع رقماً")
+        rules.append("لا تخلط بين نظام العمل واللائحة التنفيذية ونظام التأمينات - حدد المصدر بدقة")
 
         # Intent-specific rules
         if intent == 'calculation':
@@ -1241,11 +1410,46 @@ class ReasoningLayer:
         return rules
 
     def _apply_hr_rules(self, analysis):
-        """HR advisor reasoning rules."""
+        """HR advisor reasoning rules — party-aware and structured."""
         rules = []
         intent = analysis.get('intent', 'informational')
         topics = [t['id'] for t in analysis.get('topics', [])]
         frameworks = analysis.get('matched_frameworks', [])
+        party = analysis.get('asking_party', 'neutral')
+
+        # Party-aware rules
+        party_rules = {
+            'employee': [
+                "السائل موظف: قدم الإجابة من منظور تطويره المهني وحقوقه",
+                "وضّح ما يحق له طلبه من صاحب العمل (تدريب، تقييم عادل، مسار وظيفي)",
+                "قدم نصائح عملية لتحسين وضعه المهني",
+            ],
+            'employer': [
+                "السائل صاحب عمل: ركّز على العائد الاستثماري والأثر على الأعمال",
+                "قدم ممارسات مهنية تحقق التوازن بين مصلحة المنشأة والموظفين",
+                "اذكر مؤشرات الأداء (KPIs) لقياس النجاح",
+            ],
+            'hr_officer': [
+                "السائل مختص موارد بشرية: قدم إرشادات تنفيذية احترافية",
+                "استشهد بالأطر المهنية المعتمدة (SHRM, CIPD, HRCI)",
+                "قدم خطوات عملية مع جداول زمنية ونماذج مقترحة",
+                "اذكر أفضل الممارسات العالمية مع مراعاة السياق السعودي",
+            ],
+            'manager': [
+                "السائل مدير: ركّز على الجوانب القيادية والإدارية",
+                "قدم أدوات عملية لإدارة الفريق وتطويره",
+                "وضّح دور المدير مقابل دور الموارد البشرية في كل عملية",
+            ],
+        }
+        if party in party_rules:
+            rules.extend(party_rules[party])
+        else:
+            rules.append("لم يتضح صفة السائل: قدم إرشادات شاملة تغطي جميع الأطراف")
+
+        # Anti-hallucination rules
+        rules.append("لا تذكر أي إطار مهني أو نموذج إلا إذا كان معروفاً ومعتمداً فعلاً")
+        rules.append("إذا لم تكن متأكداً من معلومة، صرّح بذلك ولا تخترع نماذج أو أطر وهمية")
+        rules.append("فرّق بوضوح بين ما هو إطار مهني معتمد وما هو ممارسة شائعة")
 
         # Intent-specific rules
         if intent == 'calculation':
@@ -1286,9 +1490,20 @@ class ReasoningLayer:
         return rules
 
     def build_reasoning_context(self, question, advisor_type, analysis, retrieved_context):
-        """Build enhanced context that includes reasoning instructions.
-        This gets prepended to the retrieved context before sending to the model."""
+        """Build enhanced context that includes reasoning instructions, party identification,
+        and confidence-aware guidance. Prepended to retrieved context before sending to model."""
         parts = []
+
+        # Asking-party identification
+        party = analysis.get('asking_party', 'neutral')
+        party_labels = {
+            'employee': 'موظف/عامل',
+            'employer': 'صاحب عمل',
+            'hr_officer': 'مسؤول موارد بشرية',
+            'manager': 'مدير',
+            'neutral': 'مستفسر عام'
+        }
+        party_label = party_labels.get(party, 'مستفسر عام')
 
         # Reasoning header
         topics_str = ", ".join([t['category'] for t in analysis.get('topics', [])]) or "عام"
@@ -1301,9 +1516,9 @@ class ReasoningLayer:
         }
         intent_ar = intent_map.get(analysis.get('intent', 'informational'), 'استفسار')
 
-        parts.append(f"\n**تحليل السؤال:** النوع: {intent_ar} | المواضيع: {topics_str}")
+        parts.append(f"\n**تحليل السؤال:** النوع: {intent_ar} | المواضيع: {topics_str} | صفة السائل: {party_label}")
 
-        # Reasoning rules
+        # Reasoning rules (includes party-aware rules)
         rules = self.apply_reasoning_rules(analysis, advisor_type)
         if rules:
             rules_text = "\n".join([f"- {r}" for r in rules])
@@ -1330,38 +1545,113 @@ class ReasoningLayer:
             if entity_parts:
                 parts.append(f"\n**البيانات المستخرجة:** {' | '.join(entity_parts)}")
 
+        # Confidence guidance
+        confidence = analysis.get('confidence', {})
+        overall = confidence.get('overall', 0.0)
+        if overall < 0.3 and retrieved_context:
+            parts.append("\n**تنبيه:** جودة المراجع المسترجعة منخفضة. أجب بحذر وصرّح بعدم اليقين عند الحاجة.")
+        elif overall < 0.3:
+            parts.append("\n**تنبيه:** لم يتم العثور على مراجع مؤكدة. أجب بحذر، لا تخترع مراجع، وأوصِ بالتحقق من مصدر رسمي.")
+
         # Retrieved context
         if retrieved_context:
             parts.append(f"\n**مراجع من قاعدة المعرفة:**\n{retrieved_context}")
 
         return "\n".join(parts)
 
-    def validate_generated_answer(self, answer, analysis, advisor_type):
-        """Validate the generated answer for quality and completeness.
-        Returns (is_valid, issues) tuple."""
-        if not answer or len(answer.strip()) < 30:
-            return False, ["الإجابة قصيرة جداً"]
+    def compute_confidence(self, analysis, retrieval_results, advisor_type):
+        """Compute confidence scores based on retrieval quality, evidence coverage, and clarity.
+        Updates analysis['confidence'] in place and returns overall score."""
+        conf = {'retrieval': 0.0, 'evidence': 0.0, 'clarity': 0.0, 'overall': 0.0}
 
-        issues = []
+        # Retrieval confidence: based on search result scores
+        if retrieval_results:
+            scores = [r.get('score', 0) for r in retrieval_results if isinstance(r, dict)]
+            if scores:
+                top_score = max(scores)
+                avg_score = sum(scores) / len(scores)
+                conf['retrieval'] = min(1.0, (top_score * 0.6 + avg_score * 0.4) * 2)
+
+        # Evidence coverage: do we have matching articles/frameworks?
+        if advisor_type == 'labor':
+            matched = analysis.get('matched_articles', [])
+            conf['evidence'] = min(1.0, len(matched) * 0.3) if matched else 0.0
+        elif advisor_type == 'hr_expert':
+            matched = analysis.get('matched_frameworks', [])
+            conf['evidence'] = min(1.0, len(matched) * 0.25) if matched else 0.0
+
+        # Clarity: based on intent detection and topic matching
+        has_intent = analysis.get('intent', 'informational') != 'informational'
+        has_topics = len(analysis.get('topics', [])) > 0
+        has_entities = bool(analysis.get('entities', {}))
+        conf['clarity'] = (0.3 if has_intent else 0.0) + (0.4 if has_topics else 0.0) + (0.3 if has_entities else 0.0)
+
+        # Overall weighted
+        conf['overall'] = conf['retrieval'] * 0.4 + conf['evidence'] * 0.35 + conf['clarity'] * 0.25
+
+        analysis['confidence'] = conf
+        return conf['overall']
+
+    def validate_generated_answer(self, answer, analysis, advisor_type):
+        """Validate the generated answer for quality, completeness, and citation accuracy.
+        Includes citation verification against known sources to prevent hallucinations.
+        Returns (is_valid, issues, warnings) tuple."""
+        if not answer or len(answer.strip()) < 30:
+            return False, ["الإجابة قصيرة جداً"], []
+
+        issues = []    # Critical: may trigger retry
+        warnings = []  # Non-critical: attached as notes
         intent = analysis.get('intent', 'informational')
 
-        # Check article citations for legal
+        # === CITATION VERIFICATION (Anti-Hallucination) ===
+        import re
+
         if advisor_type == 'labor':
+            # Verify all cited article numbers exist in Saudi Labor Law
+            cited_articles = re.findall(r'(?:المادة|مادة)\s*(\d+)', answer)
+            for art in cited_articles:
+                if art not in self.KNOWN_LABOR_ARTICLES:
+                    issues.append(f"المادة {art} المذكورة في الإجابة غير موجودة في نظام العمل السعودي")
+
+            # Check expected articles are mentioned
             expected_articles = analysis.get('matched_articles', [])
             if expected_articles and not any(f'المادة {a}' in answer or f'مادة {a}' in answer for a in expected_articles):
-                issues.append("لم يتم ذكر المواد القانونية المتوقعة")
+                warnings.append("لم يتم ذكر المواد القانونية المتوقعة")
 
-        # Check framework citations for HR
-        if advisor_type == 'hr_expert':
+        elif advisor_type == 'hr_expert':
+            # Verify cited frameworks are known/approved
+            answer_lower = answer.lower()
+            # Extract potential framework names (capitalized multi-word patterns)
+            potential_refs = re.findall(r'\b([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*)\b', answer)
+            known_lower = {f.lower() for f in self.KNOWN_HR_FRAMEWORKS}
+            for ref in potential_refs:
+                if len(ref) > 3 and ref.lower() not in known_lower:
+                    # Only flag if it looks like a framework name (not a common English word)
+                    common_words = {'the','and','for','with','from','this','that','what','how',
+                                    'when','where','which','about','each','every','some','any',
+                                    'more','most','other','than','they','will','have','been',
+                                    'based','level','high','low','rate','plan','total','model',
+                                    'human','resources','management','system','process','analysis',
+                                    'employee','employer','work','time','cost','quality','impact',
+                                    'result','value','return','investment','performance','training',
+                                    'development','recruitment','compensation','benefits','strategy'}
+                    if ref.lower() not in common_words and len(ref.split()) <= 4:
+                        # Check if it's a plausible framework mention
+                        if any(trigger in answer_lower[max(0,answer_lower.find(ref.lower())-30):answer_lower.find(ref.lower())+len(ref)+30]
+                               for trigger in ['نموذج','إطار','framework','model','method','theory','approach']):
+                            warnings.append(f"الإطار '{ref}' المذكور قد لا يكون إطاراً مهنياً معتمداً")
+
+            # Check expected frameworks are mentioned
             expected_fw = analysis.get('matched_frameworks', [])
-            if expected_fw and not any(fw.lower() in answer.lower() for fw in expected_fw[:2]):
-                issues.append("لم يتم ذكر الأطر المهنية المتوقعة")
+            if expected_fw and not any(fw.lower() in answer_lower for fw in expected_fw[:2]):
+                warnings.append("لم يتم ذكر الأطر المهنية المتوقعة")
+
+        # === STRUCTURAL VALIDATION ===
 
         # Check calculation presence
         if intent == 'calculation':
-            import re
             has_numbers = bool(re.search(r'\d+[,.]?\d*', answer))
-            has_calc_words = any(w in answer for w in ['=','×','÷','+','-','حساب','النتيجة','المجموع','الإجمالي'])
+            has_calc_words = any(w in answer for w in ['=','x','×','÷','+','-','حساب','النتيجة','المجموع','الإجمالي'])
             if not has_numbers or not has_calc_words:
                 issues.append("طُلب حساب لكن الإجابة لا تحتوي على خطوات حسابية واضحة")
 
@@ -1371,9 +1661,30 @@ class ReasoningLayer:
             if arabic_chars / len(answer) < 0.2:
                 issues.append("لغة الإجابة لا تتوافق مع لغة السؤال")
 
-        # Answer is valid if there are no critical issues (article/framework missing is a warning, not blocking)
-        is_valid = not any("قصيرة" in i or "حسابية" in i or "لغة" in i for i in issues)
-        return is_valid, issues
+        # === PARTY-AWARENESS CHECK ===
+        party = analysis.get('asking_party', 'neutral')
+        if party != 'neutral':
+            party_indicators = {
+                'employee': ['حقوق','يحق لك','يحق للعامل','حقوقك','مستحقاتك'],
+                'employer': ['التزامات','يلتزم صاحب العمل','إجراءات','عقوبات','غرامات'],
+                'hr_officer': ['إجراءات','سياسة','تطبيق','تنفيذ','نماذج'],
+                'manager': ['صلاحيات','فريق','إدارة','إشراف'],
+            }
+            indicators = party_indicators.get(party, [])
+            if indicators and not any(ind in answer for ind in indicators):
+                warnings.append(f"الإجابة قد لا تخاطب صفة السائل ({party}) بشكل كافٍ")
+
+        # === CONFIDENCE CHECK ===
+        confidence = analysis.get('confidence', {})
+        if confidence.get('overall', 0) < 0.2:
+            # Low confidence: check if answer disclaims uncertainty
+            disclaimer_words = ['غير متأكد','لا يمكن التأكد','يُنصح بمراجعة','ينصح بالتحقق','يرجى مراجعة','لست متأكد']
+            if not any(w in answer for w in disclaimer_words):
+                warnings.append("درجة الثقة منخفضة لكن الإجابة لم تُصرّح بعدم اليقين")
+
+        # Answer is valid if there are no critical issues
+        is_valid = not any("قصيرة" in i or "حسابية" in i or "لغة" in i or "غير موجودة" in i for i in issues)
+        return is_valid, issues, warnings
 
 
 # =====================================================================
@@ -1914,11 +2225,12 @@ def _search_local_kb(question, kb):
     return best_answer if best_score >= 2 else None
 
 def get_labor_fallback_answer(question):
-    """Fallback for LEGAL advisor only. Searches LABOR_KB only. Never returns empty."""
+    """Fallback for LEGAL advisor only. Searches LABOR_KB only. Never returns empty.
+    Includes source attribution to prevent ambiguity about answer origin."""
     # 1. Exact match in labor KB
     answer = _search_local_kb(question, LABOR_KB)
     if answer:
-        return answer
+        return f"{answer}\n\n---\n*المصدر: قاعدة المعرفة المحلية - نظام العمل السعودي*"
     # 2. Fuzzy match in labor KB
     q = question.lower().strip()
     best_score = 0
@@ -1930,15 +2242,16 @@ def get_labor_fallback_answer(question):
         if score > best_score:
             best_score = score; best_answer = ans
     if best_answer and best_score > 0:
-        return f"**بناءً على أقرب موضوع قانوني:**\n\n{best_answer}\n\n---\n*للإجابة الأدق، يرجى إعادة صياغة سؤالك القانوني.*"
-    return f"**شكراً لسؤالك القانوني:** \"{question}\"\n\nللإجابة الدقيقة:\n1. **مراجعة نظام العمل السعودي** عبر موقع وزارة الموارد البشرية\n2. **الاتصال بمكتب العمل** على الرقم الموحد 19911\n3. **منصة ودي** للاستشارات العمالية الإلكترونية\n\n**المواضيع المتاحة:** التقاعد | التأمينات | المكافأة | الفصل | الاستقالة | الإجازات | ساعات العمل | الرواتب | العقود | نطاقات | التأمين الطبي | حقوق المرأة | الشكاوى | نقل الكفالة"
+        return f"**بناءً على أقرب موضوع قانوني:**\n\n{best_answer}\n\n---\n*المصدر: قاعدة المعرفة المحلية (تطابق جزئي). للإجابة الأدق، يرجى إعادة صياغة سؤالك القانوني.*"
+    return f"**لم يتم العثور على إجابة مؤكدة لسؤالك:** \"{question}\"\n\n**تنبيه:** لم يتمكن النظام من تحديد الإجابة بدرجة ثقة كافية. لتجنب تقديم معلومات غير دقيقة، يُنصح بـ:\n1. **مراجعة نظام العمل السعودي** عبر موقع وزارة الموارد البشرية\n2. **الاتصال بمكتب العمل** على الرقم الموحد 19911\n3. **منصة ودي** للاستشارات العمالية الإلكترونية\n\n**المواضيع المتاحة:** التقاعد | التأمينات | المكافأة | الفصل | الاستقالة | الإجازات | ساعات العمل | الرواتب | العقود | نطاقات | التأمين الطبي | حقوق المرأة | الشكاوى | نقل الكفالة"
 
 def get_hr_fallback_answer(question):
-    """Fallback for HR advisor only. Searches HR_KB only. Never returns empty."""
+    """Fallback for HR advisor only. Searches HR_KB only. Never returns empty.
+    Includes source attribution to prevent ambiguity about answer origin."""
     # 1. Exact match in HR KB
     answer = _search_local_kb(question, HR_KB)
     if answer:
-        return answer
+        return f"{answer}\n\n---\n*المصدر: قاعدة المعرفة المحلية - أطر مهنية معتمدة (SHRM/CIPD/HRCI/ATD)*"
     # 2. Fuzzy match in HR KB
     q = question.lower().strip()
     best_score = 0
@@ -1950,8 +2263,8 @@ def get_hr_fallback_answer(question):
         if score > best_score:
             best_score = score; best_answer = ans
     if best_answer and best_score > 0:
-        return f"**بناءً على أقرب موضوع مهني:**\n\n{best_answer}\n\n---\n*للإجابة الأدق، يرجى إعادة صياغة سؤالك.*"
-    return f"**شكراً لسؤالك:** \"{question}\"\n\nللإجابة الدقيقة:\n1. **مراجع SHRM/CIPD/HRCI** للأطر المهنية\n2. **رفع مستندات** في قاعدة المعرفة RAG لتحسين إجابات النظام\n\n**المواضيع المتاحة:** إدارة الأداء | التدريب والتطوير | الاستقطاب | التعويضات | تجربة الموظف | تخطيط القوى العاملة | إدارة التغيير | تحليلات HR | التنوع والشمول"
+        return f"**بناءً على أقرب موضوع مهني:**\n\n{best_answer}\n\n---\n*المصدر: قاعدة المعرفة المحلية (تطابق جزئي). للإجابة الأدق، يرجى إعادة صياغة سؤالك.*"
+    return f"**لم يتم العثور على إجابة مؤكدة لسؤالك:** \"{question}\"\n\n**تنبيه:** لم يتمكن النظام من تحديد الإجابة بدرجة ثقة كافية. لتجنب تقديم معلومات غير دقيقة، يُنصح بـ:\n1. **مراجع SHRM/CIPD/HRCI** للأطر المهنية\n2. **رفع مستندات** في قاعدة المعرفة RAG لتحسين إجابات النظام\n\n**المواضيع المتاحة:** إدارة الأداء | التدريب والتطوير | الاستقطاب | التعويضات | تجربة الموظف | تخطيط القوى العاملة | إدارة التغيير | تحليلات HR | التنوع والشمول"
     """Universal export: Excel (with charts) + CSV + PDF (with interactive charts)"""
     if dataframes is None: return
     if isinstance(dataframes, pd.DataFrame):
@@ -8387,25 +8700,41 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 
 **تعليمات مهمة للإجابة:**
 
-**أولاً - فهم السؤال:**
+**أولاً - تحديد صفة السائل:**
+- حدد أولاً: هل السائل موظف/عامل؟ صاحب عمل؟ مسؤول موارد بشرية؟ مدير؟
+- إذا قال "تم فصلي" أو "حقوقي" أو "مستحقاتي" → هو موظف: ابدأ بحقوقه
+- إذا قال "موظف عندي" أو "هل يحق لي فصل" → هو صاحب عمل: ابدأ بالتزاماته
+- إذا قال "كيف نطبق" أو "سياسة الشركة" → هو مسؤول HR: قدم إرشادات تنفيذية
+- إذا لم يتضح → وضّح حقوق والتزامات جميع الأطراف
+
+**ثانياً - فهم السؤال:**
 - اقرأ السؤال بعناية وحدد الموضوع القانوني المطلوب
-- إذا كان السؤال يتضمن حالة عملية (مثل: "تم فصلي بعد 3 سنوات")، استخرج المعطيات: نوع العقد، مدة الخدمة، سبب الإنهاء
+- إذا كان السؤال يتضمن حالة عملية، استخرج المعطيات: نوع العقد، مدة الخدمة، سبب الإنهاء
 - إذا كان السؤال عاماً، قدم إجابة شاملة مع ذكر جميع الحالات المحتملة
 
-**ثانياً - بناء الإجابة:**
-1. ابدأ بذكر المادة أو المواد القانونية المتعلقة بالسؤال مع نصها
-2. اشرح كيف تنطبق المادة على حالة السائل
-3. إذا كان هناك حساب (مكافأة، تعويض)، أظهر الخطوات بالأرقام
-4. اذكر حقوق الطرفين (العامل وصاحب العمل)
-5. أضف نصيحة عملية في النهاية
+**ثالثاً - بناء الإجابة:**
+1. ابدأ بتحديد المسألة القانونية بدقة
+2. اذكر المادة أو المواد القانونية المتعلقة مع نصها
+3. طبّق القاعدة القانونية على حالة السائل تحديداً
+4. اشرح حقوق والتزامات السائل حسب صفته
+5. إذا كان هناك حساب (مكافأة، تعويض)، أظهر الخطوات بالأرقام
+6. اذكر الخطوات العملية والجهة المختصة
+7. أضف نصيحة عملية في النهاية
 
-**ثالثاً - قواعد ثابتة:**
-- أجب دائماً بنفس لغة السؤال (عربي يحصل على إجابة عربية، إنجليزي يحصل على إنجليزية)
+**رابعاً - قواعد ثابتة:**
+- أجب دائماً بنفس لغة السؤال (عربي بالعربي، إنجليزي بالإنجليزي)
 - اذكر رقم المادة القانونية دائماً عند الاستشهاد
 - فرّق بين العقد محدد المدة وغير محدد المدة
-- إذا لم تكن متأكداً من معلومة، صرّح بذلك وأوصِ بمراجعة محامٍ مرخص
-- لا تخترع مواد قانونية غير موجودة - التزم بالمواد المذكورة أعلاه فقط
-- اذكر متى يتحول العقد المحدد لغير محدد: بعد 3 تجديدات أو 4 سنوات"""
+- فرّق بوضوح بين نظام العمل واللائحة التنفيذية ونظام التأمينات
+- اذكر متى يتحول العقد المحدد لغير محدد: بعد 3 تجديدات أو 4 سنوات
+
+**خامساً - منع الاختلاق (هام جداً):**
+- لا تخترع مواد قانونية غير موجودة - نظام العمل يحتوي على 245 مادة فقط
+- لا تذكر رقم مادة إلا إذا كنت متأكداً من وجودها ومن نصها
+- لا تخلط بين مصادر مختلفة (نظام العمل vs التأمينات vs الضمان الصحي)
+- إذا لم تكن متأكداً من رقم المادة أو نصها بالضبط، قل ذلك صراحةً
+- إذا لم تكن متأكداً من معلومة، صرّح بذلك وأوصِ بمراجعة محامٍ مرخص أو وزارة الموارد البشرية
+- عند عدم وجود نص قانوني واضح، اذكر المبدأ العام وأوصِ بالتحقق"""
 
         HR_EXPERT_SYSTEM_PROMPT = """You are a world-class HR professional and consultant with deep expertise equivalent to holding PHRi, SHRM-SCP, CIPD Level 7, APTD, and SPHR certifications.
 
@@ -8460,19 +8789,34 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 
 **تعليمات مهمة للإجابة:**
 
-**أولاً - فهم السؤال:**
-- حدد المجال المطلوب: استقطاب، تدريب، تعويضات، أداء، علاقات عمل، تحليلات HR
-- إذا كان السؤال عملياً (مثل: "كيف أبني")، قدم خطوات تنفيذية واضحة
-- إذا كان السؤال نظرياً (مثل: "ما الفرق")، قدم مقارنة منظمة
+**أولاً - تحديد صفة السائل:**
+- حدد أولاً: هل السائل مختص موارد بشرية؟ مدير؟ موظف يسأل عن حقوقه؟ صاحب عمل؟
+- إذا قال "كيف أبني" أو "كيف نطبق" أو "أفضل الممارسات" → مختص HR: قدم إرشادات مهنية تنفيذية
+- إذا قال "فريقي" أو "موظفيي" → مدير: ركّز على أدوات إدارة الفريق
+- إذا قال "حقي في التدريب" أو "تقييمي" → موظف: وضّح حقوقه وكيف يطالب بها
+- إذا لم يتضح → قدم إرشادات شاملة تغطي جميع الأطراف
 
-**ثانياً - بناء الإجابة:**
+**ثانياً - فهم السؤال:**
+- حدد المجال المطلوب: استقطاب، تدريب، تعويضات، أداء، علاقات عمل، تحليلات HR
+- حدد نوع السؤال: تنفيذي (كيف أبني)، مقارنة (ما الفرق)، تحليلي (كيف أقيس)
+- استخرج السياق والبيانات المتاحة
+
+**ثالثاً - بناء الإجابة:**
 1. أجب بنفس لغة السؤال (عربي بالعربي، إنجليزي بالإنجليزي)
-2. استشهد بالنماذج والأطر العلمية المناسبة (مثل: Kirkpatrick, ADDIE, Phillips ROI)
-3. قدم نصائح عملية قابلة للتنفيذ مع أمثلة واقعية
-4. اذكر مؤشرات الأداء (KPIs) لقياس النجاح
-5. راعِ السياق السعودي (نظام العمل، الثقافة المحلية) عند الحاجة
-6. اقترح أدوات وتقنيات حديثة عند المناسبة
-7. لا تخترع معلومات - التزم بالمعرفة المهنية المعتمدة
+2. حدد المسألة المهنية بدقة قبل الإجابة
+3. استشهد بالنماذج والأطر العلمية المناسبة (مثل: Kirkpatrick, ADDIE, Phillips ROI)
+4. قدم نصائح عملية قابلة للتنفيذ مع أمثلة واقعية وخطوات محددة
+5. اذكر مؤشرات الأداء (KPIs) لقياس النجاح
+6. راعِ السياق السعودي (نظام العمل، الثقافة المحلية) عند الحاجة
+7. اقترح أدوات وتقنيات حديثة عند المناسبة
+8. فرّق بوضوح بين ما هو إطار مهني معتمد وما هو ممارسة شائعة
+
+**رابعاً - منع الاختلاق (هام جداً):**
+- لا تذكر اسم إطار مهني أو نموذج إلا إذا كان معروفاً ومعتمداً فعلاً
+- الأطر المعتمدة تشمل: SHRM, CIPD, HRCI/PHRi, ATD/APTD, ADDIE, Kirkpatrick, Phillips ROI, 70-20-10, Kotter, ADKAR, وغيرها من الأطر المعروفة
+- لا تخترع أطراً أو نماذج أو منهجيات وهمية
+- إذا لم تكن متأكداً من معلومة أو إطار، صرّح بذلك
+- إذا لم يكن لديك إجابة دقيقة، قدم إجابة حذرة مع توصية بالرجوع لمصدر مهني معتمد
 
 **KEY MODELS & FRAMEWORKS (from PHRi):**
 - ADDIE Model: Analysis → Design → Development → Implementation → Evaluation
@@ -8510,7 +8854,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
         def get_learned_context(query, model_type, top_k=3):
             return st.session_state._learning_system.get_relevant_history(query, model_type, top_k)
 
-        def call_ai_api(system_prompt, user_message, chat_history=None, model_type="general", provider=None):
+        def call_ai_api(system_prompt, user_message, chat_history=None, model_type="general", provider=None, asking_party=None):
             try:
                 if '_orchestrator' not in st.session_state:
                     st.session_state._orchestrator = _init_orchestrator()
@@ -8518,7 +8862,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                     st.session_state._knowledge_engine = _init_knowledge()
                 if '_learning_system' not in st.session_state:
                     st.session_state._learning_system = _init_learning()
-                return st.session_state._orchestrator.call(system_prompt, user_message, chat_history, model_type)
+                return st.session_state._orchestrator.call(system_prompt, user_message, chat_history, model_type, asking_party)
             except Exception as e:
                 return None, f"⚠️ خطأ في الاتصال بالذكاء الاصطناعي. يرجى المحاولة مرة أخرى."
 
@@ -8654,6 +8998,13 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 
             # Input for custom questions
             with st.form("labor_form", clear_on_submit=True):
+                labor_party = st.radio("👤 أنا أسأل بصفتي:", [
+                    "🔍 اكتشاف تلقائي",
+                    "👷 موظف/عامل",
+                    "🏢 صاحب عمل",
+                    "📋 مسؤول موارد بشرية",
+                    "👔 مدير"
+                ], horizontal=True, key="labor_party_sel")
                 labor_q = st.text_area("اكتب سؤالك القانوني:", height=80, key="labor_q_input",
                     placeholder="مثال: تم فصلي بعد 3 سنوات خدمة بدون سبب، ما مستحقاتي؟")
                 submitted = st.form_submit_button("⚖️ استشارة", type="primary", use_container_width=True)
@@ -8673,12 +9024,18 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                     st.session_state.labor_chat.append({"role":"assistant","content":answer})
                     st.rerun()
                 else:
+                    # Map UI selection to asking_party value
+                    _party_map = {"👷 موظف/عامل": "employee", "🏢 صاحب عمل": "employer",
+                                  "📋 مسؤول موارد بشرية": "hr_officer", "👔 مدير": "manager"}
+                    _asking = _party_map.get(labor_party, None)  # None = auto-detect
+
                     # Use AI model with the full Labor Law system prompt
                     with st.spinner("⚖️ جاري تحليل القضية بالذكاء الاصطناعي..."):
                         response, error = call_ai_api(
                             LABOR_LAW_SYSTEM_PROMPT, labor_q,
                             chat_history=st.session_state.labor_chat,
-                            model_type="labor"
+                            model_type="labor",
+                            asking_party=_asking
                         )
                         if not response or len(str(response)) < 20:
                             response = get_labor_fallback_answer(labor_q)
@@ -8731,6 +9088,13 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                         st.rerun()
 
             with st.form("hr_form", clear_on_submit=True):
+                hr_party = st.radio("👤 أنا أسأل بصفتي:", [
+                    "🔍 اكتشاف تلقائي",
+                    "📋 مختص موارد بشرية",
+                    "👔 مدير",
+                    "👷 موظف",
+                    "🏢 صاحب عمل"
+                ], horizontal=True, key="hr_party_sel")
                 hr_q = st.text_area("اكتب سؤالك:", height=80, key="hr_q_input",
                     placeholder="مثال: كيف أقيس فعالية برنامج التدريب باستخدام نموذج Kirkpatrick؟")
                 submitted = st.form_submit_button("📚 استشارة", type="primary", use_container_width=True)
@@ -8749,11 +9113,17 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                     st.session_state.hr_chat.append({"role":"assistant","content":answer})
                     st.rerun()
                 else:
+                    # Map UI selection to asking_party value
+                    _hr_party_map = {"📋 مختص موارد بشرية": "hr_officer", "👔 مدير": "manager",
+                                     "👷 موظف": "employee", "🏢 صاحب عمل": "employer"}
+                    _hr_asking = _hr_party_map.get(hr_party, None)  # None = auto-detect
+
                     with st.spinner("📚 جاري البحث بالذكاء الاصطناعي..."):
                         response, error = call_ai_api(
                             HR_EXPERT_SYSTEM_PROMPT, hr_q,
                             chat_history=st.session_state.hr_chat,
-                            model_type="hr_expert"
+                            model_type="hr_expert",
+                            asking_party=_hr_asking
                         )
                         if not response or len(str(response)) < 20:
                             response = get_hr_fallback_answer(hr_q)
