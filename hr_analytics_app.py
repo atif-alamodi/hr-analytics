@@ -1179,191 +1179,384 @@ def filter_response(text, consultant_type):
 # REASONING ARCHITECTURE
 # =====================================================
 
-LEGAL_TOPICS = {
-    "termination": {"keywords": ["فصل","إنهاء","طرد","إقالة","فسخ","فصلي"], "articles": "م74-82", "label": "إنهاء العقد"},
-    "end_of_service": {"keywords": ["مكافأة","نهاية الخدمة","مستحقات","تسوية"], "articles": "م84-88", "label": "مكافأة نهاية الخدمة"},
-    "resignation": {"keywords": ["استقالة","أستقيل","ترك العمل"], "articles": "م75,م81,م85", "label": "الاستقالة"},
-    "contracts": {"keywords": ["عقد","عقود","محدد","غير محدد","تجديد"], "articles": "م49-60", "label": "العقود"},
-    "wages": {"keywords": ["راتب","أجر","رواتب","بدل","خصم"], "articles": "م89-97", "label": "الأجور"},
-    "working_hours": {"keywords": ["ساعات","دوام","إضافي","overtime","رمضان"], "articles": "م98-107", "label": "ساعات العمل"},
-    "leave": {"keywords": ["إجازة","إجازات","سنوية","مرضية","وفاة","زواج","حج"], "articles": "م108-116", "label": "الإجازات"},
-    "training": {"keywords": ["تدريب","تأهيل","تطوير مهني","دورة"], "articles": "م42-48", "label": "التدريب والتأهيل"},
-    "probation": {"keywords": ["تجربة","فترة التجربة"], "articles": "م53-54", "label": "فترة التجربة"},
-    "women": {"keywords": ["المرأة","حامل","وضع","رضاعة","أمومة"], "articles": "م121-130,م151", "label": "المرأة العاملة"},
-    "insurance": {"keywords": ["تأمين","تأمينات","gosi","ساند","تقاعد"], "articles": "GOSI", "label": "التأمينات الاجتماعية"},
-    "safety": {"keywords": ["سلامة","إصابة","حادث","خطر"], "articles": "م131-155", "label": "السلامة وإصابات العمل"},
-    "disputes": {"keywords": ["شكوى","نزاع","محكمة","خلاف"], "articles": "م200-231", "label": "تسوية النزاعات"},
-    "saudization": {"keywords": ["نطاقات","سعودة","توطين"], "articles": "م26+قرارات", "label": "نطاقات والتوطين"},
-    "maritime": {"keywords": ["بحار","بحري","سفينة","ملاحة"], "articles": "م156-178", "label": "العمل البحري"},
-    "transfer": {"keywords": ["نقل كفالة","نقل خدمات","كفالتي"], "articles": "مبادرة تعاقدية", "label": "نقل الخدمات"},
+# =====================================================
+# GENERAL REASONING ARCHITECTURE (Both Advisors)
+# =====================================================
+
+# --- Intent Categories (shared, advisor-agnostic) ---
+INTENT_PATTERNS = {
+    "explanation":     ["ما هو","ماهو","ما هي","ماهي","تعريف","مفهوم","اشرح","وضح","what is","define","explain"],
+    "case_application":["حالتي","تم فصلي","فصلوني","عندي","لدي مشكلة","في حالة","إذا كان","لو"],
+    "calculation":     ["حساب","احسب","كم","مبلغ","نسبة","كيف أحسب","calculate","مقدار","قيمة"],
+    "comparison":      ["الفرق","مقارنة","أفضل","أيهما","مقابل","vs","difference","compare"],
+    "process":         ["خطوات","مراحل","إجراءات","كيف أقدم","كيف أرفع","steps","procedure","طريقة تقديم"],
+    "methodology":     ["كيف أبني","كيف أصمم","كيف أطور","كيف أنشئ","how to build","how to design"],
+    "recommendation":  ["أنصح","أفضل طريقة","ماذا تنصح","ما رأيك","recommend","suggest","أقترح"],
+    "diagnosis":       ["مشكلة","تحدي","ضعف","انخفاض","ارتفاع","تراجع","سبب","لماذا","diagnose","problem"],
+    "policy":          ["سياسة","لائحة","نظام داخلي","ضوابط","policy","regulation","إعداد سياسة"],
+    "rights":          ["حقوق","حقوقي","يحق لي","هل يحق","واجبات","التزامات","rights","obligations"],
+    "pros_cons":       ["مزايا","عيوب","إيجابيات","سلبيات","pros","cons","advantages"],
+    "kpi_design":      ["مؤشرات","KPI","قياس","كيف أقيس","metrics","measure","تقييم فعالية"],
 }
 
+# --- Legal Topics (comprehensive) ---
+LEGAL_TOPICS = {
+    "termination":     {"kw": ["فصل","إنهاء","طرد","إقالة","فسخ","فصلي","فُصلت","إنهاء خدمة","فصل تعسفي"], "ref": "م74-82", "label": "إنهاء العقد"},
+    "end_of_service":  {"kw": ["مكافأة","نهاية الخدمة","مستحقات","مستحقاتي","تسوية","EOS","نهاية خدمة"], "ref": "م84-88", "label": "مكافأة نهاية الخدمة"},
+    "resignation":     {"kw": ["استقالة","أستقيل","ترك العمل","تقديم استقالة","إشعار"], "ref": "م75,م81,م85", "label": "الاستقالة"},
+    "contracts":       {"kw": ["عقد","عقود","محدد المدة","غير محدد","تجديد","عقد عمل","نوع العقد","تحويل العقد"], "ref": "م49-60", "label": "العقود"},
+    "wages":           {"kw": ["راتب","أجر","رواتب","بدل","بدلات","خصم","تأخير رواتب","حماية الأجر","أجور"], "ref": "م89-97", "label": "الأجور"},
+    "working_hours":   {"kw": ["ساعات","ساعات العمل","دوام","عمل إضافي","أوفرتايم","وقت العمل","overtime"], "ref": "م98-107", "label": "ساعات العمل"},
+    "leave":           {"kw": ["إجازة","إجازات","سنوية","مرضية","وفاة","زواج","حج","مولود","إجازة سنوية","إجازة مرضية"], "ref": "م108-116", "label": "الإجازات"},
+    "training":        {"kw": ["تدريب","تأهيل","تدريب مهني","دورة تدريبية","عقد تأهيل","نسبة التدريب"], "ref": "م42-48", "label": "التدريب والتأهيل"},
+    "probation":       {"kw": ["تجربة","فترة التجربة","فترة الاختبار"], "ref": "م53-54", "label": "فترة التجربة"},
+    "women":           {"kw": ["المرأة","حامل","وضع","رضاعة","أمومة","إجازة وضع","حقوق المرأة"], "ref": "م121-130,م151", "label": "المرأة العاملة"},
+    "insurance":       {"kw": ["تأمين","تأمينات","تأمينات اجتماعية","gosi","ساند","تقاعد","اشتراك","معاش"], "ref": "GOSI", "label": "التأمينات الاجتماعية"},
+    "medical":         {"kw": ["تأمين طبي","تأمين صحي","ضمان صحي","علاج","مستشفى","CCHI"], "ref": "CCHI", "label": "التأمين الطبي"},
+    "safety":          {"kw": ["سلامة","إصابة","حادث عمل","إصابة مهنية","خطر","وفاة عمل"], "ref": "م131-155", "label": "السلامة وإصابات العمل"},
+    "disputes":        {"kw": ["شكوى","نزاع","محكمة عمالية","مكتب العمل","خلاف","تظلم","ودي"], "ref": "م200-231", "label": "تسوية النزاعات"},
+    "saudization":     {"kw": ["نطاقات","سعودة","توطين","نسبة السعودة","بلاتيني"], "ref": "م26+قرارات", "label": "نطاقات والتوطين"},
+    "maritime":        {"kw": ["بحار","بحري","سفينة","ملاحة","عمل بحري"], "ref": "م156-178", "label": "العمل البحري"},
+    "transfer":        {"kw": ["نقل كفالة","نقل خدمات","كفالتي","تنقل وظيفي","خروج نهائي","تحويل كفالة"], "ref": "مبادرة تعاقدية", "label": "نقل الخدمات"},
+    "disciplinary":    {"kw": ["جزاء","عقوبة","إنذار","خصم","لفت نظر","مخالفة","تأديب","جزاءات"], "ref": "م66-72", "label": "الجزاءات التأديبية"},
+    "certificate":     {"kw": ["شهادة خبرة","شهادة عمل","خطاب تعريف","تعريف بالراتب"], "ref": "م64", "label": "الشهادات والخطابات"},
+    "absence":         {"kw": ["غياب","تغيب","انقطاع","عدم حضور"], "ref": "م80", "label": "الغياب والانقطاع"},
+    "employer_duties":  {"kw": ["واجبات صاحب العمل","التزامات الشركة","مسؤوليات المنشأة"], "ref": "م51,م90,م121", "label": "واجبات صاحب العمل"},
+    "worker_rights":    {"kw": ["حقوق العامل","حقوقي","حقوق الموظف","حق العامل"], "ref": "متعددة", "label": "حقوق العامل"},
+    "minors":           {"kw": ["أحداث","قاصر","عمالة أطفال","سن العمل"], "ref": "م117-120", "label": "تشغيل الأحداث"},
+    "domestic":         {"kw": ["عمالة منزلية","خادم","سائق منزلي","عامل منزلي"], "ref": "لائحة خاصة", "label": "العمالة المنزلية"},
+}
+
+# --- HR Topics (comprehensive) ---
 HR_TOPICS = {
-    "learning_development": {"keywords": ["تدريب","تطوير","L&D","دورة","تعليم"], "frameworks": "ADDIE,Kirkpatrick,Phillips ROI,70-20-10", "certs": "APTD,PHRi,CIPD L5", "label": "التعلم والتطوير"},
-    "performance": {"keywords": ["أداء","تقييم","KPI","OKR","أهداف"], "frameworks": "9-Box,MBO,BARS,360-degree,BSC", "certs": "SPHRi,CIPD L7,SHRM", "label": "إدارة الأداء"},
-    "recruitment": {"keywords": ["استقطاب","توظيف","مقابلة","ATS"], "frameworks": "Competency-Based,Structured Interview,EVP", "certs": "PHRi,SHRM,CIPD L5", "label": "الاستقطاب والتوظيف"},
-    "compensation": {"keywords": ["رواتب","تعويضات","بدلات","هيكل رواتب"], "frameworks": "Total Rewards,Job Evaluation,Compa-Ratio", "certs": "PHRi,SPHRi,CIPD L7", "label": "التعويضات والمزايا"},
-    "engagement": {"keywords": ["رضا","تجربة الموظف","احتفاظ","دوران"], "frameworks": "Gallup Q12,eNPS,Pulse Survey", "certs": "SHRM,CIPD L5,PHRi", "label": "تجربة الموظف"},
-    "org_development": {"keywords": ["تطوير مؤسسي","تغيير","OD","هيكلة"], "frameworks": "Burke-Litwin,Kotter 8-Step,ADKAR", "certs": "CIPD L7,SPHRi", "label": "التطوير المؤسسي"},
-    "leadership": {"keywords": ["قيادة","إدارة","كوتشنج","coaching"], "frameworks": "Ulrich,Situational Leadership,Coaching", "certs": "CIPD L7,SPHRi,APTD", "label": "القيادة"},
-    "talent": {"keywords": ["مواهب","talent","تعاقب","succession"], "frameworks": "9-Box,Talent Pipeline,HIPO", "certs": "SPHRi,CIPD L7,PHRi", "label": "إدارة المواهب"},
-    "analytics": {"keywords": ["تحليلات","analytics","بيانات","مؤشرات"], "frameworks": "Descriptive→Diagnostic→Predictive→Prescriptive", "certs": "PHRi,SPHRi", "label": "تحليلات HR"},
-    "competency": {"keywords": ["كفاءات","مهارات","جدارات"], "frameworks": "Competency Framework,Skills Matrix", "certs": "SHRM,PHRi", "label": "إدارة الكفاءات"},
-    "onboarding": {"keywords": ["تهيئة","onboarding","موظف جديد"], "frameworks": "30-60-90,Buddy System", "certs": "aPHRi,PHRi", "label": "التهيئة"},
-    "culture": {"keywords": ["ثقافة","بيئة عمل","diversity"], "frameworks": "Schein,Denison,Competing Values", "certs": "CIPD L7,SHRM", "label": "الثقافة المؤسسية"},
+    "learning_development": {"kw": ["تدريب","تطوير","L&D","دورة","تعليم","برنامج تدريبي","تصميم تعليمي","محتوى تدريبي"], "fw": "ADDIE,Kirkpatrick,Phillips ROI,70-20-10,Bloom,SAM,Gagné", "certs": "APTD,PHRi,CIPD L5", "label": "التعلم والتطوير"},
+    "performance":          {"kw": ["أداء","تقييم","تقييم الأداء","KPI","OKR","أهداف","إدارة الأداء","تقييم سنوي"], "fw": "9-Box,MBO,BARS,360-degree,BSC,SMART", "certs": "SPHRi,CIPD L7,SHRM", "label": "إدارة الأداء"},
+    "recruitment":          {"kw": ["استقطاب","توظيف","مقابلة","ATS","اختيار","تعيين","وصف وظيفي","إعلان وظيفي"], "fw": "Competency-Based,Structured Interview,EVP,Employer Brand", "certs": "PHRi,SHRM,CIPD L5", "label": "الاستقطاب والتوظيف"},
+    "compensation":         {"kw": ["رواتب","تعويضات","هيكل رواتب","بدلات","مكافآت","حوافز","درجات وظيفية"], "fw": "Total Rewards,Job Evaluation,Compa-Ratio,Salary Survey,Hay,Mercer", "certs": "PHRi,SPHRi,CIPD L7", "label": "التعويضات والمزايا"},
+    "engagement":           {"kw": ["رضا","تجربة الموظف","احتفاظ","دوران","engagement","تحفيز","ولاء"], "fw": "Gallup Q12,eNPS,Pulse Survey,EX Journey Map", "certs": "SHRM,CIPD L5,PHRi", "label": "تجربة الموظف والاحتفاظ"},
+    "org_development":      {"kw": ["تطوير مؤسسي","تغيير","OD","هيكلة","إعادة هيكلة","تحول"], "fw": "Burke-Litwin,Kotter 8-Step,ADKAR,Lewin,McKinsey 7S", "certs": "CIPD L7,SPHRi", "label": "التطوير المؤسسي"},
+    "leadership":           {"kw": ["قيادة","تطوير قيادي","إدارة","كوتشنج","coaching","توجيه","mentoring"], "fw": "Ulrich,Situational Leadership,Coaching Models,GROW", "certs": "CIPD L7,SPHRi,APTD", "label": "القيادة والتطوير القيادي"},
+    "talent":               {"kw": ["مواهب","talent","تعاقب","succession","خلافة","مسار وظيفي","career"], "fw": "9-Box,Talent Pipeline,HIPO,Career Lattice", "certs": "SPHRi,CIPD L7,PHRi", "label": "إدارة المواهب"},
+    "analytics":            {"kw": ["تحليلات","analytics","بيانات","مؤشرات","تقارير","لوحة معلومات"], "fw": "Descriptive→Diagnostic→Predictive→Prescriptive,ROI", "certs": "PHRi,SPHRi,CIPD L7", "label": "تحليلات الموارد البشرية"},
+    "competency":           {"kw": ["كفاءات","competency","مهارات","جدارات","إطار كفاءات","skills"], "fw": "Competency Framework,Skills Matrix,Gap Analysis,TNA", "certs": "SHRM,PHRi,CIPD L5", "label": "إدارة الكفاءات"},
+    "onboarding":           {"kw": ["تهيئة","onboarding","تعريف","استقبال","موظف جديد","أول يوم"], "fw": "30-60-90 Plan,Buddy System,Orientation Program", "certs": "aPHRi,PHRi,SHRM", "label": "التهيئة والاندماج"},
+    "culture":              {"kw": ["ثقافة","بيئة عمل","قيم","diversity","DEI","شمولية"], "fw": "Schein Model,Denison,Competing Values,Great Place to Work", "certs": "CIPD L7,SHRM,SPHRi", "label": "الثقافة المؤسسية"},
+    "workforce_planning":   {"kw": ["تخطيط القوى","workforce planning","احتياج وظيفي","حجم القوى"], "fw": "Supply-Demand Analysis,Scenario Planning,FTE Analysis", "certs": "SPHRi,CIPD L7", "label": "تخطيط القوى العاملة"},
+    "policy_design":        {"kw": ["سياسة","لائحة داخلية","نظام داخلي","ضوابط","إعداد سياسة"], "fw": "Policy Framework,Governance,Compliance Matrix", "certs": "SHRM,SPHRi,CIPD L7", "label": "تصميم السياسات"},
+    "job_design":           {"kw": ["تصميم وظيفي","وصف وظيفي","تحليل وظيفي","job design","job analysis"], "fw": "Job Analysis,Job Description,Job Evaluation,Role Profiling", "certs": "PHRi,SHRM", "label": "التصميم الوظيفي"},
+    "hr_strategy":          {"kw": ["استراتيجية","خطة استراتيجية","رؤية","أهداف استراتيجية","HR strategy"], "fw": "BSC,Strategy Map,Ulrich Model,HR Value Chain", "certs": "SPHRi,CIPD L7,SHRM", "label": "الاستراتيجية"},
+    "employee_relations":   {"kw": ["علاقات موظفين","شكاوى داخلية","تظلم","صراع","نزاع داخلي"], "fw": "Conflict Resolution,Mediation,Grievance Process", "certs": "PHRi,SHRM,CIPD L5", "label": "علاقات الموظفين"},
+    "wellbeing":            {"kw": ["رفاهية","صحة نفسية","wellbeing","توازن","work-life","إرهاق"], "fw": "Wellbeing Framework,EAP,Burnout Prevention", "certs": "CIPD L5,SHRM", "label": "رفاهية الموظفين"},
 }
 
 def analyze_question(question, advisor_type):
-    """Analyze question to extract topic, intent, and metadata."""
+    """General-purpose question analysis for both advisors."""
     q = question.lower().strip()
-    analysis = {"topic": "general", "intent": "information", "label": "",
-                "reference": "", "certs": "", "needs_calculation": False}
+    analysis = {
+        "topic": "general", "subtopic": "", "intent": "explanation",
+        "label": "", "reference": "", "certs": "",
+        "entities": {}, "needs_calculation": False, "needs_comparison": False,
+        "needs_case_application": False, "needs_recommendation": False,
+        "missing_info": [], "confidence": 0.0
+    }
+
+    # 1. Detect topic
     topics = LEGAL_TOPICS if advisor_type == "legal" else HR_TOPICS
     best_score = 0
-    for topic_key, topic_def in topics.items():
-        score = sum(3 if kw in q else (2 if kw.replace('ال','') in q.replace('ال','') else 0) for kw in topic_def['keywords'])
+    for key, tdef in topics.items():
+        score = sum(3 if kw in q else (2 if kw.replace('ال','') in q.replace('ال','') else 0) for kw in tdef['kw'])
         if score > best_score:
             best_score = score
-            analysis['topic'] = topic_key
-            analysis['label'] = topic_def['label']
-            analysis['reference'] = topic_def.get('articles', topic_def.get('frameworks', ''))
-            analysis['certs'] = topic_def.get('certs', '')
-    # Detect intent
-    if any(w in q for w in ['كيف','طريقة']): analysis['intent'] = 'methodology'
-    elif any(w in q for w in ['ما هي','ماهي','تعريف','مفهوم']): analysis['intent'] = 'definition'
-    elif any(w in q for w in ['حساب','احسب','كم','مبلغ','نسبة']): analysis['intent'] = 'calculation'; analysis['needs_calculation'] = True
-    elif any(w in q for w in ['حقوق','مستحقات','يحق','واجب']): analysis['intent'] = 'entitlements'
-    elif any(w in q for w in ['الفرق','مقارنة','أفضل']): analysis['intent'] = 'comparison'
-    elif any(w in q for w in ['خطوات','مراحل','إجراءات']): analysis['intent'] = 'process'
+            analysis['topic'] = key
+            analysis['label'] = tdef['label']
+            analysis['reference'] = tdef.get('ref', tdef.get('fw', ''))
+            analysis['certs'] = tdef.get('certs', '')
+            analysis['confidence'] = min(score / 9.0, 1.0)
+
+    # 2. Detect intent (general, works for both)
+    for intent, patterns in INTENT_PATTERNS.items():
+        if any(p in q for p in patterns):
+            analysis['intent'] = intent
+            break
+
+    # 3. Set flags based on intent
+    analysis['needs_calculation'] = analysis['intent'] == 'calculation'
+    analysis['needs_comparison'] = analysis['intent'] in ('comparison', 'pros_cons')
+    analysis['needs_case_application'] = analysis['intent'] == 'case_application'
+    analysis['needs_recommendation'] = analysis['intent'] in ('recommendation', 'diagnosis')
+
+    # 4. Extract entities
+    import re
+    years = re.findall(r'(\d+)\s*(?:سنة|سنوات|عام|أعوام|شهر|أشهر)', q)
+    if years: analysis['entities']['duration'] = years[0]
+    amounts = re.findall(r'(\d[\d,]+)\s*(?:ريال|راتب|أجر)', q)
+    if amounts: analysis['entities']['amount'] = amounts[0].replace(',','')
+    pct = re.findall(r'(\d+)\s*%', q)
+    if pct: analysis['entities']['percentage'] = pct[0]
+
+    # 5. Detect missing info
+    if analysis['needs_calculation']:
+        if 'duration' not in analysis['entities']: analysis['missing_info'].append('المدة/سنوات الخدمة')
+        if 'amount' not in analysis['entities']: analysis['missing_info'].append('المبلغ/الراتب')
+
     return analysis
 
-def build_reasoning_context(question, advisor_type, analysis, retrieved_context=""):
-    """Build structured reasoning instructions for the model."""
+def apply_reasoning_rules(analysis, advisor_type):
+    """Infer what kind of reasoning is needed based on topic + intent."""
+    rules = {
+        "reasoning_mode": "general", "emphasis": [],
+        "requires_articles": False, "requires_frameworks": False,
+        "requires_calculation": False, "requires_steps": False,
+        "requires_comparison": False, "requires_kpis": False,
+        "depth": "standard"
+    }
+
+    intent = analysis.get('intent', 'explanation')
+    topic = analysis.get('topic', 'general')
+
     if advisor_type == "legal":
-        r = f"""أنت المستشار القانوني لنظام العمل السعودي.
-المسألة: {analysis['label']} | المواد: {analysis['reference']} | نوع الطلب: {analysis['intent']}
+        rules["requires_articles"] = True
 
-اتبع هذا الهيكل بالضبط:
-🔍 **أولاً - تحديد المسألة القانونية:** صنّف المسألة وحدد الباب المعني
-📋 **ثانياً - الأساس النظامي:** اسرد كل المواد ذات العلاقة ({analysis['reference']}) بأرقامها
-⚖️ **ثالثاً - التحليل القانوني:** طبّق المواد على الحالة"""
-        if analysis['needs_calculation']: r += " مع حسابات رقمية مفصّلة"
-        r += """
-👤 **رابعاً - حقوق والتزامات الأطراف:** لكل من العامل وصاحب العمل
-💡 **خامساً - التوصية القانونية:** نصيحة عملية + إجراءات + مدد + جهات مختصة
-⚠️ **سادساً - التحذيرات:** مخالفات وعقوبات محتملة
+        # Determine reasoning mode
+        if intent == "case_application":
+            rules["reasoning_mode"] = "legal_case_analysis"
+            rules["emphasis"] = ["تحديد الواقعة","تكييفها قانونياً","المواد المنطبقة","النتيجة"]
+            rules["depth"] = "deep"
+        elif intent == "calculation":
+            rules["reasoning_mode"] = "legal_calculation"
+            rules["emphasis"] = ["المعادلة","المدخلات","الحساب التفصيلي","النتيجة"]
+            rules["requires_calculation"] = True
+        elif intent == "comparison":
+            rules["reasoning_mode"] = "legal_comparison"
+            rules["emphasis"] = ["الحالة الأولى","الحالة الثانية","الفروقات","الأثر القانوني"]
+            rules["requires_comparison"] = True
+        elif intent == "process":
+            rules["reasoning_mode"] = "legal_procedure"
+            rules["emphasis"] = ["الخطوات","المدد الزمنية","الجهات المختصة","المستندات"]
+            rules["requires_steps"] = True
+        elif intent == "rights":
+            rules["reasoning_mode"] = "rights_obligations"
+            rules["emphasis"] = ["حقوق العامل","حقوق صاحب العمل","الالتزامات","العقوبات"]
+        elif intent == "diagnosis":
+            rules["reasoning_mode"] = "legal_diagnosis"
+            rules["emphasis"] = ["تحليل المشكلة","المخالفة المحتملة","الحل القانوني","الإجراء"]
+        else:
+            rules["reasoning_mode"] = "legal_explanation"
+            rules["emphasis"] = ["المفهوم القانوني","المواد ذات العلاقة","الشرح","التطبيق"]
 
-❌ لا تذكر أي أطر منهجية أو مصطلحات HR إنجليزية."""
-    else:
-        r = f"""أنت مستشار الموارد البشرية المهني.
-الموضوع: {analysis['label']} | المناهج: {analysis['certs']} | الأطر: {analysis['reference']} | نوع الطلب: {analysis['intent']}
+    else:  # HR
+        rules["requires_frameworks"] = True
 
-اتبع هذا الهيكل بالضبط:
-🎯 **أولاً - تحديد المجال:** صنّف الموضوع في تخصصات HR
-📚 **ثانياً - الإطار المرجعي:** حدد المناهج ({analysis['certs']}) واذكر **(PHRi - المجال)** أو **(CIPD L7 - المجال)**
-🔬 **ثالثاً - التحليل العلمي:** اشرح النموذج المناسب ({analysis['reference']}) بالتفصيل
-📊 **رابعاً - مؤشرات القياس:** 3-5 KPIs قابلة للقياس
-🛠️ **خامساً - التطبيق العملي:** خطوات تنفيذية + جدول زمني
-🌍 **سادساً - أفضل الممارسات:** أمثلة من شركات عالمية
+        if intent == "methodology":
+            rules["reasoning_mode"] = "hr_methodology"
+            rules["emphasis"] = ["الإطار المنهجي","المراحل","التطبيق","القياس"]
+            rules["requires_steps"] = True
+        elif intent == "diagnosis":
+            rules["reasoning_mode"] = "hr_diagnosis"
+            rules["emphasis"] = ["تحليل الوضع","الأسباب الجذرية","الحل المقترح","خطة التنفيذ"]
+            rules["depth"] = "deep"
+        elif intent == "comparison":
+            rules["reasoning_mode"] = "hr_comparison"
+            rules["emphasis"] = ["النموذج الأول","النموذج الثاني","المقارنة","التوصية"]
+            rules["requires_comparison"] = True
+        elif intent == "kpi_design":
+            rules["reasoning_mode"] = "hr_kpi_design"
+            rules["emphasis"] = ["المؤشرات","طريقة القياس","المستهدف","التكرار"]
+            rules["requires_kpis"] = True
+        elif intent == "policy":
+            rules["reasoning_mode"] = "hr_policy_design"
+            rules["emphasis"] = ["الهدف","النطاق","الضوابط","الإجراءات","المسؤوليات"]
+            rules["requires_steps"] = True
+        elif intent == "process":
+            rules["reasoning_mode"] = "hr_process_design"
+            rules["emphasis"] = ["المراحل","المدخلات","المخرجات","المسؤوليات","الأدوات"]
+            rules["requires_steps"] = True
+        elif intent == "recommendation":
+            rules["reasoning_mode"] = "hr_recommendation"
+            rules["emphasis"] = ["التحليل","الخيارات","التوصية","مبررات التوصية"]
+        elif intent == "pros_cons":
+            rules["reasoning_mode"] = "hr_evaluation"
+            rules["emphasis"] = ["المزايا","العيوب","الملاءمة","البديل"]
+            rules["requires_comparison"] = True
+        else:
+            rules["reasoning_mode"] = "hr_explanation"
+            rules["emphasis"] = ["المفهوم","الإطار المرجعي","التطبيق","أفضل الممارسات"]
 
-❌ لا تذكر أي مادة قانونية أو رقم مادة."""
+    return rules
+
+def build_reasoning_context(question, advisor_type, analysis, retrieved_context=""):
+    """Build dynamic reasoning prompt based on analysis + rules."""
+    rules = apply_reasoning_rules(analysis, advisor_type)
+    mode = rules["reasoning_mode"]
+    emphasis = rules["emphasis"]
+    label = analysis.get("label", "")
+    ref = analysis.get("reference", "")
+    certs = analysis.get("certs", "")
+
+    if advisor_type == "legal":
+        header = f"أنت المستشار القانوني لنظام العمل السعودي.\nالمسألة: {label} | المواد: {ref} | نوع التحليل: {mode}\n"
+        header += "❌ لا تذكر أي إطار منهجي أو مصطلح HR. فقط مواد قانونية.\n\n"
+
+        if mode == "legal_case_analysis":
+            body = "اتبع هذا المنهج:\n🔍 **تحديد الواقعة القانونية:** حدد الوقائع الجوهرية\n📋 **التكييف القانوني:** كيّف الواقعة وحدد المواد المنطبقة\n⚖️ **تطبيق النص:** طبّق كل مادة على الوقائع\n👤 **حقوق الأطراف:** حقوق والتزامات كل طرف\n💡 **النتيجة:** الحكم القانوني المتوقع\n⚠️ **ملاحظات:** معلومات ناقصة أو احتمالات"
+        elif mode == "legal_calculation":
+            body = "اتبع هذا المنهج:\n📋 **الأساس القانوني:** المواد التي تحكم الحساب\n🔢 **المعادلة:** اكتب المعادلة بوضوح\n📊 **الحساب التفصيلي:** خطوة بخطوة مع الأرقام\n💰 **النتيجة:** المبلغ النهائي\n⚠️ **ملاحظات:** حالات خاصة أو استثناءات"
+        elif mode == "legal_comparison":
+            body = "اتبع هذا المنهج:\n📋 **الحالة الأولى:** الوصف والمواد المنطبقة\n📋 **الحالة الثانية:** الوصف والمواد المنطبقة\n⚖️ **المقارنة:** الفروقات في الحقوق والالتزامات\n💡 **الأثر القانوني:** النتائج المترتبة على كل حالة"
+        elif mode == "legal_procedure":
+            body = "اتبع هذا المنهج:\n📋 **الأساس النظامي:** المواد ذات العلاقة\n📝 **الخطوات:** رقّم كل خطوة بالترتيب\n⏰ **المدد الزمنية:** حدد المهل لكل خطوة\n🏛️ **الجهات:** حدد الجهة المختصة لكل إجراء\n📄 **المستندات:** المطلوبة لكل خطوة"
+        elif mode == "rights_obligations":
+            body = "اتبع هذا المنهج:\n👤 **حقوق العامل:** اسردها مع المواد\n🏢 **حقوق صاحب العمل:** اسردها مع المواد\n📋 **التزامات الطرفين:** لكل طرف\n⚠️ **المخالفات والعقوبات:** ما يترتب على الإخلال"
+        elif mode == "legal_diagnosis":
+            body = "اتبع هذا المنهج:\n🔍 **تحليل المشكلة:** حدد الإشكالية القانونية\n📋 **المخالفة المحتملة:** هل هناك مخالفة نظامية؟\n⚖️ **الحل القانوني:** ما الخيارات المتاحة؟\n📝 **الإجراء المطلوب:** خطوات عملية للحل"
+        else:
+            body = "اتبع هذا المنهج:\n🔍 **تحديد المسألة:** حدد الموضوع القانوني\n📋 **الأساس النظامي:** المواد ذات العلاقة\n⚖️ **الشرح:** اشرح الحكم القانوني\n💡 **التطبيق:** كيف ينطبق عملياً\n⚠️ **تحذيرات:** استثناءات أو حالات خاصة"
+
+    else:  # HR
+        header = f"أنت مستشار الموارد البشرية المهني.\nالموضوع: {label} | المناهج: {certs} | الأطر: {ref} | نوع التحليل: {mode}\n"
+        header += "❌ لا تذكر أي مادة قانونية أو رقم مادة. فقط مفاهيم ومناهج مهنية.\nفي كل نقطة اذكر المنهج المرجعي مثل **(PHRi - المجال)**\n\n"
+
+        if mode == "hr_methodology":
+            body = "اتبع هذا المنهج:\n🎯 **تحديد المجال:** صنّف الموضوع\n📚 **الإطار المنهجي:** النموذج المناسب ومراحله\n🔬 **التطبيق:** خطوات تنفيذية مفصّلة\n📊 **القياس:** KPIs لتقييم النجاح\n🌍 **أفضل الممارسات:** أمثلة عالمية"
+        elif mode == "hr_diagnosis":
+            body = "اتبع هذا المنهج:\n🔍 **تحليل الوضع الحالي:** ما المشكلة بالضبط؟\n🔬 **الأسباب الجذرية:** لماذا تحدث؟ (5 Whys / Ishikawa)\n💡 **الحل المقترح:** الإطار المنهجي المناسب\n📝 **خطة التنفيذ:** مراحل وجدول زمني\n📊 **قياس التحسن:** مؤشرات المتابعة"
+        elif mode == "hr_comparison":
+            body = "اتبع هذا المنهج:\n📚 **النموذج/النهج الأول:** التعريف والمصدر المرجعي\n📚 **النموذج/النهج الثاني:** التعريف والمصدر المرجعي\n⚖️ **المقارنة:** جدول مقارنة واضح\n💡 **التوصية:** أيهما أنسب ولماذا"
+        elif mode == "hr_kpi_design":
+            body = "اتبع هذا المنهج:\n🎯 **الهدف:** ماذا نريد قياسه ولماذا\n📊 **المؤشرات:** 5-7 KPIs مع المعادلة لكل منها\n🎯 **المستهدف:** القيمة المرجعية (benchmark)\n⏰ **التكرار:** دوري/شهري/ربعي\n🛠️ **الأدوات:** كيف نجمع البيانات"
+        elif mode == "hr_policy_design":
+            body = "اتبع هذا المنهج:\n🎯 **الهدف:** لماذا نحتاج هذه السياسة\n📋 **النطاق:** من يشمل ومن يُستثنى\n📝 **الضوابط:** القواعد والشروط\n🔄 **الإجراءات:** خطوات التطبيق\n👥 **المسؤوليات:** من المسؤول عن ماذا\n📊 **القياس:** كيف نقيّم فعالية السياسة"
+        elif mode == "hr_process_design":
+            body = "اتبع هذا المنهج:\n📋 **نظرة عامة:** وصف العملية وأهدافها\n🔄 **المراحل:** خطوات مرقّمة بالترتيب\n📥 **المدخلات والمخرجات:** لكل مرحلة\n👥 **المسؤوليات:** RACI matrix\n🛠️ **الأدوات:** تقنيات وأنظمة مطلوبة\n📊 **مؤشرات:** لقياس كفاءة العملية"
+        elif mode == "hr_recommendation":
+            body = "اتبع هذا المنهج:\n🔍 **التحليل:** فهم الوضع والسياق\n📋 **الخيارات:** 2-3 بدائل ممكنة\n💡 **التوصية:** البديل الأفضل مع المبررات\n📝 **خطة التنفيذ:** كيف ننفذ التوصية\n📊 **القياس:** كيف نعرف أنها نجحت"
+        elif mode == "hr_evaluation":
+            body = "اتبع هذا المنهج:\n✅ **المزايا:** نقاط القوة\n❌ **العيوب:** نقاط الضعف\n🎯 **الملاءمة:** متى يُستخدم هذا النهج\n🔄 **البديل:** ما الخيار الآخر إن لم يناسب"
+        else:
+            body = "اتبع هذا المنهج:\n🎯 **تحديد المجال:** صنّف الموضوع في HR\n📚 **المفهوم:** التعريف والإطار المرجعي\n🔬 **التطبيق:** كيف يُطبّق عملياً\n📊 **القياس:** مؤشرات النجاح\n🌍 **أفضل الممارسات:** تجارب عالمية"
+
+    # Add entities context
+    entities = analysis.get('entities', {})
+    if entities:
+        header += f"**بيانات مستخرجة:** {entities}\n"
+    if analysis.get('missing_info'):
+        header += f"**معلومات ناقصة:** {', '.join(analysis['missing_info'])} - اذكر أنك تحتاج هذه المعلومات لإجابة أدق.\n"
+
+    prompt = header + body
     if retrieved_context:
-        r += f"\n\nسياق من قاعدة المعرفة:\n{retrieved_context[:1500]}"
-    return r
+        prompt += f"\n\n**سياق من قاعدة المعرفة:**\n{retrieved_context[:1500]}"
+    return prompt
+
+def validate_generated_answer(answer, analysis, advisor_type):
+    """Validate answer quality and domain compliance for both advisors."""
+    if not answer or len(answer) < 30: return False, ["short"]
+    issues = []
+    if advisor_type == "legal":
+        legal_markers = ['المادة','مادة','م4','م5','م7','م8','م9','م1','الباب','نظام العمل']
+        if not any(m in answer for m in legal_markers):
+            if analysis.get('intent') not in ('definition','explanation'):
+                issues.append("no_legal_basis")
+        hr_leak = ['PHRi','SHRM','CIPD','APTD','ADDIE','Kirkpatrick','competency framework']
+        if any(m in answer for m in hr_leak):
+            issues.append("hr_contamination")
+    else:
+        hr_markers = ['PHRi','SHRM','CIPD','APTD','SPHRi','aPHRi','framework','model','نموذج','إطار']
+        if not any(m in answer for m in hr_markers):
+            issues.append("no_hr_framework")
+        legal_leak = ['المادة ','م42','م50','م53','م74','م77','م80','م84','م88','م98','م109','م151','نظام العمل السعودي']
+        if any(m in answer for m in legal_leak):
+            issues.append("legal_contamination")
+    return len(issues) == 0, issues
 
 def generate_advisor_answer(question, advisor_type, system_prompt=None):
-    """Full reasoning pipeline: analyze → retrieve → reason → generate."""
+    """Full general reasoning pipeline for both advisors."""
     import requests as req_lib
+
+    # Step 1: Analyze
     analysis = analyze_question(question, advisor_type)
+
+    # Step 2: Rules
+    rules = apply_reasoning_rules(analysis, advisor_type)
+
+    # Step 3: Retrieve
     retrieved = ""
     try:
         if '_knowledge_engine' in st.session_state:
             retrieved = st.session_state._knowledge_engine.search(question, advisor_type=advisor_type)
     except: pass
+
+    # Step 4: Build reasoning context
     reasoning_prompt = build_reasoning_context(question, advisor_type, analysis, retrieved)
 
-    # Try Groq
-    groq_key = st.session_state.get('groq_api_key','')
-    if not groq_key:
-        try: groq_key = st.secrets.get("groq",{}).get("api_key","")
-        except: pass
-    if groq_key:
-        try:
-            resp = req_lib.post("https://api.groq.com/openai/v1/chat/completions",
-                json={"model":"llama-3.3-70b-versatile","messages":[
-                    {"role":"system","content":reasoning_prompt[:3000]},
-                    {"role":"user","content":question}],
-                    "max_tokens":2500,"temperature":0.2},
-                headers={'Authorization':f'Bearer {groq_key}'},timeout=30)
-            if resp.status_code == 200:
-                text = resp.json().get('choices',[{}])[0].get('message',{}).get('content','')
-                if text and len(text) > 20: return filter_response(text, advisor_type)
-        except: pass
+    # Step 5: Generate
+    answer = _call_llm_with_reasoning(question, reasoning_prompt, req_lib)
 
-    # Try Gemini
-    gemini_key = st.session_state.get('gemini_api_key','')
-    if not gemini_key:
-        try: gemini_key = st.secrets.get("gemini",{}).get("api_key","")
-        except: pass
-    if gemini_key:
-        try:
-            resp = req_lib.post(f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_key}",
-                json={"contents":[{"parts":[{"text":f"{reasoning_prompt[:2500]}\n\nالسؤال: {question}"}]}],
-                    "generationConfig":{"maxOutputTokens":2000,"temperature":0.2}},timeout=30)
-            if resp.status_code == 200:
-                text = resp.json().get('candidates',[{}])[0].get('content',{}).get('parts',[{}])[0].get('text','')
-                if text and len(text) > 20: return filter_response(text, advisor_type)
-        except: pass
-
-    # Try OpenRouter
-    or_key = st.session_state.get('openrouter_api_key','')
-    if not or_key:
-        try: or_key = st.secrets.get("openrouter",{}).get("api_key","")
-        except: pass
-    if or_key:
-        try:
-            resp = req_lib.post("https://openrouter.ai/api/v1/chat/completions",
-                json={"model":"meta-llama/llama-3.3-70b-instruct:free",
-                    "messages":[{"role":"user","content":f"{reasoning_prompt[:2000]}\n\n{question}"}],"max_tokens":1500},
-                headers={'Authorization':f'Bearer {or_key}','HTTP-Referer':'https://hr-analytics-risal.streamlit.app'},timeout=30)
-            if resp.status_code == 200:
-                text = resp.json().get('choices',[{}])[0].get('message',{}).get('content','')
-                if text and len(text) > 20: return filter_response(text, advisor_type)
-        except: pass
+    # Step 6: Validate
+    if answer:
+        is_valid, issues = validate_generated_answer(answer, analysis, advisor_type)
+        if not is_valid:
+            answer = filter_response(answer, advisor_type)
+            if answer and len(answer) > 30:
+                return answer
+            # Retry with stronger guidance
+            retry_prompt = reasoning_prompt + "\n\n⚠️ الإجابة السابقة لم تكن مناسبة. "
+            if "hr_contamination" in issues or "no_legal_basis" in issues:
+                retry_prompt += "اذكر المواد القانونية بأرقامها فقط. لا تذكر أي إطار منهجي HR."
+            elif "legal_contamination" in issues or "no_hr_framework" in issues:
+                retry_prompt += "اذكر المناهج المهنية (PHRi/SHRM/CIPD/APTD) فقط. لا تذكر أي مادة قانونية."
+            answer = _call_llm_with_reasoning(question, retry_prompt, req_lib)
+            if answer:
+                return filter_response(answer, advisor_type)
+        else:
+            return answer
     return None
 
+def _call_llm_with_reasoning(question, reasoning_prompt, req_lib):
+    """Call available LLM providers."""
+    for prov, key_name, secret_name in [('groq','groq_api_key','groq'),('gemini','gemini_api_key','gemini'),('openrouter','openrouter_api_key','openrouter')]:
+        api_key = st.session_state.get(key_name,'')
+        if not api_key:
+            try: api_key = st.secrets.get(secret_name,{}).get("api_key","")
+            except: pass
+        if not api_key: continue
+        try:
+            if prov == 'groq':
+                resp = req_lib.post("https://api.groq.com/openai/v1/chat/completions",
+                    json={"model":"llama-3.3-70b-versatile","messages":[
+                        {"role":"system","content":reasoning_prompt[:3000]},
+                        {"role":"user","content":question}],"max_tokens":2500,"temperature":0.2},
+                    headers={'Authorization':f'Bearer {api_key}'},timeout=30)
+            elif prov == 'gemini':
+                resp = req_lib.post(f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}",
+                    json={"contents":[{"parts":[{"text":f"{reasoning_prompt[:2500]}\n\nالسؤال: {question}"}]}],
+                        "generationConfig":{"maxOutputTokens":2000,"temperature":0.2}},timeout=30)
+            else:
+                resp = req_lib.post("https://openrouter.ai/api/v1/chat/completions",
+                    json={"model":"meta-llama/llama-3.3-70b-instruct:free",
+                        "messages":[{"role":"user","content":f"{reasoning_prompt[:2000]}\n\n{question}"}],"max_tokens":1500},
+                    headers={'Authorization':f'Bearer {api_key}','HTTP-Referer':'https://hr-analytics-risal.streamlit.app'},timeout=30)
+            if resp.status_code == 200:
+                if prov == 'gemini':
+                    text = resp.json().get('candidates',[{}])[0].get('content',{}).get('parts',[{}])[0].get('text','')
+                else:
+                    text = resp.json().get('choices',[{}])[0].get('message',{}).get('content','')
+                if text and len(text) > 20: return text
+        except: continue
+    return None
 def get_best_kb_answer(question, system_prompt=None):
-    """Main entry: Local KB → Reasoning Pipeline → Diagnostic."""
+    """Main entry: Reasoning Pipeline first for rich answers, Local KB as fallback."""
     consultant_type = "legal" if system_prompt and 'المستشار القانوني' in system_prompt else "hr"
 
-    # 0. Clean and check learned answers
-    try:
-        conn = get_conn(); c = conn.cursor()
-        c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_learned",))
-        row = c.fetchone()
-        if row:
-            learned = json.loads(row[0])
-            clean = [item for item in learned if item.get('type','')]
-            if len(clean) < len(learned):
-                _upsert_config(c, "rag_learned", json.dumps(clean, ensure_ascii=False))
-                conn.commit()
-                learned = clean
-            q_lower = question.lower().strip()
-            for item in learned:
-                if item.get('type','') == consultant_type and item.get('q','').lower() == q_lower:
-                    conn.close(); return item['a']
-        conn.close()
-    except: pass
+    # 1. Try Reasoning Pipeline FIRST (structured, rich answers)
+    answer = generate_advisor_answer(question, consultant_type, system_prompt)
+    if answer and len(answer) > 30:
+        return answer
 
-    # 1. Local KB (guaranteed correct separation)
+    # 2. Fallback to Local KB (if API fails)
     if consultant_type == "legal":
         answer = smart_local_answer(question, LABOR_KB)
     else:
         answer = smart_local_answer(question, HR_KB)
-    if answer: return answer
-
-    # 2. Reasoning Pipeline (analyze → retrieve → reason → generate)
-    answer = generate_advisor_answer(question, consultant_type, system_prompt)
     if answer: return answer
 
     # 3. Diagnostic
