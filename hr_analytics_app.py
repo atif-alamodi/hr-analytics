@@ -1108,10 +1108,12 @@ def smart_local_answer(question, kb=None):
             best_answer = answer
     return best_answer if best_score >= 3 else None
 
-def get_best_kb_answer(question):
+def get_best_kb_answer(question, system_prompt=None):
     """Call AI directly using requests library (bypasses Cloudflare)."""
     import requests as req_lib
     errors = []
+    if not system_prompt:
+        system_prompt = "أنت مستشار قانوني وخبير موارد بشرية سعودي متخصص. أجب دائماً بالعربية بدقة ووضوح مع ذكر المواد القانونية. لا تعتذر أبداً."
 
     # 1. Try Groq with requests library (bypasses Cloudflare)
     groq_key = st.session_state.get('groq_api_key', '')
@@ -1124,7 +1126,7 @@ def get_best_kb_answer(question):
                 json={
                     "model": "llama-3.3-70b-versatile",
                     "messages": [
-                        {"role":"system","content":"أنت مستشار قانوني وخبير موارد بشرية سعودي متخصص. أجب دائماً بالعربية بدقة ووضوح مع ذكر المواد القانونية. لا تعتذر أبداً."},
+                        {"role":"system","content":system_prompt},
                         {"role":"user","content":question}
                     ],
                     "max_tokens": 2000, "temperature": 0.3
@@ -1149,7 +1151,7 @@ def get_best_kb_answer(question):
             resp = req_lib.post(
                 f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_key}",
                 json={
-                    "contents":[{"parts":[{"text":f"أنت مستشار قانوني سعودي متخصص. أجب بالعربية بدقة.\n\nالسؤال: {question}"}]}],
+                    "contents":[{"parts":[{"text":f"{system_prompt}\n\nالسؤال: {question}"}]}],
                     "generationConfig":{"maxOutputTokens":2000,"temperature":0.3}
                 },
                 timeout=30)
@@ -1171,7 +1173,7 @@ def get_best_kb_answer(question):
             resp = req_lib.post("https://openrouter.ai/api/v1/chat/completions",
                 json={
                     "model": "meta-llama/llama-3.3-70b-instruct:free",
-                    "messages": [{"role":"user","content":f"أنت مستشار قانوني سعودي. أجب بالعربية.\n\n{question}"}],
+                    "messages": [{"role":"user","content":f"{system_prompt}\n\n{question}"}],
                     "max_tokens": 1500
                 },
                 headers={'Authorization':f'Bearer {or_key}','HTTP-Referer':'https://hr-analytics-risal.streamlit.app'},
@@ -7701,12 +7703,12 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 **⚠️ قواعد صارمة:**
 1. أجب بنفس لغة السؤال
 2. في كل إجابة اذكر المنهج: **(PHRi - Talent Management)** أو **(CIPD L7 - Strategic Reward)** أو **(APTD - Instructional Design)**
-3. لا تتطرق للمواد القانونية أو أحكام نظام العمل (هذا تخصص المستشار القانوني)
-4. ركّز على: المفاهيم العلمية، الأطر المنهجية، أفضل الممارسات، النماذج الإدارية
+3. ⛔ ممنوع منعاً باتاً ذكر أي مادة قانونية أو رقم مادة من نظام العمل (مثل المادة 77 أو 81 أو 84 أو 85). هذا تخصص المستشار القانوني فقط. لا تذكر أبداً "المادة" أو "نظام العمل" أو "اللائحة التنفيذية" في إجاباتك.
+4. ركّز فقط على: المفاهيم العلمية، الأطر المنهجية (Frameworks)، النماذج الإدارية (Models)، أفضل الممارسات العالمية (Best Practices)
 5. أجب على أي سؤال في مجال الموارد البشرية مهما كان تخصصه
 6. لا تعتذر ولا تقل لا أعرف
 7. قدم نصائح عملية قابلة للتطبيق مع KPIs
-8. لو السؤال قانوني بحت، وجّه السائل للمستشار القانوني
+8. لو السؤال قانوني بحت (مثل: ما حقوقي عند الفصل)، قل: "هذا سؤال قانوني، يرجى استخدام المستشار القانوني ⚖️ للحصول على إجابة دقيقة بالمواد القانونية."
 
 **الفرق بين المستشارين:**
 - **المستشار القانوني** ← المواد القانونية، نظام العمل، التأمينات، الأحكام
@@ -7913,7 +7915,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                 else:
                     # Always gets an answer - never fails
                     with st.spinner("جاري تحليل القضية..."):
-                        response = get_best_kb_answer(labor_q)
+                        response = get_best_kb_answer(labor_q, LABOR_LAW_SYSTEM_PROMPT)
                         st.session_state.labor_chat = [{"role":"user","content":labor_q},{"role":"assistant","content":response}]
                         st.rerun()
 
@@ -7983,7 +7985,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                     st.rerun()
                 else:
                     with st.spinner("جاري البحث في المراجع..."):
-                        response = get_best_kb_answer(hr_q)
+                        response = get_best_kb_answer(hr_q, HR_EXPERT_SYSTEM_PROMPT)
                         st.session_state.hr_chat = [{"role":"user","content":hr_q},{"role":"assistant","content":response}]
                         st.rerun()
 
