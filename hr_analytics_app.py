@@ -1012,7 +1012,39 @@ def ibox(t,tp="info"):
     st.markdown(f'<div class="{c.get(tp,"ibox")}">{ic.get(tp,"💡")} {t}</div>',unsafe_allow_html=True)
 def kpi(l,v): st.markdown(f'<div class="kpi"><p>{l}</p><h3>{v}</h3></div>',unsafe_allow_html=True)
 
-def export_widget(dataframes, title="تقرير", key_prefix="exp"):
+# ===== LOCAL KNOWLEDGE ENGINE (No API needed) =====
+LABOR_KB = {
+    "مستحقات|تسوية|صرف|متى يجب|دفع|سداد": "**تسوية المستحقات (المادة 88):**\n\nيلتزم صاحب العمل بتصفية جميع حقوق العامل خلال **أسبوع** من تاريخ انتهاء العلاقة. وإذا كان العامل هو من أنهى العقد فخلال **أسبوعين**.\n\n**المستحقات تشمل:**\n- الراتب حتى آخر يوم عمل\n- مكافأة نهاية الخدمة (المادة 84)\n- بدل الإجازات غير المستخدمة\n- أي بدلات مستحقة\n- شهادة الخبرة\n\n**عند التأخير:** يحق للعامل تقديم شكوى لمكتب العمل.",
+    "إجازة|إجازات|سنوية|مرضية|annual|leave": "**الإجازات في نظام العمل:**\n\n**السنوية (المادة 109):**\n- أول 5 سنوات: 21 يوماً\n- بعد 5 سنوات: 30 يوماً\n\n**المرضية (المادة 113):**\n- 30 يوماً بأجر كامل\n- 60 يوماً بثلاثة أرباع الأجر\n- 30 يوماً بدون أجر\n\n**إجازات أخرى:** وفاة 5 أيام | زواج 5 أيام | مولود 3 أيام | حج 10-15 يوماً",
+    "ساعات|دوام|عمل اضافي|أوفرتايم|overtime": "**ساعات العمل (المادة 98):**\n\n- العادية: 8 ساعات/يوم أو 48 ساعة/أسبوع\n- رمضان: 6 ساعات/يوم أو 36 ساعة/أسبوع\n- العمل الإضافي (المادة 107): أجر الساعة + 50%\n- راحة: 30 دقيقة بعد كل 5 ساعات متواصلة",
+    "استقالة|أستقيل|resignation": "**الاستقالة:**\n\n**الإشعار (المادة 75):** 60 يوماً (بأجر شهري) أو 30 يوماً (بغيره)\n\n**المكافأة عند الاستقالة (المادة 85):**\n- أقل من سنتين: لا يستحق\n- 2-5 سنوات: ثلث المكافأة\n- 5-10 سنوات: ثلثا المكافأة\n- أكثر من 10: كاملة\n\n**ترك العمل بدون إشعار (المادة 81):** عند عدم دفع الأجر أو الاعتداء",
+    "فصل|إنهاء|طرد|termination|إقالة": "**إنهاء العقد:**\n\n**فصل مشروع بدون مكافأة (المادة 80):** اعتداء، إخلال جوهري، غياب 20 يوم متقطعة أو 10 متصلة، تزوير\n\n**فصل غير مشروع (المادة 77):**\n- غير محدد: 15 يوم/سنة\n- محدد: أجر المدة الباقية\n- الحد الأدنى: شهرين\n+ مكافأة نهاية الخدمة + بدل إجازات",
+    "نطاقات|سعودة|توطين|nitaqat": "**نطاقات:** أحمر (عقوبات) → أصفر → أخضر (منخفض/متوسط/مرتفع) → بلاتيني (أفضل المزايا)\n\nالنسب تختلف حسب حجم المنشأة ونشاطها والمنطقة.",
+    "عقد|عقود|contract|أنواع": "**أنواع العقود:** محدد المدة | غير محدد (سعوديين) | مهمة | موسمي | تدريب | دوام جزئي\n\nالمادة 55: يتحول المحدد لغير محدد بعد 3 تجديدات أو 4 سنوات.\nالمادة 50: يجب أن يكون مكتوباً.",
+    "تأمين|صحي|ضمان|medical|insurance|gosi|تأمينات": "**التأمينات (GOSI):**\n- سعودي: 10.5% خصم + 12.5% شركة\n- غير سعودي: 2% شركة فقط\n\n**التأمين الطبي:** إلزامي، يتحمله صاحب العمل، يشمل الموظف ومن يعولهم.",
+    "أداء|تقييم|performance|kpi|أهداف": "**إدارة الأداء:** أهداف SMART + تقييم دوري + تغذية راجعة + خطة تطوير\n\n**مؤشرات HR:** معدل الدوران، وقت التوظيف، رضا الموظفين، معدل الغياب",
+    "تدريب|تطوير|training|kirkpatrick|addie": "**التدريب:** نموذج ADDIE (تحليل→تصميم→تطوير→تنفيذ→تقييم)\n**التقييم:** Kirkpatrick 4 مستويات (رد فعل→تعلم→سلوك→نتائج)\n**الميزانية:** 1-3% من إجمالي الرواتب",
+    "راتب|رواتب|أجر|أجور|بدل|salary|wage": "**الأجور:**\n- يُدفع بالريال السعودي (المادة 89)\n- لا يقل عن الحد الأدنى المحدد\n- يُدفع خلال 7 أيام من استحقاقه\n- بدل السكن: عادة 25% من الأساسي\n- بدل النقل: عادة 10% من الأساسي\n- لا يجوز خفض الراتب بدون موافقة مكتوبة",
+    "حقوق|واجبات|التزامات": "**حقوق العامل الأساسية:**\n- أجر عادل ومنتظم\n- بيئة عمل آمنة\n- إجازات مدفوعة\n- تأمين طبي\n- مكافأة نهاية خدمة\n- شهادة خبرة\n- عدم التمييز\n\n**واجبات العامل:**\n- أداء العمل بإتقان\n- اتباع التعليمات\n- المحافظة على الأسرار\n- العناية بالممتلكات",
+}
+
+def smart_local_answer(question, kb=None):
+    """Answer from local knowledge base using keyword matching."""
+    if kb is None: kb = LABOR_KB
+    q = question.lower().strip()
+    best_score = 0
+    best_answer = None
+    for keywords, answer in kb.items():
+        kw_list = [k.strip() for k in keywords.split('|')]
+        score = sum(2 if kw in q else 0 for kw in kw_list)
+        for kw in kw_list:
+            for word in q.split():
+                if len(word) > 2 and (kw in word or word in kw):
+                    score += 1
+        if score > best_score:
+            best_score = score
+            best_answer = answer
+    return best_answer if best_score >= 2 else None
     """Universal export: Excel (with charts) + CSV + PDF (with interactive charts)"""
     if dataframes is None: return
     if isinstance(dataframes, pd.DataFrame):
@@ -7713,13 +7745,17 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                     st.session_state.labor_chat = [{"role":"user","content":labor_q},{"role":"assistant","content":answer}]
                     st.rerun()
                 else:
+                    # Try API first, fallback to local knowledge
                     with st.spinner("جاري تحليل القضية..."):
                         response, error = call_claude_api(LABOR_LAW_SYSTEM_PROMPT, labor_q, [], "labor")
+                        if not response:
+                            response = smart_local_answer(labor_q, LABOR_KB)
                         if response:
                             st.session_state.labor_chat = [{"role":"user","content":labor_q},{"role":"assistant","content":response}]
                             st.rerun()
                         else:
-                            st.warning("⚠️ يرجى المحاولة مرة أخرى أو تحقق من إعدادات API")
+                            st.session_state.labor_chat = [{"role":"user","content":labor_q},{"role":"assistant","content":"عذراً، لم أجد إجابة محددة لهذا السؤال في قاعدة المعرفة. يرجى تجربة صياغة مختلفة أو اختيار من الأسئلة الشائعة أعلاه."}]
+                            st.rerun()
 
             # Clear chat
             if st.session_state.labor_chat and st.button("🗑️ مسح المحادثة", key="labor_clear"):
@@ -7786,11 +7822,14 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                 else:
                     with st.spinner("جاري البحث في المراجع..."):
                         response, error = call_claude_api(HR_EXPERT_SYSTEM_PROMPT, hr_q, [], "hr")
+                        if not response:
+                            response = smart_local_answer(hr_q, LABOR_KB)
                         if response:
                             st.session_state.hr_chat = [{"role":"user","content":hr_q},{"role":"assistant","content":response}]
                             st.rerun()
                         else:
-                            st.warning("⚠️ يرجى المحاولة مرة أخرى أو تحقق من إعدادات API")
+                            st.session_state.hr_chat = [{"role":"user","content":hr_q},{"role":"assistant","content":"عذراً، لم أجد إجابة محددة لهذا السؤال. يرجى تجربة صياغة مختلفة أو اختيار من المواضيع الشائعة أعلاه."}]
+                            st.rerun()
 
             if st.session_state.hr_chat and st.button("🗑️ مسح المحادثة", key="hr_clear"):
                 st.session_state.hr_chat = []
