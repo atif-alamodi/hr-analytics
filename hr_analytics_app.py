@@ -29,8 +29,11 @@ class ModelOrchestrator:
     MODELS = {
         'claude': {'url':'https://api.anthropic.com/v1/messages','model':'claude-3-5-sonnet-20241022','max_tokens':4000},
         'groq': {'url':'https://api.groq.com/openai/v1/chat/completions','model':'llama-3.3-70b-versatile','max_tokens':4000},
-        'openrouter': {'url':'https://openrouter.ai/api/v1/chat/completions','model':'google/gemma-3-27b-it:free','max_tokens':2000},
+        'openrouter': {'url':'https://openrouter.ai/api/v1/chat/completions','model':'meta-llama/llama-3.3-70b-instruct:free','max_tokens':2000},
     }
+
+    # Fallback models for OpenRouter
+    OR_MODELS = ['meta-llama/llama-3.3-70b-instruct:free','google/gemma-3-27b-it:free','mistralai/mistral-7b-instruct:free']
 
     # Prompt Templates (editable registry)
     PROMPT_TEMPLATES = {
@@ -178,28 +181,27 @@ class ModelOrchestrator:
             return None, "fallback"
 
         if provider in ('groq', 'openrouter'):
-            payload = json.dumps({
-                "model": config['model'], "max_tokens": config['max_tokens'],
-                "messages": [{"role":"system","content":system_prompt}] + messages,
-                "temperature": 0.3
-            })
-            headers = {'Content-Type':'application/json','Authorization':f'Bearer {api_key}'}
-            if provider == 'openrouter':
-                headers['HTTP-Referer'] = 'https://hr-analytics-risal.streamlit.app'
-                headers['X-Title'] = 'HR Analytics Platform'
-            try:
-                timeout = 30 if provider == 'openrouter' else 60
-                req = urllib.request.Request(config['url'], data=payload.encode('utf-8'), headers=headers, method='POST')
-                with urllib.request.urlopen(req, timeout=timeout) as resp:
-                    result = json.loads(resp.read().decode())
-                    text = result.get('choices',[{}])[0].get('message',{}).get('content','')
-                    return text, None
-            except urllib.request.HTTPError as he:
-                try: err = he.read().decode('utf-8',errors='ignore')[:200]
-                except: err = str(he.code)
-                return None, "fallback"
-            except:
-                return None, "fallback"
+            models_to_try = self.OR_MODELS if provider == 'openrouter' else [config['model']]
+            for model_name in models_to_try:
+                payload = json.dumps({
+                    "model": model_name, "max_tokens": config['max_tokens'],
+                    "messages": [{"role":"system","content":system_prompt}] + messages,
+                    "temperature": 0.3
+                })
+                headers = {'Content-Type':'application/json','Authorization':f'Bearer {api_key}'}
+                if provider == 'openrouter':
+                    headers['HTTP-Referer'] = 'https://hr-analytics-risal.streamlit.app'
+                    headers['X-Title'] = 'HR Analytics Platform'
+                try:
+                    timeout = 30 if provider == 'openrouter' else 60
+                    req = urllib.request.Request(config['url'], data=payload.encode('utf-8'), headers=headers, method='POST')
+                    with urllib.request.urlopen(req, timeout=timeout) as resp:
+                        result = json.loads(resp.read().decode())
+                        text = result.get('choices',[{}])[0].get('message',{}).get('content','')
+                        if text: return text, None
+                except:
+                    continue  # Try next model
+            return None, "fallback"
 
         else:  # claude
             for use_web in [True, False]:
@@ -7690,14 +7692,25 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                 submitted = st.form_submit_button("⚖️ استشارة", type="primary", use_container_width=True)
 
             if submitted and labor_q:
-                with st.spinner("جاري تحليل القضية..."):
-                    response, error = call_claude_api(LABOR_LAW_SYSTEM_PROMPT, labor_q, st.session_state.labor_chat, "labor")
-                    if response:
-                        st.session_state.labor_chat.append({"role": "user", "content": labor_q})
-                        st.session_state.labor_chat.append({"role": "assistant", "content": response})
-                        st.rerun()
-                    else:
-                        st.warning("⚠️ يرجى المحاولة مرة أخرى أو تحقق من إعدادات API في إدارة المستخدمين")
+                # Try instant answer first (no API needed)
+                instant = st.session_state._orchestrator._instant.get(labor_q.strip())
+                if not instant:
+                    for q, a in st.session_state._orchestrator._instant.items():
+                        if q in labor_q or labor_q.strip() in q:
+                            instant = a; break
+                if instant:
+                    st.session_state.labor_chat.append({"role": "user", "content": labor_q})
+                    st.session_state.labor_chat.append({"role": "assistant", "content": instant})
+                    st.rerun()
+                else:
+                    with st.spinner("جاري تحليل القضية..."):
+                        response, error = call_claude_api(LABOR_LAW_SYSTEM_PROMPT, labor_q, st.session_state.labor_chat, "labor")
+                        if response:
+                            st.session_state.labor_chat.append({"role": "user", "content": labor_q})
+                            st.session_state.labor_chat.append({"role": "assistant", "content": response})
+                            st.rerun()
+                        else:
+                            st.warning("⚠️ يرجى المحاولة مرة أخرى أو تحقق من إعدادات API في إدارة المستخدمين")
 
             # Clear chat
             if st.session_state.labor_chat and st.button("🗑️ مسح المحادثة", key="labor_clear"):
@@ -7748,14 +7761,24 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                 submitted = st.form_submit_button("📚 استشارة", type="primary", use_container_width=True)
 
             if submitted and hr_q:
-                with st.spinner("جاري البحث في المراجع..."):
-                    response, error = call_claude_api(HR_EXPERT_SYSTEM_PROMPT, hr_q, st.session_state.hr_chat, "hr")
-                    if response:
-                        st.session_state.hr_chat.append({"role": "user", "content": hr_q})
-                        st.session_state.hr_chat.append({"role": "assistant", "content": response})
-                        st.rerun()
-                    else:
-                        st.warning("⚠️ يرجى المحاولة مرة أخرى أو تحقق من إعدادات API في إدارة المستخدمين")
+                instant = st.session_state._orchestrator._instant.get(hr_q.strip())
+                if not instant:
+                    for q, a in st.session_state._orchestrator._instant.items():
+                        if q in hr_q or hr_q.strip() in q:
+                            instant = a; break
+                if instant:
+                    st.session_state.hr_chat.append({"role": "user", "content": hr_q})
+                    st.session_state.hr_chat.append({"role": "assistant", "content": instant})
+                    st.rerun()
+                else:
+                    with st.spinner("جاري البحث في المراجع..."):
+                        response, error = call_claude_api(HR_EXPERT_SYSTEM_PROMPT, hr_q, st.session_state.hr_chat, "hr")
+                        if response:
+                            st.session_state.hr_chat.append({"role": "user", "content": hr_q})
+                            st.session_state.hr_chat.append({"role": "assistant", "content": response})
+                            st.rerun()
+                        else:
+                            st.warning("⚠️ يرجى المحاولة مرة أخرى أو تحقق من إعدادات API في إدارة المستخدمين")
 
             if st.session_state.hr_chat and st.button("🗑️ مسح المحادثة", key="hr_clear"):
                 st.session_state.hr_chat = []
