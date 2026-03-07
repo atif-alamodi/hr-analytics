@@ -30,7 +30,7 @@ class ModelOrchestrator:
         'claude': {'url':'https://api.anthropic.com/v1/messages','model':'claude-3-5-sonnet-20241022','max_tokens':4000},
         'groq': {'url':'https://api.groq.com/openai/v1/chat/completions','model':'llama-3.3-70b-versatile','max_tokens':4000},
         'openrouter': {'url':'https://openrouter.ai/api/v1/chat/completions','model':'meta-llama/llama-3.3-70b-instruct:free','max_tokens':2000},
-        'huggingface': {'url':'https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3/v1/chat/completions','model':'mistralai/Mistral-7B-Instruct-v0.3','max_tokens':1500},
+        'huggingface': {'url':'https://api-inference.huggingface.co/v1/chat/completions','model':'mistralai/Mistral-7B-Instruct-v0.3','max_tokens':1500},
     }
 
     # Fallback models for OpenRouter
@@ -1029,7 +1029,9 @@ LABOR_KB = {
     "فترة التجربة|تجربة|probation": "**فترة التجربة (المادة 53):**\n- 90 يوماً كحد أقصى\n- تمديد إلى 180 يوماً بموافقة مكتوبة\n- لا تشمل الأعياد والإجازات المرضية\n- لأي طرف الإنهاء بدون تعويض\n- لا تتكرر لدى نفس صاحب العمل",
     "حقوق المرأة|المرأة|امرأة|حامل|وضع|رضاعة|أمومة|maternity": "**حقوق المرأة العاملة:**\n- إجازة وضع: 10 أسابيع (المادة 151)\n- رضاعة: ساعة يومياً لـ 24 شهراً\n- حماية من الفصل أثناء الحمل والوضع\n- إجازة وفاة الزوج: 4 أشهر و10 أيام\n- المساواة في الأجر\n- بيئة عمل آمنة",
     "راتب|رواتب|أجر|أجور|بدل|salary|wage|حد أدنى": "**الأجور:**\n- يُدفع بالريال السعودي (المادة 89)\n- يُدفع خلال 7 أيام من استحقاقه\n- بدل السكن: عادة 25% من الأساسي\n- بدل النقل: عادة 10% من الأساسي\n- لا يجوز الخفض بدون موافقة مكتوبة\n- الحد الأدنى للسعودي في القطاع الخاص: 4,000 ريال (لاحتساب نطاقات)",
-    "حقوق|واجبات|التزامات|حق العامل": "**حقوق العامل:** أجر عادل + بيئة آمنة + إجازات + تأمين طبي + مكافأة نهاية خدمة + شهادة خبرة + عدم التمييز\n\n**واجبات العامل:** أداء العمل بإتقان + اتباع التعليمات + المحافظة على الأسرار + العناية بالممتلكات",
+    "حقوق العامل|حقوق الموظف|حق العامل|حقوقي": "**حقوق العامل في نظام العمل السعودي:**\n\n1. الأجر العادل والمنتظم في موعده\n2. بيئة عمل آمنة وصحية\n3. إجازة سنوية مدفوعة (21 أو 30 يوماً)\n4. تأمين طبي شامل له ولأسرته\n5. مكافأة نهاية الخدمة\n6. شهادة خبرة عند المغادرة\n7. عدم التمييز والمساواة\n8. ساعات عمل لا تتجاوز 8 يومياً\n9. راحة أسبوعية\n10. السلامة المهنية ومعدات الحماية",
+    "واجبات صاحب العمل|التزامات صاحب العمل|مسؤوليات الشركة|واجبات المنشأة|واجبات الشركة": "**واجبات صاحب العمل في نظام العمل السعودي:**\n\n1. **دفع الأجور** في موعدها بدون تأخير (المادة 90)\n2. **عقد مكتوب** من نسختين (المادة 51)\n3. **التأمين الطبي** للموظف وأسرته\n4. **التأمينات الاجتماعية** تسجيل وسداد الاشتراكات\n5. **بيئة آمنة** وصحية (المادة 121)\n6. **منح الإجازات** المستحقة\n7. **شهادة الخبرة** عند انتهاء العلاقة (المادة 64)\n8. **مكافأة نهاية الخدمة** خلال أسبوع (المادة 88)\n9. **السلامة المهنية** توفير معدات الوقاية\n10. **عدم التمييز** بين العاملين\n11. **التدريب** والتأهيل للسعوديين\n12. **السكن أو بدله** توفير سكن أو بدل",
+    "واجبات العامل|التزامات الموظف|واجبات الموظف": "**واجبات العامل في نظام العمل السعودي:**\n\n1. أداء العمل بإتقان وعناية\n2. اتباع أوامر صاحب العمل المشروعة\n3. التعامل بأدب واحترام\n4. عدم إفشاء أسرار العمل\n5. المحافظة على أدوات ومعدات العمل\n6. الالتزام بمواعيد العمل\n7. تقديم المساعدة في حالات الكوارث\n8. عدم منافسة صاحب العمل خلال العقد\n9. إبلاغ أي تغيير في البيانات الشخصية\n10. الخضوع للفحوصات الطبية المطلوبة",
     "شكوى|نزاع|خلاف|محكمة عمالية|مكتب العمل|تظلم": "**تسوية النزاعات العمالية:**\n\n1. **الود:** محاولة حل ودي بين الطرفين\n2. **مكتب العمل:** تقديم شكوى خلال 12 شهراً من المخالفة\n3. **المحكمة العمالية:** خلال 12 شهراً من رفض التسوية الودية\n\n**المدة:** تنظر الدعوى خلال أسابيع\n**مجاناً:** لا رسوم على الدعاوى العمالية\n\n**منصة ودي:** تسوية إلكترونية عبر وزارة الموارد البشرية.",
     "نقل كفالة|نقل خدمات|تحويل|كفيل|sponsor|كفالتي|أنقل|تنقل وظيفي|خروج نهائي": "**نقل الخدمات (مبادرة تحسين العلاقة التعاقدية):**\n\nمبادرة تحسين العلاقة التعاقدية تتيح:\n- **التنقل الوظيفي:** الانتقال لصاحب عمل آخر بعد إكمال السنة الأولى أو انتهاء العقد\n- **الخروج والعودة:** بدون موافقة صاحب العمل\n- **تأشيرة الخروج النهائي:** بدون موافقة صاحب العمل\n\n**الشرط:** إشعار صاحب العمل الحالي قبل 90 يوماً.\n\n**الخطوات:**\n1. الدخول على منصة قوى (qiwa.sa)\n2. اختيار خدمة التنقل الوظيفي\n3. تقديم طلب الانتقال\n4. موافقة صاحب العمل الجديد\n5. إشعار صاحب العمل الحالي",
     "أداء|تقييم|performance|kpi|أهداف|okr": "**إدارة الأداء:**\n- أهداف SMART: محددة + قابلة للقياس + قابلة للتحقيق + ذات صلة + محددة زمنياً\n- تقييم دوري: ربع سنوي أو نصف سنوي\n- تغذية راجعة مستمرة\n- خطة تطوير فردية\n\n**مؤشرات HR:** معدل الدوران | وقت التوظيف | رضا الموظفين | معدل الغياب | تكلفة التوظيف",
@@ -1039,9 +1041,9 @@ LABOR_KB = {
 }
 
 def smart_local_answer(question, kb=None):
-    """Smart answer from local knowledge base - prefers specific matches."""
+    """Smart answer from local knowledge base - prioritizes full phrase matches."""
     if kb is None: kb = LABOR_KB
-    q = question.lower().strip()
+    q = question.lower().strip().rstrip('؟?')
 
     best_score = 0
     best_answer = None
@@ -1050,23 +1052,21 @@ def smart_local_answer(question, kb=None):
         score = 0
         for kw in kw_list:
             kw_lower = kw.lower()
-            # Exact multi-word keyword match (highest priority)
-            if len(kw_lower) > 5 and kw_lower in q: score += 5
-            # Exact keyword in question
+            # Full multi-word phrase match (highest priority)
+            if len(kw_lower) > 8 and kw_lower in q: score += 10
+            elif len(kw_lower) > 5 and kw_lower in q: score += 6
             elif kw_lower in q: score += 3
-            # Keyword root in question
-            elif len(kw_lower) > 3 and kw_lower[:4] in q: score += 2
+            # Check if question contains the keyword with Arabic prefix ال
+            elif f"ال{kw_lower}" in q or kw_lower.replace('ال','') in q.replace('ال',''): score += 2
             else:
                 for word in q.split():
-                    if len(word) > 2:
-                        if word in kw_lower or kw_lower in word: score += 1
-                        if len(word) > 3 and len(kw_lower) > 3 and word[:3] == kw_lower[:3]: score += 1
-        # Bonus for fewer keywords (more specific topic)
-        if score > 0 and len(kw_list) < 5: score += 1
+                    if len(word) > 2 and len(kw_lower) > 2:
+                        if word == kw_lower: score += 2
+                        elif word in kw_lower or kw_lower in word: score += 1
         if score > best_score:
             best_score = score
             best_answer = answer
-    return best_answer if best_score >= 2 else None
+    return best_answer if best_score >= 3 else None
 
 def get_best_kb_answer(question):
     """Always returns an answer - never fails. Tries API first, then KB, then general."""
