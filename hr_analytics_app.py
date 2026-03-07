@@ -133,18 +133,21 @@ class ModelOrchestrator:
             if p != provider and st.session_state.get(f'{p}_api_key',''):
                 providers_to_try.append(p)
 
+        last_error = None
         for prov in providers_to_try:
             result, error = self._call_provider(prov, enhanced_prompt, messages)
             if result:
                 self._call_count += 1
-                # Cache successful response
                 self._cache[cache_key] = result
                 if len(self._cache) > 50: self._cache = dict(list(self._cache.items())[-50:])
-                # Save to learning system
                 if hasattr(st.session_state, '_learning_system'):
                     st.session_state._learning_system.save_interaction(user_message, result, model_type)
                 return result, None
-        return None, error or "خطأ غير متوقع"
+            last_error = error
+        # If all providers failed
+        if last_error in ("no_credit", "rate_limit"):
+            return None, "⚠️ جميع المزودين غير متاحين. تحقق من المفاتيح أو أضف رصيد."
+        return None, last_error or "خطأ غير متوقع"
 
     def _call_provider(self, provider, system_prompt, messages):
         """Execute API call to specific provider."""
@@ -194,9 +197,14 @@ class ModelOrchestrator:
                         text = "\n".join([b.get('text','') for b in result.get('content',[]) if b.get('type')=='text'])
                         return text, None
                 except urllib.request.HTTPError as he:
-                    if use_web and he.code == 400: continue
+                    if use_web and he.code == 400:
+                        err_body = he.read().decode('utf-8',errors='ignore')[:300]
+                        if 'credit' in err_body.lower() or 'balance' in err_body.lower():
+                            return None, "no_credit"  # Trigger fallback
+                        continue
                     err = he.read().decode('utf-8',errors='ignore')[:200]
                     if he.code == 429: return None, "rate_limit"
+                    if he.code == 400 and 'credit' in err.lower(): return None, "no_credit"
                     return None, f"خطأ Claude {he.code}: {err}"
                 except Exception as e:
                     if use_web: continue
