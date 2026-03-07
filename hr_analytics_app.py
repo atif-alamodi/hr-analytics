@@ -1131,7 +1131,15 @@ def filter_response(text, consultant_type):
         if consultant_type == "hr":
             skip = False
             for marker in ['المادة ', 'مادة ', 'نظام العمل', 'اللائحة التنفيذية',
-                'المحكمة العمالية', 'مكتب العمل', 'الباب ال', 'Article ']:
+                'المحكمة العمالية', 'مكتب العمل', 'الباب ال', 'Article ',
+                'م42', 'م43', 'م44', 'م45', 'م46', 'م47', 'م48',
+                'م50', 'م51', 'م53', 'م55', 'م74', 'م75', 'م77', 'م80', 'م81',
+                'م84', 'م85', 'م88', 'م89', 'م90', 'م98', 'م99', 'م107',
+                'م109', 'م112', 'م113', 'م115', 'م151', 'م164',
+                'المواد ذات', 'الباب الرابع', 'الباب الخامس', 'الباب السادس',
+                'الباب السابع', 'الباب الثامن', 'الباب التاسع', 'الباب العاشر',
+                'قانون العمل', 'labor law', 'التأمينات الاجتماعية',
+                'نظام التأمينات', 'الضمان الصحي']:
                 if marker in line and not any(h in line for h in ['PHRi','SHRM','CIPD','APTD','SPHRi']):
                     skip = True; break
             if not skip: filtered.append(line)
@@ -1139,13 +1147,20 @@ def filter_response(text, consultant_type):
             skip = False
             for marker in ['PHRi','SHRM','CIPD','APTD','SPHRi','aPHRi','ADDIE',
                 'Kirkpatrick','Phillips ROI','Instructional Design','Ulrich',
-                '9-Box','Balanced Scorecard','70-20-10','HPT','Bloom','Gagné']:
+                '9-Box','Balanced Scorecard','70-20-10','HPT','Bloom','Gagné',
+                'competency framework','Total Rewards Model','Talent Acquisition Strategy']:
                 if marker in line:
                     skip = True; break
             if not skip: filtered.append(line)
         else:
             filtered.append(line)
     result = '\n'.join(filtered).strip()
+    # If too much was filtered, return a note
+    if len(result) < 30 and len(text) > 100:
+        if consultant_type == "hr":
+            return "هذا السؤال يتعلق بالجانب القانوني. يرجى استخدام **المستشار القانوني ⚖️** للحصول على إجابة دقيقة بالمواد القانونية."
+        else:
+            return "هذا السؤال يتعلق بمفاهيم إدارة الموارد البشرية. يرجى استخدام **مستشار الموارد البشرية 📚** للحصول على إجابة من المناهج المهنية."
     return result if len(result) > 20 else text
 
 def get_best_kb_answer(question, system_prompt=None):
