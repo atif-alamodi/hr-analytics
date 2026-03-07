@@ -1175,23 +1175,174 @@ def filter_response(text, consultant_type):
             return "هذا السؤال يتعلق بمفاهيم إدارة الموارد البشرية. يرجى استخدام **مستشار الموارد البشرية 📚** للحصول على إجابة من المناهج المهنية."
     return result if len(result) > 20 else text
 
-def get_best_kb_answer(question, system_prompt=None):
-    """Answer questions - LOCAL KB first (guaranteed correct), then API."""
-    import requests as req_lib
-    errors = []
-    if not system_prompt:
-        system_prompt = "أجب بالعربية بدقة."
+# =====================================================
+# REASONING ARCHITECTURE
+# =====================================================
 
+LEGAL_TOPICS = {
+    "termination": {"keywords": ["فصل","إنهاء","طرد","إقالة","فسخ","فصلي"], "articles": "م74-82", "label": "إنهاء العقد"},
+    "end_of_service": {"keywords": ["مكافأة","نهاية الخدمة","مستحقات","تسوية"], "articles": "م84-88", "label": "مكافأة نهاية الخدمة"},
+    "resignation": {"keywords": ["استقالة","أستقيل","ترك العمل"], "articles": "م75,م81,م85", "label": "الاستقالة"},
+    "contracts": {"keywords": ["عقد","عقود","محدد","غير محدد","تجديد"], "articles": "م49-60", "label": "العقود"},
+    "wages": {"keywords": ["راتب","أجر","رواتب","بدل","خصم"], "articles": "م89-97", "label": "الأجور"},
+    "working_hours": {"keywords": ["ساعات","دوام","إضافي","overtime","رمضان"], "articles": "م98-107", "label": "ساعات العمل"},
+    "leave": {"keywords": ["إجازة","إجازات","سنوية","مرضية","وفاة","زواج","حج"], "articles": "م108-116", "label": "الإجازات"},
+    "training": {"keywords": ["تدريب","تأهيل","تطوير مهني","دورة"], "articles": "م42-48", "label": "التدريب والتأهيل"},
+    "probation": {"keywords": ["تجربة","فترة التجربة"], "articles": "م53-54", "label": "فترة التجربة"},
+    "women": {"keywords": ["المرأة","حامل","وضع","رضاعة","أمومة"], "articles": "م121-130,م151", "label": "المرأة العاملة"},
+    "insurance": {"keywords": ["تأمين","تأمينات","gosi","ساند","تقاعد"], "articles": "GOSI", "label": "التأمينات الاجتماعية"},
+    "safety": {"keywords": ["سلامة","إصابة","حادث","خطر"], "articles": "م131-155", "label": "السلامة وإصابات العمل"},
+    "disputes": {"keywords": ["شكوى","نزاع","محكمة","خلاف"], "articles": "م200-231", "label": "تسوية النزاعات"},
+    "saudization": {"keywords": ["نطاقات","سعودة","توطين"], "articles": "م26+قرارات", "label": "نطاقات والتوطين"},
+    "maritime": {"keywords": ["بحار","بحري","سفينة","ملاحة"], "articles": "م156-178", "label": "العمل البحري"},
+    "transfer": {"keywords": ["نقل كفالة","نقل خدمات","كفالتي"], "articles": "مبادرة تعاقدية", "label": "نقل الخدمات"},
+}
+
+HR_TOPICS = {
+    "learning_development": {"keywords": ["تدريب","تطوير","L&D","دورة","تعليم"], "frameworks": "ADDIE,Kirkpatrick,Phillips ROI,70-20-10", "certs": "APTD,PHRi,CIPD L5", "label": "التعلم والتطوير"},
+    "performance": {"keywords": ["أداء","تقييم","KPI","OKR","أهداف"], "frameworks": "9-Box,MBO,BARS,360-degree,BSC", "certs": "SPHRi,CIPD L7,SHRM", "label": "إدارة الأداء"},
+    "recruitment": {"keywords": ["استقطاب","توظيف","مقابلة","ATS"], "frameworks": "Competency-Based,Structured Interview,EVP", "certs": "PHRi,SHRM,CIPD L5", "label": "الاستقطاب والتوظيف"},
+    "compensation": {"keywords": ["رواتب","تعويضات","بدلات","هيكل رواتب"], "frameworks": "Total Rewards,Job Evaluation,Compa-Ratio", "certs": "PHRi,SPHRi,CIPD L7", "label": "التعويضات والمزايا"},
+    "engagement": {"keywords": ["رضا","تجربة الموظف","احتفاظ","دوران"], "frameworks": "Gallup Q12,eNPS,Pulse Survey", "certs": "SHRM,CIPD L5,PHRi", "label": "تجربة الموظف"},
+    "org_development": {"keywords": ["تطوير مؤسسي","تغيير","OD","هيكلة"], "frameworks": "Burke-Litwin,Kotter 8-Step,ADKAR", "certs": "CIPD L7,SPHRi", "label": "التطوير المؤسسي"},
+    "leadership": {"keywords": ["قيادة","إدارة","كوتشنج","coaching"], "frameworks": "Ulrich,Situational Leadership,Coaching", "certs": "CIPD L7,SPHRi,APTD", "label": "القيادة"},
+    "talent": {"keywords": ["مواهب","talent","تعاقب","succession"], "frameworks": "9-Box,Talent Pipeline,HIPO", "certs": "SPHRi,CIPD L7,PHRi", "label": "إدارة المواهب"},
+    "analytics": {"keywords": ["تحليلات","analytics","بيانات","مؤشرات"], "frameworks": "Descriptive→Diagnostic→Predictive→Prescriptive", "certs": "PHRi,SPHRi", "label": "تحليلات HR"},
+    "competency": {"keywords": ["كفاءات","مهارات","جدارات"], "frameworks": "Competency Framework,Skills Matrix", "certs": "SHRM,PHRi", "label": "إدارة الكفاءات"},
+    "onboarding": {"keywords": ["تهيئة","onboarding","موظف جديد"], "frameworks": "30-60-90,Buddy System", "certs": "aPHRi,PHRi", "label": "التهيئة"},
+    "culture": {"keywords": ["ثقافة","بيئة عمل","diversity"], "frameworks": "Schein,Denison,Competing Values", "certs": "CIPD L7,SHRM", "label": "الثقافة المؤسسية"},
+}
+
+def analyze_question(question, advisor_type):
+    """Analyze question to extract topic, intent, and metadata."""
+    q = question.lower().strip()
+    analysis = {"topic": "general", "intent": "information", "label": "",
+                "reference": "", "certs": "", "needs_calculation": False}
+    topics = LEGAL_TOPICS if advisor_type == "legal" else HR_TOPICS
+    best_score = 0
+    for topic_key, topic_def in topics.items():
+        score = sum(3 if kw in q else (2 if kw.replace('ال','') in q.replace('ال','') else 0) for kw in topic_def['keywords'])
+        if score > best_score:
+            best_score = score
+            analysis['topic'] = topic_key
+            analysis['label'] = topic_def['label']
+            analysis['reference'] = topic_def.get('articles', topic_def.get('frameworks', ''))
+            analysis['certs'] = topic_def.get('certs', '')
+    # Detect intent
+    if any(w in q for w in ['كيف','طريقة']): analysis['intent'] = 'methodology'
+    elif any(w in q for w in ['ما هي','ماهي','تعريف','مفهوم']): analysis['intent'] = 'definition'
+    elif any(w in q for w in ['حساب','احسب','كم','مبلغ','نسبة']): analysis['intent'] = 'calculation'; analysis['needs_calculation'] = True
+    elif any(w in q for w in ['حقوق','مستحقات','يحق','واجب']): analysis['intent'] = 'entitlements'
+    elif any(w in q for w in ['الفرق','مقارنة','أفضل']): analysis['intent'] = 'comparison'
+    elif any(w in q for w in ['خطوات','مراحل','إجراءات']): analysis['intent'] = 'process'
+    return analysis
+
+def build_reasoning_context(question, advisor_type, analysis, retrieved_context=""):
+    """Build structured reasoning instructions for the model."""
+    if advisor_type == "legal":
+        r = f"""أنت المستشار القانوني لنظام العمل السعودي.
+المسألة: {analysis['label']} | المواد: {analysis['reference']} | نوع الطلب: {analysis['intent']}
+
+اتبع هذا الهيكل بالضبط:
+🔍 **أولاً - تحديد المسألة القانونية:** صنّف المسألة وحدد الباب المعني
+📋 **ثانياً - الأساس النظامي:** اسرد كل المواد ذات العلاقة ({analysis['reference']}) بأرقامها
+⚖️ **ثالثاً - التحليل القانوني:** طبّق المواد على الحالة"""
+        if analysis['needs_calculation']: r += " مع حسابات رقمية مفصّلة"
+        r += """
+👤 **رابعاً - حقوق والتزامات الأطراف:** لكل من العامل وصاحب العمل
+💡 **خامساً - التوصية القانونية:** نصيحة عملية + إجراءات + مدد + جهات مختصة
+⚠️ **سادساً - التحذيرات:** مخالفات وعقوبات محتملة
+
+❌ لا تذكر أي أطر منهجية أو مصطلحات HR إنجليزية."""
+    else:
+        r = f"""أنت مستشار الموارد البشرية المهني.
+الموضوع: {analysis['label']} | المناهج: {analysis['certs']} | الأطر: {analysis['reference']} | نوع الطلب: {analysis['intent']}
+
+اتبع هذا الهيكل بالضبط:
+🎯 **أولاً - تحديد المجال:** صنّف الموضوع في تخصصات HR
+📚 **ثانياً - الإطار المرجعي:** حدد المناهج ({analysis['certs']}) واذكر **(PHRi - المجال)** أو **(CIPD L7 - المجال)**
+🔬 **ثالثاً - التحليل العلمي:** اشرح النموذج المناسب ({analysis['reference']}) بالتفصيل
+📊 **رابعاً - مؤشرات القياس:** 3-5 KPIs قابلة للقياس
+🛠️ **خامساً - التطبيق العملي:** خطوات تنفيذية + جدول زمني
+🌍 **سادساً - أفضل الممارسات:** أمثلة من شركات عالمية
+
+❌ لا تذكر أي مادة قانونية أو رقم مادة."""
+    if retrieved_context:
+        r += f"\n\nسياق من قاعدة المعرفة:\n{retrieved_context[:1500]}"
+    return r
+
+def generate_advisor_answer(question, advisor_type, system_prompt=None):
+    """Full reasoning pipeline: analyze → retrieve → reason → generate."""
+    import requests as req_lib
+    analysis = analyze_question(question, advisor_type)
+    retrieved = ""
+    try:
+        if '_knowledge_engine' in st.session_state:
+            retrieved = st.session_state._knowledge_engine.search(question, advisor_type=advisor_type)
+    except: pass
+    reasoning_prompt = build_reasoning_context(question, advisor_type, analysis, retrieved)
+
+    # Try Groq
+    groq_key = st.session_state.get('groq_api_key','')
+    if not groq_key:
+        try: groq_key = st.secrets.get("groq",{}).get("api_key","")
+        except: pass
+    if groq_key:
+        try:
+            resp = req_lib.post("https://api.groq.com/openai/v1/chat/completions",
+                json={"model":"llama-3.3-70b-versatile","messages":[
+                    {"role":"system","content":reasoning_prompt[:3000]},
+                    {"role":"user","content":question}],
+                    "max_tokens":2500,"temperature":0.2},
+                headers={'Authorization':f'Bearer {groq_key}'},timeout=30)
+            if resp.status_code == 200:
+                text = resp.json().get('choices',[{}])[0].get('message',{}).get('content','')
+                if text and len(text) > 20: return filter_response(text, advisor_type)
+        except: pass
+
+    # Try Gemini
+    gemini_key = st.session_state.get('gemini_api_key','')
+    if not gemini_key:
+        try: gemini_key = st.secrets.get("gemini",{}).get("api_key","")
+        except: pass
+    if gemini_key:
+        try:
+            resp = req_lib.post(f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_key}",
+                json={"contents":[{"parts":[{"text":f"{reasoning_prompt[:2500]}\n\nالسؤال: {question}"}]}],
+                    "generationConfig":{"maxOutputTokens":2000,"temperature":0.2}},timeout=30)
+            if resp.status_code == 200:
+                text = resp.json().get('candidates',[{}])[0].get('content',{}).get('parts',[{}])[0].get('text','')
+                if text and len(text) > 20: return filter_response(text, advisor_type)
+        except: pass
+
+    # Try OpenRouter
+    or_key = st.session_state.get('openrouter_api_key','')
+    if not or_key:
+        try: or_key = st.secrets.get("openrouter",{}).get("api_key","")
+        except: pass
+    if or_key:
+        try:
+            resp = req_lib.post("https://openrouter.ai/api/v1/chat/completions",
+                json={"model":"meta-llama/llama-3.3-70b-instruct:free",
+                    "messages":[{"role":"user","content":f"{reasoning_prompt[:2000]}\n\n{question}"}],"max_tokens":1500},
+                headers={'Authorization':f'Bearer {or_key}','HTTP-Referer':'https://hr-analytics-risal.streamlit.app'},timeout=30)
+            if resp.status_code == 200:
+                text = resp.json().get('choices',[{}])[0].get('message',{}).get('content','')
+                if text and len(text) > 20: return filter_response(text, advisor_type)
+        except: pass
+    return None
+
+def get_best_kb_answer(question, system_prompt=None):
+    """Main entry: Local KB → Reasoning Pipeline → Diagnostic."""
     consultant_type = "legal" if system_prompt and 'المستشار القانوني' in system_prompt else "hr"
 
-    # 0. Clean old untagged learned answers, then check tagged ones
+    # 0. Clean and check learned answers
     try:
         conn = get_conn(); c = conn.cursor()
         c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_learned",))
         row = c.fetchone()
         if row:
             learned = json.loads(row[0])
-            # Remove old entries without type tag (contaminated)
             clean = [item for item in learned if item.get('type','')]
             if len(clean) < len(learned):
                 _upsert_config(c, "rag_learned", json.dumps(clean, ensure_ascii=False))
@@ -1199,112 +1350,28 @@ def get_best_kb_answer(question, system_prompt=None):
                 learned = clean
             q_lower = question.lower().strip()
             for item in learned:
-                if item.get('type', '') != consultant_type:
-                    continue
-                saved_q = item.get('q','').lower()
-                if saved_q == q_lower:
-                    conn.close()
-                    return item['a']
+                if item.get('type','') == consultant_type and item.get('q','').lower() == q_lower:
+                    conn.close(); return item['a']
         conn.close()
     except: pass
 
-    # 1. LOCAL KB FIRST (guaranteed correct separation)
+    # 1. Local KB (guaranteed correct separation)
     if consultant_type == "legal":
         answer = smart_local_answer(question, LABOR_KB)
     else:
         answer = smart_local_answer(question, HR_KB)
-    if answer:
-        return answer
+    if answer: return answer
 
-    # 1.5 RAG Knowledge Base (ONLY if local KB had no match, filtered by advisor_type)
-    try:
-        if '_knowledge_engine' in st.session_state:
-            rag_result = st.session_state._knowledge_engine.search(question, advisor_type=consultant_type)
-            if rag_result and len(rag_result) > 50:
-                # Apply filter to RAG results too
-                filtered_rag = filter_response(rag_result, consultant_type)
-                if filtered_rag and len(filtered_rag) > 30:
-                    return f"**من قاعدة المعرفة:**\n\n{filtered_rag[:2000]}"
-    except: pass
+    # 2. Reasoning Pipeline (analyze → retrieve → reason → generate)
+    answer = generate_advisor_answer(question, consultant_type, system_prompt)
+    if answer: return answer
 
-    # 2. Try API (with filter to enforce separation)
-    groq_key = st.session_state.get('groq_api_key', '')
-    if not groq_key:
-        try: groq_key = st.secrets.get("groq", {}).get("api_key", "")
-        except: pass
-    if groq_key:
-        try:
-            resp = req_lib.post("https://api.groq.com/openai/v1/chat/completions",
-                json={
-                    "model": "llama-3.3-70b-versatile",
-                    "messages": [
-                        {"role":"system","content":system_prompt[:3000]},
-                        {"role":"user","content":question}
-                    ],
-                    "max_tokens": 2000, "temperature": 0.3
-                },
-                headers={'Authorization':f'Bearer {groq_key}'},
-                timeout=30)
-            if resp.status_code == 200:
-                text = resp.json().get('choices',[{}])[0].get('message',{}).get('content','')
-                if text and len(text) > 10:
-                    return filter_response(text, consultant_type)
-            else:
-                errors.append(f"Groq: {resp.status_code}")
-        except Exception as e:
-            errors.append(f"Groq: {str(e)[:60]}")
-
-    # 3. Try Gemini
-    gemini_key = st.session_state.get('gemini_api_key', '')
-    if not gemini_key:
-        try: gemini_key = st.secrets.get("gemini", {}).get("api_key", "")
-        except: pass
-    if gemini_key:
-        try:
-            resp = req_lib.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_key}",
-                json={
-                    "contents":[{"parts":[{"text":f"{system_prompt[:2000]}\n\nالسؤال: {question}"}]}],
-                    "generationConfig":{"maxOutputTokens":2000,"temperature":0.3}
-                },
-                timeout=30)
-            if resp.status_code == 200:
-                text = resp.json().get('candidates',[{}])[0].get('content',{}).get('parts',[{}])[0].get('text','')
-                if text and len(text) > 10:
-                    return filter_response(text, consultant_type)
-            else:
-                errors.append(f"Gemini: {resp.status_code}")
-        except Exception as e:
-            errors.append(f"Gemini: {str(e)[:60]}")
-
-    # 4. Try OpenRouter
-    or_key = st.session_state.get('openrouter_api_key', '')
-    if not or_key:
-        try: or_key = st.secrets.get("openrouter", {}).get("api_key", "")
-        except: pass
-    if or_key:
-        try:
-            resp = req_lib.post("https://openrouter.ai/api/v1/chat/completions",
-                json={
-                    "model": "meta-llama/llama-3.3-70b-instruct:free",
-                    "messages": [{"role":"user","content":f"{system_prompt[:1500]}\n\n{question}"}],
-                    "max_tokens": 1500
-                },
-                headers={'Authorization':f'Bearer {or_key}','HTTP-Referer':'https://hr-analytics-risal.streamlit.app'},
-                timeout=30)
-            if resp.status_code == 200:
-                text = resp.json().get('choices',[{}])[0].get('message',{}).get('content','')
-                if text and len(text) > 10:
-                    return filter_response(text, consultant_type)
-            else:
-                errors.append(f"OpenRouter: {resp.status_code}")
-        except Exception as e:
-            errors.append(f"OpenRouter: {str(e)[:60]}")
-
-    # 5. Diagnostic
-    keys_info = f"Groq: {'✅' if groq_key else '❌'} | Gemini: {'✅' if gemini_key else '❌'} | OpenRouter: {'✅' if or_key else '❌'}"
-    err_info = " | ".join(errors) if errors else "لا أخطاء"
-    return f"**لم أتمكن من الاتصال بمزودي الذكاء الاصطناعي**\n\n**المفاتيح:** {keys_info}\n**الأخطاء:** {err_info}"
+    # 3. Diagnostic
+    k_status = []
+    for p in ['groq','gemini','openrouter']:
+        has = bool(st.session_state.get(f'{p}_api_key',''))
+        k_status.append(f"{p}: {'Y' if has else 'N'}")
+    return f"**لم أتمكن من الاتصال**\n\nالمفاتيح: {' | '.join(k_status)}"
 
 def auto_learn_from_answer(question, answer, consultant_type="legal"):
     """Save good AI answers and improve them over time."""
