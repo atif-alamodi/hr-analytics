@@ -29,6 +29,7 @@ class ModelOrchestrator:
     MODELS = {
         'claude': {'url':'https://api.anthropic.com/v1/messages','model':'claude-3-5-sonnet-20241022','max_tokens':4000},
         'groq': {'url':'https://api.groq.com/openai/v1/chat/completions','model':'llama-3.3-70b-versatile','max_tokens':4000},
+        'gemini': {'url':'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent','model':'gemini-2.0-flash','max_tokens':2000},
         'openrouter': {'url':'https://openrouter.ai/api/v1/chat/completions','model':'meta-llama/llama-3.3-70b-instruct:free','max_tokens':2000},
         'huggingface': {'url':'https://api-inference.huggingface.co/v1/chat/completions','model':'mistralai/Mistral-7B-Instruct-v0.3','max_tokens':1500},
     }
@@ -44,7 +45,7 @@ class ModelOrchestrator:
     }
 
     # Context size limits per provider
-    CONTEXT_LIMITS = {'claude': 15000, 'groq': 12000, 'openrouter': 4000, 'huggingface': 3000}
+    CONTEXT_LIMITS = {'claude': 15000, 'groq': 12000, 'gemini': 8000, 'openrouter': 4000, 'huggingface': 3000}
 
     def __init__(self):
         self._cache = {}
@@ -64,28 +65,30 @@ class ModelOrchestrator:
         }
 
     def select_provider(self, question_type='general'):
-        """Smart model routing based on question type and availability."""
         provider = st.session_state.get('ai_provider', 'auto')
         claude_key = st.session_state.get('claude_api_key', '')
         groq_key = st.session_state.get('groq_api_key', '')
         or_key = st.session_state.get('openrouter_api_key', '')
         hf_key = st.session_state.get('huggingface_api_key', '')
+        gemini_key = st.session_state.get('gemini_api_key', '')
         claude_ok = claude_key and not st.session_state.get('_claude_no_credit')
 
         if provider == 'auto':
             legal_kw = ['مادة','قانون','نظام العمل','تعويض','فصل','إنهاء','article','labor law','termination']
             is_legal = any(kw in question_type.lower() for kw in legal_kw)
             if is_legal and claude_ok: return 'claude'
+            if gemini_key: return 'gemini'
             if groq_key: return 'groq'
-            if hf_key: return 'huggingface'
             if or_key: return 'openrouter'
+            if hf_key: return 'huggingface'
             if claude_ok: return 'claude'
             return None
+        if provider == 'gemini' and gemini_key: return 'gemini'
         if provider == 'claude' and claude_ok: return 'claude'
         if provider == 'groq' and groq_key: return 'groq'
         if provider == 'huggingface' and hf_key: return 'huggingface'
         if provider == 'openrouter' and or_key: return 'openrouter'
-        for p, k in [('groq',groq_key),('huggingface',hf_key),('openrouter',or_key),('claude',claude_ok)]:
+        for p, k in [('gemini',gemini_key),('groq',groq_key),('openrouter',or_key),('huggingface',hf_key),('claude',claude_ok)]:
             if k: return p
         return None
 
@@ -153,7 +156,7 @@ class ModelOrchestrator:
 
         # Try primary provider, fallback to others
         providers_to_try = [provider]
-        all_providers = ['groq','huggingface','openrouter','claude']
+        all_providers = ['gemini','groq','openrouter','huggingface','claude']
         for p in all_providers:
             if p != provider and st.session_state.get(f'{p}_api_key',''):
                 providers_to_try.append(p)
@@ -184,7 +187,30 @@ class ModelOrchestrator:
         if provider == 'claude' and st.session_state.get('_claude_no_credit'):
             return None, "fallback"
 
-        if provider in ('groq', 'openrouter', 'huggingface'):
+        if provider == 'gemini':
+            url = f"{config['url']}?key={api_key}"
+            # Build Gemini format
+            user_text = messages[-1]['content'] if messages else ""
+            gemini_contents = []
+            for m in messages[-4:]:
+                role = "user" if m['role'] == 'user' else "model"
+                gemini_contents.append({"role":role,"parts":[{"text":m['content'][:500]}]})
+            payload = json.dumps({
+                "contents": gemini_contents,
+                "systemInstruction": {"parts":[{"text":system_prompt[:4000]}]},
+                "generationConfig": {"maxOutputTokens": config['max_tokens'], "temperature": 0.3}
+            })
+            headers = {'Content-Type':'application/json'}
+            try:
+                req = urllib.request.Request(url, data=payload.encode('utf-8'), headers=headers, method='POST')
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    result = json.loads(resp.read().decode())
+                    text = result.get('candidates',[{}])[0].get('content',{}).get('parts',[{}])[0].get('text','')
+                    if text: return text, None
+            except: pass
+            return None, "fallback"
+
+        elif provider in ('groq', 'openrouter', 'huggingface'):
             models_to_try = self.OR_MODELS if provider == 'openrouter' else [config['model']]
             for model_name in models_to_try:
                 payload = json.dumps({
@@ -7680,9 +7706,11 @@ function stopSpeak(){{speechSynthesis.cancel()}}
             except: st.session_state.setdefault('openrouter_api_key', '')
             try: st.session_state.huggingface_api_key = st.secrets.get("huggingface", {}).get("api_key", "")
             except: st.session_state.setdefault('huggingface_api_key', '')
+            try: st.session_state.gemini_api_key = st.secrets.get("gemini", {}).get("api_key", "")
+            except: st.session_state.setdefault('gemini_api_key', '')
             try:
                 conn = get_conn(); c = conn.cursor()
-                for pk in ['claude_api_key','groq_api_key','openrouter_api_key','huggingface_api_key']:
+                for pk in ['claude_api_key','groq_api_key','openrouter_api_key','huggingface_api_key','gemini_api_key']:
                     if not st.session_state.get(pk):
                         c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", (pk,))
                         row = c.fetchone()
@@ -7703,17 +7731,18 @@ function stopSpeak(){{speechSynthesis.cancel()}}
         has_groq = bool(st.session_state.get('groq_api_key'))
         has_or = bool(st.session_state.get('openrouter_api_key'))
         has_hf = bool(st.session_state.get('huggingface_api_key'))
+        has_gemini = bool(st.session_state.get('gemini_api_key'))
 
-        if not has_claude and not has_groq and not has_or and not has_hf:
+        if not has_claude and not has_groq and not has_or and not has_hf and not has_gemini:
             st.warning("⚠️ يرجى إدخال API Key واحد على الأقل")
             kc1, kc2 = st.columns(2)
             with kc1:
-                st.markdown("### 🤗 Hugging Face (مجاني)")
-                hf_input = st.text_input("🔑 HuggingFace Token:", type="password", key="hf_key_input",
-                    help="مجاني من https://huggingface.co/settings/tokens")
-                if hf_input:
-                    st.session_state.huggingface_api_key = hf_input; st.rerun()
-                st.caption("Mistral 7B مجاني + موثوق")
+                st.markdown("### ✨ Google Gemini (مجاني + الأفضل)")
+                gm_input = st.text_input("🔑 Gemini API Key:", type="password", key="gm_key_input",
+                    help="مجاني من https://aistudio.google.com/apikey")
+                if gm_input:
+                    st.session_state.gemini_api_key = gm_input; st.rerun()
+                st.caption("Gemini 2.0 Flash مجاني 60 طلب/دقيقة")
             with kc2:
                 st.markdown("### 🟠 OpenRouter (مجاني)")
                 or_input = st.text_input("🔑 OpenRouter Key:", type="password", key="or_key_input",
@@ -7722,24 +7751,29 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                     st.session_state.openrouter_api_key = or_input; st.rerun()
                 st.caption("Llama 3.3 70B مجاني")
             with st.expander("🔧 مزودين إضافيين"):
-                ec1, ec2 = st.columns(2)
+                ec1, ec2, ec3 = st.columns(3)
                 with ec1:
-                    groq_input = st.text_input("🟢 Groq API Key:", type="password", key="groq_key_input")
+                    groq_input = st.text_input("🟢 Groq:", type="password", key="groq_key_input")
                     if groq_input: st.session_state.groq_api_key = groq_input; st.rerun()
                 with ec2:
-                    claude_input = st.text_input("🔵 Claude API Key:", type="password", key="claude_key_input")
+                    hf_input = st.text_input("🤗 HuggingFace:", type="password", key="hf_key_input")
+                    if hf_input: st.session_state.huggingface_api_key = hf_input; st.rerun()
+                with ec3:
+                    claude_input = st.text_input("🔵 Claude:", type="password", key="claude_key_input")
                     if claude_input: st.session_state.claude_api_key = claude_input; st.rerun()
-            st.info("💡 أضف في Streamlit Secrets:\n```\n[huggingface]\napi_key = \"hf_...\"\n[openrouter]\napi_key = \"sk-or-...\"\n[groq]\napi_key = \"gsk_...\"\n[anthropic]\napi_key = \"sk-ant-...\"\n```")
+            st.info("💡 أسهل طريقة: احصل على مفتاح Gemini مجاناً من **aistudio.google.com/apikey**\n\nثم أضف في Secrets:\n```\n[gemini]\napi_key = \"AIza...\"\n```")
             return
 
         # Provider selector
         available_providers = ["🔄 تلقائي"]
+        if has_gemini: available_providers.append("✨ Gemini")
         if has_groq: available_providers.append("🟢 Groq")
-        if has_hf: available_providers.append("🤗 HuggingFace")
         if has_or: available_providers.append("🟠 OpenRouter")
+        if has_hf: available_providers.append("🤗 HuggingFace")
         if has_claude: available_providers.append("🔵 Claude")
         sel_provider = st.radio("🤖 المحرك:", available_providers, horizontal=True, key="provider_sel")
-        if "Groq" in sel_provider: st.session_state.ai_provider = 'groq'
+        if "Gemini" in sel_provider: st.session_state.ai_provider = 'gemini'
+        elif "Groq" in sel_provider: st.session_state.ai_provider = 'groq'
         elif "HuggingFace" in sel_provider: st.session_state.ai_provider = 'huggingface'
         elif "OpenRouter" in sel_provider: st.session_state.ai_provider = 'openrouter'
         elif "Claude" in sel_provider: st.session_state.ai_provider = 'claude'
@@ -8242,16 +8276,16 @@ function stopSpeak(){{speechSynthesis.cancel()}}
             st.markdown("### 🔑 إعدادات API Keys")
             kc1, kc2 = st.columns(2)
             with kc1:
-                st.markdown("**🤗 Hugging Face (مجاني)**")
-                cur_hf = st.session_state.get('huggingface_api_key','')
-                st.caption(f"الحالي: {'hf_...'+cur_hf[-6:] if len(cur_hf)>8 else 'غير مُعيّن'}")
-                new_hf = st.text_input("HuggingFace Token:", type="password", key="new_hf_key")
-                if st.button("💾 حفظ HuggingFace", key="save_hf"):
-                    if new_hf:
-                        st.session_state.huggingface_api_key = new_hf
+                st.markdown("**✨ Google Gemini (مجاني + الأفضل)**")
+                cur_gm = st.session_state.get('gemini_api_key','')
+                st.caption(f"الحالي: {'AIza...'+cur_gm[-6:] if len(cur_gm)>8 else 'غير مُعيّن'}")
+                new_gm = st.text_input("Gemini API Key:", type="password", key="new_gm_key")
+                if st.button("💾 حفظ Gemini", key="save_gm"):
+                    if new_gm:
+                        st.session_state.gemini_api_key = new_gm
                         try:
                             conn = get_conn(); c = conn.cursor()
-                            _upsert_config(c, "huggingface_api_key", new_hf)
+                            _upsert_config(c, "gemini_api_key", new_gm)
                             conn.commit(); conn.close()
                         except: pass
                         st.success("✅ تم الحفظ")
