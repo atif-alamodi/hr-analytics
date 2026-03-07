@@ -94,10 +94,11 @@ class ModelOrchestrator:
             if k: return p
         return None
 
-    def build_context(self, system_prompt, user_message, model_type='general', provider='claude'):
-        """Assemble full context: system prompt + RAG + learned + legal docs.
+    def build_context(self, system_prompt, user_message, model_type='general', provider='claude', analysis=None):
+        """Assemble full context: system prompt + reasoning + RAG + learned + legal docs.
         CRITICAL: Never truncate the system prompt - it contains the expert knowledge.
-        Each consultant only gets context from its own dedicated knowledge domain."""
+        Each consultant only gets context from its own dedicated knowledge domain.
+        When analysis is provided, injects reasoning context for better answers."""
         max_ctx = self.CONTEXT_LIMITS.get(provider, 8000)
 
         # Keep the FULL system prompt - this is the expert knowledge that drives correct answers
@@ -106,16 +107,32 @@ class ModelOrchestrator:
         # Calculate remaining budget for additional context
         remaining = max(0, max_ctx - len(enhanced))
 
-        # Layer 1: RAG Knowledge Base - filtered by domain
+        # Layer 0: Reasoning context (from ReasoningLayer analysis)
+        rag_ctx = ""
         if remaining > 500:
             try:
                 if hasattr(st.session_state, '_knowledge_engine'):
                     rag_ctx = st.session_state._knowledge_engine.search(user_message, top_k=5, model_type=model_type)
-                    if rag_ctx:
-                        rag_budget = min(len(rag_ctx), remaining // 2)
-                        enhanced += f"\n\n**مراجع إضافية:**\n{rag_ctx[:rag_budget]}"
-                        remaining -= rag_budget
             except: pass
+
+        if analysis and remaining > 300:
+            try:
+                reasoning = ReasoningLayer()
+                reasoning_ctx = reasoning.build_reasoning_context(
+                    user_message, model_type, analysis, rag_ctx
+                )
+                if reasoning_ctx:
+                    r_budget = min(len(reasoning_ctx), remaining // 2)
+                    enhanced += reasoning_ctx[:r_budget]
+                    remaining -= r_budget
+                    rag_ctx = ""  # Already included in reasoning context
+            except: pass
+
+        # Layer 1: RAG Knowledge Base - filtered by domain (if not already in reasoning context)
+        if rag_ctx and remaining > 500:
+            rag_budget = min(len(rag_ctx), remaining // 2)
+            enhanced += f"\n\n**مراجع إضافية:**\n{rag_ctx[:rag_budget]}"
+            remaining -= rag_budget
 
         # Layer 2: Legal documents - ONLY for labor law consultant
         if model_type == 'labor' and remaining > 500:
@@ -141,7 +158,7 @@ class ModelOrchestrator:
         return hashlib.md5(f"{message[:100]}_{model_type}".encode()).hexdigest()
 
     def call(self, system_prompt, user_message, chat_history=None, model_type='general'):
-        """Main orchestrated call with routing, context, caching, fallback."""
+        """Main orchestrated call with reasoning pipeline: analyze → context → call → validate."""
         # Check instant cached responses from the correct domain (< 1 second)
         instant_db = self._instant_labor if model_type == 'labor' else self._instant_hr if model_type == 'hr_expert' else {}
         for q, a in instant_db.items():
@@ -157,8 +174,16 @@ class ModelOrchestrator:
         if not provider:
             return None, "يرجى إدخال API Key (Groq مجاني أو Claude)"
 
-        # Build enhanced context (size depends on provider)
-        enhanced_prompt = self.build_context(system_prompt, user_message, model_type, provider)
+        # Step 1: Analyze question with reasoning layer (for labor/hr_expert only)
+        analysis = None
+        if model_type in ('labor', 'hr_expert'):
+            try:
+                reasoning = ReasoningLayer()
+                analysis = reasoning.analyze_question(user_message, model_type)
+            except: pass
+
+        # Step 2: Build enhanced context with reasoning (size depends on provider)
+        enhanced_prompt = self.build_context(system_prompt, user_message, model_type, provider, analysis)
 
         # Build messages
         messages = []
@@ -182,6 +207,16 @@ class ModelOrchestrator:
         for prov in providers_to_try:
             result, error = self._call_provider(prov, enhanced_prompt, messages)
             if result:
+                # Step 3: Validate answer with reasoning layer
+                if analysis:
+                    try:
+                        reasoning = ReasoningLayer()
+                        is_valid, issues = reasoning.validate_generated_answer(result, analysis, model_type)
+                        if not is_valid and prov == providers_to_try[0] and len(providers_to_try) > 1:
+                            # Try next provider if validation fails on primary
+                            continue
+                    except: pass
+
                 self._call_count += 1
                 self._cache[cache_key] = result
                 if len(self._cache) > 50: self._cache = dict(list(self._cache.items())[-50:])
@@ -384,28 +419,38 @@ class ModelOrchestrator:
 
 # ==================== 2. KNOWLEDGE ENGINE (Semantic RAG) ====================
 class KnowledgeEngine:
-    """Enterprise RAG with TF-IDF vectorization, versioning, and governance.
-    Upgrades keyword search to proper vector-based semantic retrieval."""
+    """Enterprise RAG with per-domain TF-IDF vectorization, structured search results,
+    enriched metadata, smart chunking, and retrieval diagnostics."""
 
     def __init__(self):
-        self._vectorizer = None
-        self._vectors = None
+        self._vectorizer = None        # Global vectorizer (fallback)
+        self._vectors = None            # Global vectors (fallback)
+        self._labor_vectorizer = None   # Per-domain: labor
+        self._labor_vectors = None
+        self._labor_indices = []        # Maps labor vector row → chunk index
+        self._hr_vectorizer = None      # Per-domain: HR
+        self._hr_vectors = None
+        self._hr_indices = []           # Maps HR vector row → chunk index
         self._chunks = []
         self._loaded = False
+        self._cosine = None
+        self._last_diagnostics = {}
 
     def _ensure_vectorizer(self):
-        """Lazy-load TF-IDF vectorizer."""
-        if self._vectorizer is None:
-            try:
-                from sklearn.feature_extraction.text import TfidfVectorizer
-                from sklearn.metrics.pairwise import cosine_similarity
-                self._vectorizer = TfidfVectorizer(max_features=5000, ngram_range=(1,2))
-                self._cosine = cosine_similarity
-            except ImportError:
-                self._vectorizer = "unavailable"
+        """Lazy-load TF-IDF vectorizer class."""
+        if self._cosine is not None: return True
+        try:
+            from sklearn.feature_extraction.text import TfidfVectorizer
+            from sklearn.metrics.pairwise import cosine_similarity
+            self._TfidfVectorizer = TfidfVectorizer
+            self._cosine = cosine_similarity
+            return True
+        except ImportError:
+            self._cosine = "unavailable"
+            return False
 
     def load_from_db(self):
-        """Load chunks from database and build vector index."""
+        """Load chunks from database and build per-domain vector indexes."""
         if self._loaded: return
         self._loaded = True
         try:
@@ -414,18 +459,48 @@ class KnowledgeEngine:
             row = c.fetchone(); conn.close()
             if row:
                 self._chunks = json.loads(row[0])
-                self._build_index()
+                self._build_domain_indexes()
         except: pass
 
-    def _build_index(self):
-        """Build TF-IDF vector index from chunks."""
+    def _build_domain_indexes(self):
+        """Build separate TF-IDF indexes for each domain for better retrieval precision."""
         if not self._chunks: return
-        self._ensure_vectorizer()
-        if self._vectorizer == "unavailable": return
+        if not self._ensure_vectorizer(): return
+        if self._cosine == "unavailable": return
+
         try:
-            texts = [ch.get('text','') for ch in self._chunks if ch.get('text','').strip()]
-            if texts:
-                self._vectors = self._vectorizer.fit_transform(texts)
+            # Partition chunks by domain
+            labor_texts, labor_idxs = [], []
+            hr_texts, hr_idxs = [], []
+            all_texts = []
+
+            for i, ch in enumerate(self._chunks):
+                text = ch.get('text', '').strip()
+                if not text: continue
+                all_texts.append(text)
+                doc_type = ch.get('type', '')
+                if doc_type in self.LABOR_TYPES:
+                    labor_texts.append(text)
+                    labor_idxs.append(i)
+                elif doc_type in self.HR_TYPES:
+                    hr_texts.append(text)
+                    hr_idxs.append(i)
+
+            # Build per-domain indexes
+            if labor_texts:
+                self._labor_vectorizer = self._TfidfVectorizer(max_features=5000, ngram_range=(1,2))
+                self._labor_vectors = self._labor_vectorizer.fit_transform(labor_texts)
+                self._labor_indices = labor_idxs
+
+            if hr_texts:
+                self._hr_vectorizer = self._TfidfVectorizer(max_features=5000, ngram_range=(1,2))
+                self._hr_vectors = self._hr_vectorizer.fit_transform(hr_texts)
+                self._hr_indices = hr_idxs
+
+            # Global fallback index
+            if all_texts:
+                self._vectorizer = self._TfidfVectorizer(max_features=5000, ngram_range=(1,2))
+                self._vectors = self._vectorizer.fit_transform(all_texts)
         except: pass
 
     # Domain-specific doc_type filters — strict separation
@@ -441,38 +516,142 @@ class KnowledgeEngine:
 
     def search(self, query, top_k=5, model_type=None):
         """Semantic search filtered by advisor domain.
-        Each advisor only sees chunks tagged for its own domain."""
+        Uses per-domain TF-IDF index for better precision.
+        Returns formatted string for backward compatibility."""
+        results = self.search_structured(query, top_k, model_type)
+        if not results:
+            return ""
+        return "\n\n---\n".join([
+            f"[المصدر: {r['source']} | النوع: {r['type']} | الثقة: {r['score']:.0%}]\n{r['text']}"
+            for r in results
+        ])
+
+    def search_structured(self, query, top_k=5, model_type=None):
+        """Structured semantic search returning list of result dicts.
+        Each result: {text, source, type, score, chunk_id, metadata}"""
         self.load_from_db()
-        if not self._chunks: return ""
+        if not self._chunks: return []
+
+        diagnostics = {'query': query[:100], 'model_type': model_type, 'method': 'none', 'candidates': 0, 'returned': 0}
+
+        # Try per-domain vector search first (faster, more precise)
+        results = self._domain_vector_search(query, top_k, model_type, diagnostics)
+
+        # Fallback to global vector search with domain filtering
+        if not results:
+            results = self._global_vector_search(query, top_k, model_type, diagnostics)
+
+        # Fallback to keyword search
+        if not results:
+            results = self._keyword_search(query, top_k, model_type, diagnostics)
+
+        diagnostics['returned'] = len(results)
+        self._last_diagnostics = diagnostics
+        return results
+
+    def _domain_vector_search(self, query, top_k, model_type, diagnostics):
+        """Search using per-domain TF-IDF index."""
+        vectorizer = None
+        vectors = None
+        indices = []
+
+        if model_type == 'labor' and self._labor_vectorizer is not None:
+            vectorizer = self._labor_vectorizer
+            vectors = self._labor_vectors
+            indices = self._labor_indices
+        elif model_type == 'hr_expert' and self._hr_vectorizer is not None:
+            vectorizer = self._hr_vectorizer
+            vectors = self._hr_vectors
+            indices = self._hr_indices
+
+        if vectorizer is None or vectors is None:
+            return []
+
+        try:
+            query_vec = vectorizer.transform([query])
+            scores = self._cosine(query_vec, vectors).flatten()
+            top_idxs = scores.argsort()[::-1]
+            diagnostics['method'] = 'domain_vector'
+            diagnostics['candidates'] = len(top_idxs)
+
+            results = []
+            for vec_idx in top_idxs:
+                if scores[vec_idx] < 0.05: break
+                chunk_idx = indices[vec_idx]
+                ch = self._chunks[chunk_idx]
+                results.append({
+                    'text': ch.get('text', ''),
+                    'source': ch.get('source', ''),
+                    'type': ch.get('type', ''),
+                    'score': float(scores[vec_idx]),
+                    'chunk_id': ch.get('chunk_id', 0),
+                    'metadata': {
+                        'version': ch.get('version', ''),
+                        'added': ch.get('added', ''),
+                        'category': ch.get('category', ''),
+                        'topic': ch.get('topic', ''),
+                        'article_number': ch.get('article_number', ''),
+                        'tags': ch.get('tags', []),
+                    }
+                })
+                if len(results) >= top_k: break
+            return results
+        except:
+            return []
+
+    def _global_vector_search(self, query, top_k, model_type, diagnostics):
+        """Fallback: search global index with domain filtering."""
+        if self._vectors is None or self._vectorizer is None:
+            return []
+        if self._cosine == "unavailable":
+            return []
 
         allowed = self._get_allowed_types(model_type)
-
-        # Build domain-filtered index set for fast lookup
         if allowed is not None:
             domain_indices = {i for i, ch in enumerate(self._chunks) if ch.get('type', '') in allowed}
-            if not domain_indices: return ""
+            if not domain_indices: return []
         else:
-            domain_indices = None  # No filter
+            domain_indices = None
 
-        # Try vector search first
-        if self._vectors is not None and self._vectorizer not in [None, "unavailable"]:
-            try:
-                query_vec = self._vectorizer.transform([query])
-                scores = self._cosine(query_vec, self._vectors).flatten()
-                top_indices = scores.argsort()[::-1]
-                results = []
-                for idx in top_indices:
-                    if scores[idx] < 0.05: break
-                    if domain_indices is not None and idx not in domain_indices:
-                        continue
-                    ch = self._chunks[idx]
-                    results.append(f"[المصدر: {ch.get('source','')} | النوع: {ch.get('type','')}]\n{ch['text']}")
-                    if len(results) >= top_k: break
-                if results:
-                    return "\n\n---\n".join(results)
-            except: pass
+        try:
+            query_vec = self._vectorizer.transform([query])
+            scores = self._cosine(query_vec, self._vectors).flatten()
+            top_idxs = scores.argsort()[::-1]
+            diagnostics['method'] = 'global_vector'
+            diagnostics['candidates'] = len(top_idxs)
 
-        # Fallback to keyword search (domain-filtered)
+            results = []
+            for idx in top_idxs:
+                if scores[idx] < 0.05: break
+                if domain_indices is not None and idx not in domain_indices:
+                    continue
+                ch = self._chunks[idx]
+                results.append({
+                    'text': ch.get('text', ''),
+                    'source': ch.get('source', ''),
+                    'type': ch.get('type', ''),
+                    'score': float(scores[idx]),
+                    'chunk_id': ch.get('chunk_id', 0),
+                    'metadata': {
+                        'version': ch.get('version', ''),
+                        'added': ch.get('added', ''),
+                    }
+                })
+                if len(results) >= top_k: break
+            return results
+        except:
+            return []
+
+    def _keyword_search(self, query, top_k, model_type, diagnostics):
+        """Keyword-based fallback search with domain filtering."""
+        allowed = self._get_allowed_types(model_type)
+        if allowed is not None:
+            domain_indices = {i for i, ch in enumerate(self._chunks) if ch.get('type', '') in allowed}
+            if not domain_indices: return []
+        else:
+            domain_indices = None
+
+        diagnostics['method'] = 'keyword'
         query_words = set(query.lower().split())
         scored = []
         for i, ch in enumerate(self._chunks):
@@ -483,13 +662,27 @@ class KnowledgeEngine:
             if match > 0:
                 score = match / max(len(query_words), 1)
                 scored.append((score, ch))
-        scored.sort(key=lambda x: x[0], reverse=True)
-        return "\n\n---\n".join([f"[{c[1].get('source','')}]\n{c[1]['text']}" for c in scored[:top_k]])
 
-    def ingest(self, text, source, doc_type="legal", version=None):
-        """Ingest document with chunking, versioning, and metadata."""
-        chunks = self._chunk_text(text)
+        scored.sort(key=lambda x: x[0], reverse=True)
+        diagnostics['candidates'] = len(scored)
+        return [{
+            'text': c[1].get('text', ''),
+            'source': c[1].get('source', ''),
+            'type': c[1].get('type', ''),
+            'score': c[0],
+            'chunk_id': c[1].get('chunk_id', 0),
+            'metadata': {'version': c[1].get('version', ''), 'added': c[1].get('added', '')}
+        } for c in scored[:top_k]]
+
+    def get_retrieval_diagnostics(self):
+        """Return diagnostics from the last search operation."""
+        return self._last_diagnostics
+
+    def ingest(self, text, source, doc_type="legal", version=None, metadata=None):
+        """Ingest document with smart chunking, versioning, and enriched metadata."""
+        chunks = self._smart_chunk(text, doc_type)
         ver = version or datetime.now().strftime("%Y%m%d_%H%M")
+        extra_meta = metadata or {}
         try:
             conn = get_conn(); c = conn.cursor()
             c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_chunks",))
@@ -502,23 +695,77 @@ class KnowledgeEngine:
             # Remove old chunks from same source (replace with new version)
             existing = [ch for ch in existing if ch.get('source') != source]
 
-            # Add new chunks with metadata
+            # Add new chunks with enriched metadata
             for i, chunk in enumerate(chunks):
-                existing.append({
+                chunk_meta = {
                     "text": chunk, "source": source, "type": doc_type,
                     "version": ver, "chunk_id": i,
                     "added": datetime.now().strftime("%Y-%m-%d"),
-                    "hash": hashlib.md5(chunk.encode()).hexdigest()[:12]
-                })
+                    "hash": hashlib.md5(chunk.encode()).hexdigest()[:12],
+                }
+                # Enrich with optional metadata
+                if extra_meta:
+                    for mk in ['category','topic','priority','article_number','tags']:
+                        if mk in extra_meta:
+                            chunk_meta[mk] = extra_meta[mk]
+                # Auto-detect article numbers in legal docs
+                if doc_type in self.LABOR_TYPES:
+                    import re
+                    art_matches = re.findall(r'المادة\s*(\d+)', chunk)
+                    if art_matches:
+                        chunk_meta['article_number'] = ','.join(art_matches[:3])
+                existing.append(chunk_meta)
 
             _upsert_config(c, "rag_chunks", json.dumps(existing, ensure_ascii=False))
             conn.commit(); conn.close()
 
-            # Rebuild index
+            # Rebuild all indexes
             self._chunks = existing
-            self._build_index()
+            self._build_domain_indexes()
             return len(chunks)
         except: return 0
+
+    def _smart_chunk(self, text, doc_type="legal"):
+        """Smart chunking that respects document structure.
+        Legal docs: split by article boundaries.
+        HR docs: split by heading boundaries.
+        Default: overlapping word chunks."""
+        import re
+
+        # Legal documents: split by article markers (المادة)
+        if doc_type in self.LABOR_TYPES:
+            article_pattern = r'(?=(?:المادة|مادة)\s*\d+)'
+            parts = re.split(article_pattern, text)
+            if len(parts) > 1:
+                chunks = []
+                for part in parts:
+                    part = part.strip()
+                    if not part: continue
+                    if len(part.split()) > 600:
+                        chunks.extend(self._chunk_text(part, 500, 50))
+                    elif part:
+                        chunks.append(part)
+                if chunks:
+                    return chunks
+
+        # HR documents: split by heading patterns
+        if doc_type in self.HR_TYPES:
+            heading_pattern = r'(?=\n\s*(?:\*\*|#{1,3}\s|[١٢٣٤٥٦٧٨٩0-9]+[\.\)]\s))'
+            parts = re.split(heading_pattern, text)
+            if len(parts) > 1:
+                chunks = []
+                for part in parts:
+                    part = part.strip()
+                    if not part: continue
+                    if len(part.split()) > 600:
+                        chunks.extend(self._chunk_text(part, 500, 50))
+                    elif part:
+                        chunks.append(part)
+                if chunks:
+                    return chunks
+
+        # Default: overlapping word chunks
+        return self._chunk_text(text, 500, 50)
 
     def _chunk_text(self, text, chunk_size=500, overlap=50):
         """Split text into overlapping chunks."""
@@ -697,6 +944,436 @@ class LearningSystem:
         """Get recent history."""
         self._load()
         return list(reversed(self._history[-limit:]))
+
+
+# ==================== 4. REASONING LAYER ====================
+class ReasoningLayer:
+    """Advanced reasoning pipeline for both Legal and HR advisors.
+    Provides: question analysis, reasoning rules, context building, answer validation."""
+
+    # Legal topic categories with associated keywords and article references
+    LABOR_TOPICS = {
+        'end_of_service': {
+            'keywords': ['مكافأة','نهاية الخدمة','نهاية خدمة','eos','end of service','مكافاة','تسوية','مستحقات'],
+            'articles': ['84','85','88'],
+            'category': 'تعويضات ومستحقات',
+            'priority': 'high'
+        },
+        'termination': {
+            'keywords': ['فصل','إنهاء','طرد','فسخ','إقالة','termination','عزل','تعسفي'],
+            'articles': ['74','77','80','81'],
+            'category': 'إنهاء العقد',
+            'priority': 'high'
+        },
+        'resignation': {
+            'keywords': ['استقالة','أستقيل','ترك','resignation','إشعار'],
+            'articles': ['75','81','85'],
+            'category': 'الاستقالة',
+            'priority': 'medium'
+        },
+        'contract': {
+            'keywords': ['عقد','عقود','contract','محدد','غير محدد','تجربة','probation'],
+            'articles': ['50','53','55'],
+            'category': 'العقود',
+            'priority': 'medium'
+        },
+        'leave': {
+            'keywords': ['إجازة','إجازات','سنوية','مرضية','leave','وضع','أمومة','رضاعة'],
+            'articles': ['109','113','151'],
+            'category': 'الإجازات',
+            'priority': 'medium'
+        },
+        'wages': {
+            'keywords': ['راتب','رواتب','أجر','بدل','salary','wage','حد أدنى','تأخير راتب'],
+            'articles': ['89','90','94'],
+            'category': 'الرواتب والأجور',
+            'priority': 'medium'
+        },
+        'working_hours': {
+            'keywords': ['ساعات','دوام','إضافي','overtime','وقت العمل','رمضان'],
+            'articles': ['98','99','107'],
+            'category': 'ساعات العمل',
+            'priority': 'low'
+        },
+        'social_insurance': {
+            'keywords': ['تأمينات','تأمين اجتماعي','gosi','اشتراك','ساند','تقاعد','معاش'],
+            'articles': [],
+            'category': 'التأمينات الاجتماعية',
+            'priority': 'medium'
+        },
+        'health_insurance': {
+            'keywords': ['تأمين طبي','تأمين صحي','ضمان صحي','علاج','مستشفى','cchi'],
+            'articles': [],
+            'category': 'التأمين الطبي',
+            'priority': 'low'
+        },
+        'disputes': {
+            'keywords': ['شكوى','نزاع','محكمة','مكتب العمل','تظلم','ودي','قضية'],
+            'articles': [],
+            'category': 'النزاعات العمالية',
+            'priority': 'medium'
+        },
+        'saudization': {
+            'keywords': ['نطاقات','سعودة','توطين','nitaqat','نسبة السعودة'],
+            'articles': [],
+            'category': 'السعودة والتوطين',
+            'priority': 'low'
+        },
+        'women_rights': {
+            'keywords': ['حقوق المرأة','المرأة','حامل','وضع','رضاعة','أمومة'],
+            'articles': ['151'],
+            'category': 'حقوق المرأة',
+            'priority': 'medium'
+        },
+        'transfer': {
+            'keywords': ['نقل كفالة','نقل خدمات','تحويل','كفيل','sponsor'],
+            'articles': [],
+            'category': 'نقل الخدمات',
+            'priority': 'low'
+        },
+    }
+
+    # HR topic categories with associated frameworks
+    HR_TOPICS = {
+        'performance': {
+            'keywords': ['أداء','تقييم','performance','kpi','okr','أهداف','360'],
+            'frameworks': ['SMART','MBO','BARS','360-Degree','BSC'],
+            'category': 'إدارة الأداء',
+            'priority': 'high'
+        },
+        'training': {
+            'keywords': ['تدريب','تطوير','training','kirkpatrick','addie','roi التدريب','l&d','تأهيل','دورة'],
+            'frameworks': ['ADDIE','Kirkpatrick','Phillips ROI','70-20-10','SAM'],
+            'category': 'التدريب والتطوير',
+            'priority': 'high'
+        },
+        'recruitment': {
+            'keywords': ['استقطاب','توظيف','recruitment','hiring','مقابلة','شاغرة','تعيين','onboarding'],
+            'frameworks': ['EVP','ATS','Structured Interview','Assessment Center'],
+            'category': 'الاستقطاب والتوظيف',
+            'priority': 'high'
+        },
+        'compensation': {
+            'keywords': ['تعويضات','هيكل رواتب','compensation','total rewards','بدلات','مزايا','job evaluation'],
+            'frameworks': ['Point Factor','Compa-Ratio','Total Rewards','Salary Survey'],
+            'category': 'التعويضات والمزايا',
+            'priority': 'high'
+        },
+        'employee_experience': {
+            'keywords': ['تجربة الموظف','employee experience','engagement','رضا','ولاء','انتماء','ارتباط'],
+            'frameworks': ['Gallup Q12','eNPS','Pulse Survey','Stay Interview'],
+            'category': 'تجربة الموظف',
+            'priority': 'medium'
+        },
+        'workforce_planning': {
+            'keywords': ['تخطيط قوى عاملة','workforce planning','تعاقب','succession','مسار وظيفي','career'],
+            'frameworks': ['9-Box Grid','Gap Analysis','Dual Track'],
+            'category': 'تخطيط القوى العاملة',
+            'priority': 'medium'
+        },
+        'change_management': {
+            'keywords': ['إدارة التغيير','change management','تحول','kotter','adkar','lewin'],
+            'frameworks': ['Kotter 8-Step','ADKAR','Lewin'],
+            'category': 'إدارة التغيير',
+            'priority': 'medium'
+        },
+        'analytics': {
+            'keywords': ['تحليلات','analytics','بيانات','people analytics','hr analytics','dashboard'],
+            'frameworks': ['Descriptive','Diagnostic','Predictive','Prescriptive'],
+            'category': 'تحليلات الموارد البشرية',
+            'priority': 'medium'
+        },
+        'dei': {
+            'keywords': ['تنوع','شمولية','diversity','inclusion','dei','عدالة'],
+            'frameworks': ['ERGs','Unconscious Bias Training'],
+            'category': 'التنوع والشمول',
+            'priority': 'low'
+        },
+    }
+
+    def analyze_question(self, question, advisor_type):
+        """Analyze the question to extract intent, topics, entities, and complexity.
+        Returns a structured analysis dict used by subsequent pipeline stages."""
+        q_lower = question.lower().strip()
+        # Remove common Arabic prefixes for better matching
+        q_clean = q_lower
+        for prefix in ['ال','و','ب','ك','ل','ف']:
+            q_clean = q_clean.replace(f' {prefix}', ' ')
+
+        analysis = {
+            'original_question': question,
+            'advisor_type': advisor_type,
+            'language': 'ar' if any('\u0600' <= c <= '\u06FF' for c in question) else 'en',
+            'topics': [],
+            'matched_articles': [],
+            'matched_frameworks': [],
+            'intent': 'informational',  # informational, calculation, comparison, procedural, case_analysis
+            'complexity': 'simple',     # simple, moderate, complex
+            'entities': {},
+        }
+
+        # Detect intent
+        calc_keywords = ['حساب','احسب','كم','كيف أحسب','calculate','how much','مبلغ','قيمة','نسبة']
+        compare_keywords = ['فرق','مقارنة','compare','difference','أفضل','أيهما','versus','vs']
+        procedure_keywords = ['كيف','خطوات','طريقة','إجراءات','how to','steps','عملية']
+        case_keywords = ['حالتي','تم فصلي','تم طردي','حالة','situation','case','ظرفي','مشكلتي']
+
+        if any(kw in q_lower for kw in calc_keywords):
+            analysis['intent'] = 'calculation'
+        elif any(kw in q_lower for kw in compare_keywords):
+            analysis['intent'] = 'comparison'
+        elif any(kw in q_lower for kw in case_keywords):
+            analysis['intent'] = 'case_analysis'
+        elif any(kw in q_lower for kw in procedure_keywords):
+            analysis['intent'] = 'procedural'
+
+        # Extract numeric entities (years, salary, days)
+        import re
+        years_match = re.findall(r'(\d+)\s*(?:سنة|سنوات|year|years)', q_lower)
+        salary_match = re.findall(r'(\d[\d,]*)\s*(?:ريال|ر\.س|sar|riyal)', q_lower)
+        days_match = re.findall(r'(\d+)\s*(?:يوم|أيام|day|days)', q_lower)
+        months_match = re.findall(r'(\d+)\s*(?:شهر|أشهر|month|months)', q_lower)
+
+        if years_match: analysis['entities']['years'] = [int(y) for y in years_match]
+        if salary_match: analysis['entities']['salary'] = [int(s.replace(',','')) for s in salary_match]
+        if days_match: analysis['entities']['days'] = [int(d) for d in days_match]
+        if months_match: analysis['entities']['months'] = [int(m) for m in months_match]
+
+        # Topic matching
+        topic_db = self.LABOR_TOPICS if advisor_type == 'labor' else self.HR_TOPICS
+        matched_topics = []
+        for topic_id, topic_info in topic_db.items():
+            score = 0
+            for kw in topic_info['keywords']:
+                kw_lower = kw.lower()
+                if kw_lower in q_lower:
+                    score += 3
+                elif len(kw_lower) > 3 and kw_lower[:4] in q_lower:
+                    score += 1
+            if score >= 2:
+                matched_topics.append({
+                    'id': topic_id,
+                    'score': score,
+                    'category': topic_info['category'],
+                    'priority': topic_info['priority'],
+                })
+                if advisor_type == 'labor' and 'articles' in topic_info:
+                    analysis['matched_articles'].extend(topic_info['articles'])
+                elif advisor_type == 'hr_expert' and 'frameworks' in topic_info:
+                    analysis['matched_frameworks'].extend(topic_info['frameworks'])
+
+        matched_topics.sort(key=lambda x: x['score'], reverse=True)
+        analysis['topics'] = matched_topics[:3]
+        analysis['matched_articles'] = list(set(analysis['matched_articles']))
+        analysis['matched_frameworks'] = list(set(analysis['matched_frameworks']))
+
+        # Complexity assessment
+        num_topics = len(matched_topics)
+        has_entities = bool(analysis['entities'])
+        is_case = analysis['intent'] == 'case_analysis'
+        if num_topics >= 3 or (is_case and has_entities) or (analysis['intent'] == 'calculation' and num_topics >= 2):
+            analysis['complexity'] = 'complex'
+        elif num_topics >= 2 or has_entities or is_case:
+            analysis['complexity'] = 'moderate'
+
+        return analysis
+
+    def apply_reasoning_rules(self, analysis, advisor_type):
+        """Apply domain-specific reasoning rules to guide the AI response.
+        Returns reasoning instructions that get injected into the prompt."""
+        rules = []
+
+        if advisor_type == 'labor':
+            rules = self._apply_labor_rules(analysis)
+        elif advisor_type == 'hr_expert':
+            rules = self._apply_hr_rules(analysis)
+
+        return rules
+
+    def _apply_labor_rules(self, analysis):
+        """Legal advisor reasoning rules."""
+        rules = []
+        intent = analysis.get('intent', 'informational')
+        topics = [t['id'] for t in analysis.get('topics', [])]
+        entities = analysis.get('entities', {})
+
+        # Intent-specific rules
+        if intent == 'calculation':
+            rules.append("يجب عرض خطوات الحساب بالأرقام بشكل واضح ومفصل")
+            rules.append("اذكر المادة القانونية التي يستند إليها الحساب")
+            if 'years' in entities:
+                years = entities['years'][0]
+                if years > 5:
+                    rules.append(f"الموظف لديه {years} سنوات: احسب أول 5 سنوات بنصف راتب + الباقي براتب كامل")
+                else:
+                    rules.append(f"الموظف لديه {years} سنوات: احسب بنصف راتب عن كل سنة (ضمن أول 5 سنوات)")
+
+        elif intent == 'case_analysis':
+            rules.append("حلل الحالة: استخرج المعطيات (نوع العقد، مدة الخدمة، سبب الإنهاء)")
+            rules.append("حدد المواد القانونية المنطبقة على كل معطى")
+            rules.append("قدم النتيجة القانونية مع الحقوق المستحقة بالتفصيل")
+            rules.append("اذكر الخطوات العملية التي يجب اتباعها")
+
+        elif intent == 'comparison':
+            rules.append("قدم مقارنة منظمة في نقاط واضحة")
+            rules.append("اذكر الفروقات القانونية الجوهرية")
+
+        elif intent == 'procedural':
+            rules.append("قدم الخطوات بترتيب زمني واضح")
+            rules.append("اذكر المستندات المطلوبة والجهة المختصة")
+
+        # Topic-specific rules
+        if 'termination' in topics:
+            rules.append("فرّق بين الفصل المشروع (المادة 80) وغير المشروع (المادة 77)")
+            rules.append("اذكر التعويض المستحق حسب نوع العقد")
+        if 'end_of_service' in topics:
+            rules.append("فرّق بين الإنهاء والاستقالة في حساب المكافأة (المادة 84 vs 85)")
+        if 'contract' in topics:
+            rules.append("وضّح متى يتحول العقد المحدد لغير محدد (المادة 55)")
+        if 'leave' in topics and 'women_rights' in topics:
+            rules.append("وضّح إجازة الوضع (10 أسابيع) وساعة الرضاعة وحماية الفصل")
+
+        # Complexity rules
+        if analysis.get('complexity') == 'complex':
+            rules.append("السؤال معقد: نظّم الإجابة بعناوين فرعية واضحة")
+            rules.append("غطِّ جميع الجوانب القانونية المتعلقة بالسؤال")
+
+        return rules
+
+    def _apply_hr_rules(self, analysis):
+        """HR advisor reasoning rules."""
+        rules = []
+        intent = analysis.get('intent', 'informational')
+        topics = [t['id'] for t in analysis.get('topics', [])]
+        frameworks = analysis.get('matched_frameworks', [])
+
+        # Intent-specific rules
+        if intent == 'calculation':
+            rules.append("قدم المعادلة والحساب بالأرقام")
+            if 'Phillips ROI' in frameworks:
+                rules.append("استخدم معادلة Phillips: ROI = (الفوائد - التكاليف) / التكاليف × 100")
+
+        elif intent == 'procedural':
+            rules.append("قدم خطوات تنفيذية عملية مع جدول زمني مقترح")
+            rules.append("اقترح أدوات وتقنيات حديثة")
+
+        elif intent == 'comparison':
+            rules.append("قدم جدول مقارنة منظم")
+            rules.append("اذكر متى يُستخدم كل خيار")
+
+        elif intent == 'case_analysis':
+            rules.append("حلل الوضع الحالي وقدم توصيات مبنية على أطر مهنية معتمدة")
+
+        # Framework-specific rules
+        if frameworks:
+            rules.append(f"استشهد بالأطر المهنية التالية: {', '.join(frameworks[:3])}")
+
+        # Topic-specific rules
+        if 'training' in topics:
+            rules.append("اذكر كيفية قياس فعالية التدريب (Kirkpatrick/Phillips)")
+        if 'recruitment' in topics:
+            rules.append("اذكر مؤشرات الأداء: Time-to-Hire, Cost-per-Hire, Quality of Hire")
+        if 'compensation' in topics:
+            rules.append("استخدم مفاهيم: Compa-Ratio, Pay Mix, Market Positioning")
+        if 'performance' in topics:
+            rules.append("اذكر أدوات التقييم المناسبة وربطها بالأهداف الاستراتيجية")
+
+        # Complexity rules
+        if analysis.get('complexity') == 'complex':
+            rules.append("السؤال معقد: نظّم الإجابة بأقسام واضحة مع أمثلة عملية")
+
+        rules.append("راعِ السياق السعودي عند الحاجة")
+        return rules
+
+    def build_reasoning_context(self, question, advisor_type, analysis, retrieved_context):
+        """Build enhanced context that includes reasoning instructions.
+        This gets prepended to the retrieved context before sending to the model."""
+        parts = []
+
+        # Reasoning header
+        topics_str = ", ".join([t['category'] for t in analysis.get('topics', [])]) or "عام"
+        intent_map = {
+            'informational': 'استفسار معلوماتي',
+            'calculation': 'طلب حساب',
+            'comparison': 'طلب مقارنة',
+            'procedural': 'طلب إجراءات',
+            'case_analysis': 'تحليل حالة'
+        }
+        intent_ar = intent_map.get(analysis.get('intent', 'informational'), 'استفسار')
+
+        parts.append(f"\n**تحليل السؤال:** النوع: {intent_ar} | المواضيع: {topics_str}")
+
+        # Reasoning rules
+        rules = self.apply_reasoning_rules(analysis, advisor_type)
+        if rules:
+            rules_text = "\n".join([f"- {r}" for r in rules])
+            parts.append(f"\n**قواعد الإجابة المطلوبة:**\n{rules_text}")
+
+        # Article references for legal
+        if advisor_type == 'labor' and analysis.get('matched_articles'):
+            arts = ", ".join([f"المادة {a}" for a in analysis['matched_articles']])
+            parts.append(f"\n**المواد القانونية ذات الصلة:** {arts}")
+
+        # Framework references for HR
+        if advisor_type == 'hr_expert' and analysis.get('matched_frameworks'):
+            fws = ", ".join(analysis['matched_frameworks'])
+            parts.append(f"\n**الأطر المهنية ذات الصلة:** {fws}")
+
+        # Entity context
+        entities = analysis.get('entities', {})
+        if entities:
+            entity_parts = []
+            if 'years' in entities: entity_parts.append(f"سنوات الخدمة: {entities['years']}")
+            if 'salary' in entities: entity_parts.append(f"الراتب: {entities['salary']}")
+            if 'days' in entities: entity_parts.append(f"أيام: {entities['days']}")
+            if 'months' in entities: entity_parts.append(f"أشهر: {entities['months']}")
+            if entity_parts:
+                parts.append(f"\n**البيانات المستخرجة:** {' | '.join(entity_parts)}")
+
+        # Retrieved context
+        if retrieved_context:
+            parts.append(f"\n**مراجع من قاعدة المعرفة:**\n{retrieved_context}")
+
+        return "\n".join(parts)
+
+    def validate_generated_answer(self, answer, analysis, advisor_type):
+        """Validate the generated answer for quality and completeness.
+        Returns (is_valid, issues) tuple."""
+        if not answer or len(answer.strip()) < 30:
+            return False, ["الإجابة قصيرة جداً"]
+
+        issues = []
+        intent = analysis.get('intent', 'informational')
+
+        # Check article citations for legal
+        if advisor_type == 'labor':
+            expected_articles = analysis.get('matched_articles', [])
+            if expected_articles and not any(f'المادة {a}' in answer or f'مادة {a}' in answer for a in expected_articles):
+                issues.append("لم يتم ذكر المواد القانونية المتوقعة")
+
+        # Check framework citations for HR
+        if advisor_type == 'hr_expert':
+            expected_fw = analysis.get('matched_frameworks', [])
+            if expected_fw and not any(fw.lower() in answer.lower() for fw in expected_fw[:2]):
+                issues.append("لم يتم ذكر الأطر المهنية المتوقعة")
+
+        # Check calculation presence
+        if intent == 'calculation':
+            import re
+            has_numbers = bool(re.search(r'\d+[,.]?\d*', answer))
+            has_calc_words = any(w in answer for w in ['=','×','÷','+','-','حساب','النتيجة','المجموع','الإجمالي'])
+            if not has_numbers or not has_calc_words:
+                issues.append("طُلب حساب لكن الإجابة لا تحتوي على خطوات حسابية واضحة")
+
+        # Check language match
+        if analysis.get('language') == 'ar' and len(answer) > 50:
+            arabic_chars = sum(1 for c in answer if '\u0600' <= c <= '\u06FF')
+            if arabic_chars / len(answer) < 0.2:
+                issues.append("لغة الإجابة لا تتوافق مع لغة السؤال")
+
+        # Answer is valid if there are no critical issues (article/framework missing is a warning, not blocking)
+        is_valid = not any("قصيرة" in i or "حسابية" in i or "لغة" in i for i in issues)
+        return is_valid, issues
 
 
 # =====================================================================
