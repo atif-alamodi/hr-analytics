@@ -1121,166 +1121,121 @@ HR_KB = {
     "كفاءات|competency|مهارات|skills|جدارات": "**إدارة الكفاءات** *(SHRM - Competency | PHRi)*\n\n**Competency Framework:** تحديد الكفاءات المطلوبة لكل وظيفة\n\n**أنواع الكفاءات:**\n- Core: قيم المنظمة (للجميع)\n- Functional: مهارات الوظيفة\n- Leadership: كفاءات قيادية\n\n**التطبيق:** التوظيف + التطوير + التقييم + الترقية + التعاقب الوظيفي",
 }
 
-def smart_local_answer(question, kb=None):
-    """Smart answer from local knowledge base - prioritizes full phrase matches."""
-    if kb is None: kb = LABOR_KB
-    q = question.lower().strip().rstrip('؟?')
-    # Remove Arabic article for better matching
-    q_clean = q.replace('ال', ' ').strip()
-
-    best_score = 0
-    best_answer = None
-    for keywords, answer in kb.items():
-        kw_list = [k.strip() for k in keywords.split('|')]
-        score = 0
-        for kw in kw_list:
-            kw_lower = kw.lower()
-            # Full multi-word phrase match
-            if len(kw_lower) > 8 and kw_lower in q: score += 10
-            elif len(kw_lower) > 5 and kw_lower in q: score += 6
-            # Exact keyword in question (with or without ال)
-            elif kw_lower in q: score += 4
-            elif kw_lower in q_clean: score += 3
-            # Check with Arabic prefix
-            elif f"ال{kw_lower}" in q: score += 3
-            else:
-                for word in q.split():
-                    if len(word) > 2 and len(kw_lower) > 2:
-                        word_clean = word.lstrip('ال')
-                        if word_clean == kw_lower or kw_lower == word_clean: score += 3
-                        elif word in kw_lower or kw_lower in word: score += 1
-        if score > best_score:
-            best_score = score
-            best_answer = answer
-    return best_answer if best_score >= 2 else None
-
-def filter_response(text, consultant_type):
-    """Remove wrong content from responses - enforce separation."""
-    if not text: return text
-    lines = text.split('\n')
-    filtered = []
-    for line in lines:
-        if consultant_type == "hr":
-            skip = False
-            for marker in ['المادة ', 'مادة ', 'نظام العمل', 'اللائحة التنفيذية',
-                'المحكمة العمالية', 'مكتب العمل', 'الباب ال', 'Article ',
-                'م42', 'م43', 'م44', 'م45', 'م46', 'م47', 'م48',
-                'م50', 'م51', 'م53', 'م55', 'م74', 'م75', 'م77', 'م80', 'م81',
-                'م84', 'م85', 'م88', 'م89', 'م90', 'م98', 'م99', 'م107',
-                'م109', 'م112', 'م113', 'م115', 'م151', 'م164',
-                'المواد ذات', 'الباب الرابع', 'الباب الخامس', 'الباب السادس',
-                'الباب السابع', 'الباب الثامن', 'الباب التاسع', 'الباب العاشر',
-                'قانون العمل', 'labor law', 'التأمينات الاجتماعية',
-                'نظام التأمينات', 'الضمان الصحي']:
-                if marker in line and not any(h in line for h in ['PHRi','SHRM','CIPD','APTD','SPHRi']):
-                    skip = True; break
-            if not skip: filtered.append(line)
-        elif consultant_type == "legal":
-            skip = False
-            for marker in ['PHRi','SHRM','CIPD','APTD','SPHRi','aPHRi','ADDIE',
-                'Kirkpatrick','Phillips ROI','Instructional Design','Ulrich',
-                '9-Box','Balanced Scorecard','70-20-10','HPT','Bloom','Gagné',
-                'competency framework','Total Rewards Model','Talent Acquisition Strategy']:
-                if marker in line:
-                    skip = True; break
-            if not skip: filtered.append(line)
-        else:
-            filtered.append(line)
-    result = '\n'.join(filtered).strip()
-    # If too much was filtered, return a note
-    if len(result) < 30 and len(text) > 100:
-        if consultant_type == "hr":
-            return "هذا السؤال يتعلق بالجانب القانوني. يرجى استخدام **المستشار القانوني ⚖️** للحصول على إجابة دقيقة بالمواد القانونية."
-        else:
-            return "هذا السؤال يتعلق بمفاهيم إدارة الموارد البشرية. يرجى استخدام **مستشار الموارد البشرية 📚** للحصول على إجابة من المناهج المهنية."
-    return result if len(result) > 20 else text
 
 # =====================================================
-# REASONING ARCHITECTURE
+# ADVISORY REASONING ENGINE v3
+# Party-aware, source-grounded, hallucination-resistant
+# For BOTH Legal Advisor and HR Advisor
 # =====================================================
 
-# =====================================================
-# GENERAL REASONING ARCHITECTURE (Both Advisors)
-# =====================================================
+# --- Asking Party Patterns ---
+PARTY_PATTERNS = {
+    "employee": ["أنا موظف","أنا عامل","تم فصلي","فصلوني","أستقيل","حقوقي","مستحقاتي","راتبي","إجازتي","عقدي","كموظف","بصفتي عامل","حقي"],
+    "employer": ["أنا صاحب عمل","كصاحب عمل","شركتي","منشأتي","موظف عندي","أريد فصل","كيف أفصل","هل يحق لي فصل","التزاماتي كصاحب"],
+    "hr_officer": ["كمسؤول موارد","أنا HR","إدارة الموارد","قسم الموارد","سياسة الشركة","كيف أعد","كيف أصمم","نحتاج سياسة"],
+    "manager": ["كمدير","فريقي","موظفيني","أحد موظفيني","تحت إدارتي","أريد تقييم"],
+    "neutral": ["ما هو","ما هي","عرّف","اشرح","ما الفرق","ما تعريف","كيف يتم","ما حكم"],
+}
 
-# --- Intent Categories (shared, advisor-agnostic) ---
+# --- Intent Detection ---
 INTENT_PATTERNS = {
-    "explanation":     ["ما هو","ماهو","ما هي","ماهي","تعريف","مفهوم","اشرح","وضح","what is","define","explain"],
-    "case_application":["حالتي","تم فصلي","فصلوني","عندي","لدي مشكلة","في حالة","إذا كان","لو"],
-    "calculation":     ["حساب","احسب","كم","مبلغ","نسبة","كيف أحسب","calculate","مقدار","قيمة"],
-    "comparison":      ["الفرق","مقارنة","أفضل","أيهما","مقابل","vs","difference","compare"],
-    "process":         ["خطوات","مراحل","إجراءات","كيف أقدم","كيف أرفع","steps","procedure","طريقة تقديم"],
-    "methodology":     ["كيف أبني","كيف أصمم","كيف أطور","كيف أنشئ","how to build","how to design"],
-    "recommendation":  ["أنصح","أفضل طريقة","ماذا تنصح","ما رأيك","recommend","suggest","أقترح"],
-    "diagnosis":       ["مشكلة","تحدي","ضعف","انخفاض","ارتفاع","تراجع","سبب","لماذا","diagnose","problem"],
-    "policy":          ["سياسة","لائحة","نظام داخلي","ضوابط","policy","regulation","إعداد سياسة"],
-    "rights":          ["حقوق","حقوقي","يحق لي","هل يحق","واجبات","التزامات","rights","obligations"],
-    "pros_cons":       ["مزايا","عيوب","إيجابيات","سلبيات","pros","cons","advantages"],
-    "kpi_design":      ["مؤشرات","KPI","قياس","كيف أقيس","metrics","measure","تقييم فعالية"],
+    "explanation":     ["ما هو","ماهو","ما هي","ماهي","تعريف","مفهوم","اشرح","وضح","what is","define"],
+    "case_application":["حالتي","تم فصلي","فصلوني","عندي مشكلة","في حالة","إذا كان","لو","أنا"],
+    "calculation":     ["حساب","احسب","كم","مبلغ","نسبة","كيف أحسب","مقدار","قيمة"],
+    "comparison":      ["الفرق","مقارنة","أفضل","أيهما","مقابل","vs","difference"],
+    "process":         ["خطوات","مراحل","إجراءات","كيف أقدم","كيف أرفع","طريقة تقديم"],
+    "methodology":     ["كيف أبني","كيف أصمم","كيف أطور","كيف أنشئ","كيف أعد"],
+    "recommendation":  ["أنصح","أفضل طريقة","ماذا تنصح","ما رأيك","أقترح"],
+    "diagnosis":       ["مشكلة","تحدي","ضعف","انخفاض","ارتفاع","تراجع","سبب","لماذا"],
+    "policy":          ["سياسة","لائحة","نظام داخلي","ضوابط","إعداد سياسة"],
+    "rights":          ["حقوق","حقوقي","يحق لي","هل يحق","واجبات","التزامات"],
+    "kpi_design":      ["مؤشرات","KPI","قياس","كيف أقيس","تقييم فعالية"],
+    "pros_cons":       ["مزايا","عيوب","إيجابيات","سلبيات"],
 }
 
-# --- Legal Topics (comprehensive) ---
+# --- Legal Topics with VERIFIED article facts ---
 LEGAL_TOPICS = {
-    "termination":     {"kw": ["فصل","إنهاء","طرد","إقالة","فسخ","فصلي","فُصلت","إنهاء خدمة","فصل تعسفي"], "ref": "م74-82", "label": "إنهاء العقد"},
-    "end_of_service":  {"kw": ["مكافأة","نهاية الخدمة","مستحقات","مستحقاتي","تسوية","EOS","نهاية خدمة"], "ref": "م84-88", "label": "مكافأة نهاية الخدمة"},
-    "resignation":     {"kw": ["استقالة","أستقيل","ترك العمل","تقديم استقالة","إشعار"], "ref": "م75,م81,م85", "label": "الاستقالة"},
-    "contracts":       {"kw": ["عقد","عقود","محدد المدة","غير محدد","تجديد","عقد عمل","نوع العقد","تحويل العقد"], "ref": "م49-60", "label": "العقود"},
-    "wages":           {"kw": ["راتب","أجر","رواتب","بدل","بدلات","خصم","تأخير رواتب","حماية الأجر","أجور"], "ref": "م89-97", "label": "الأجور"},
-    "working_hours":   {"kw": ["ساعات","ساعات العمل","دوام","عمل إضافي","أوفرتايم","وقت العمل","overtime"], "ref": "م98-107", "label": "ساعات العمل"},
-    "leave":           {"kw": ["إجازة","إجازات","سنوية","مرضية","وفاة","زواج","حج","مولود","إجازة سنوية","إجازة مرضية"], "ref": "م108-116", "label": "الإجازات"},
-    "training":        {"kw": ["تدريب","تأهيل","تدريب مهني","دورة تدريبية","عقد تأهيل","نسبة التدريب"], "ref": "م42-48", "label": "التدريب والتأهيل"},
-    "probation":       {"kw": ["تجربة","فترة التجربة","فترة الاختبار"], "ref": "م53-54", "label": "فترة التجربة"},
-    "women":           {"kw": ["المرأة","حامل","وضع","رضاعة","أمومة","إجازة وضع","حقوق المرأة"], "ref": "م121-130,م151", "label": "المرأة العاملة"},
-    "insurance":       {"kw": ["تأمين","تأمينات","تأمينات اجتماعية","gosi","ساند","تقاعد","اشتراك","معاش"], "ref": "GOSI", "label": "التأمينات الاجتماعية"},
-    "medical":         {"kw": ["تأمين طبي","تأمين صحي","ضمان صحي","علاج","مستشفى","CCHI"], "ref": "CCHI", "label": "التأمين الطبي"},
-    "safety":          {"kw": ["سلامة","إصابة","حادث عمل","إصابة مهنية","خطر","وفاة عمل"], "ref": "م131-155", "label": "السلامة وإصابات العمل"},
-    "disputes":        {"kw": ["شكوى","نزاع","محكمة عمالية","مكتب العمل","خلاف","تظلم","ودي"], "ref": "م200-231", "label": "تسوية النزاعات"},
-    "saudization":     {"kw": ["نطاقات","سعودة","توطين","نسبة السعودة","بلاتيني"], "ref": "م26+قرارات", "label": "نطاقات والتوطين"},
-    "maritime":        {"kw": ["بحار","بحري","سفينة","ملاحة","عمل بحري"], "ref": "م156-178", "label": "العمل البحري"},
-    "transfer":        {"kw": ["نقل كفالة","نقل خدمات","كفالتي","تنقل وظيفي","خروج نهائي","تحويل كفالة"], "ref": "مبادرة تعاقدية", "label": "نقل الخدمات"},
-    "disciplinary":    {"kw": ["جزاء","عقوبة","إنذار","خصم","لفت نظر","مخالفة","تأديب","جزاءات"], "ref": "م66-72", "label": "الجزاءات التأديبية"},
-    "certificate":     {"kw": ["شهادة خبرة","شهادة عمل","خطاب تعريف","تعريف بالراتب"], "ref": "م64", "label": "الشهادات والخطابات"},
-    "absence":         {"kw": ["غياب","تغيب","انقطاع","عدم حضور"], "ref": "م80", "label": "الغياب والانقطاع"},
-    "employer_duties":  {"kw": ["واجبات صاحب العمل","التزامات الشركة","مسؤوليات المنشأة"], "ref": "م51,م90,م121", "label": "واجبات صاحب العمل"},
-    "worker_rights":    {"kw": ["حقوق العامل","حقوقي","حقوق الموظف","حق العامل"], "ref": "متعددة", "label": "حقوق العامل"},
-    "minors":           {"kw": ["أحداث","قاصر","عمالة أطفال","سن العمل"], "ref": "م117-120", "label": "تشغيل الأحداث"},
-    "domestic":         {"kw": ["عمالة منزلية","خادم","سائق منزلي","عامل منزلي"], "ref": "لائحة خاصة", "label": "العمالة المنزلية"},
+    "termination":     {"kw": ["فصل","إنهاء","طرد","إقالة","فسخ","فصلي","فُصلت","فصل تعسفي","إنهاء خدمة"], "ref": "م74-82", "label": "إنهاء العقد",
+        "facts": "م74: حالات انتهاء العقد (اتفاق، انتهاء مدة، إرادة أحد الطرفين، قوة قاهرة، تقاعد). م75: إشعار 60 يوم (أجر شهري) أو 30 يوم. م77: تعويض فسخ غير مشروع: 15 يوم/سنة (غير محدد) أو المدة الباقية (محدد)، حد أدنى شهرين. م80: فسخ مشروع بدون تعويض (اعتداء، إخلال، غياب 30 متفرقة أو 15 متتالية). م81: حق العامل بالترك بدون إشعار (إخلال صاحب العمل، غش، اعتداء)."},
+    "end_of_service":  {"kw": ["مكافأة","نهاية الخدمة","مستحقات","مستحقاتي","تسوية","EOS"], "ref": "م84-88", "label": "مكافأة نهاية الخدمة",
+        "facts": "م84: نصف شهر/سنة (أول 5) + شهر/سنة (بعدها). تُحسب على آخر أجر. م85: عند الاستقالة: ثلث (2-5 سنوات)، ثلثان (5-10)، كاملة (10+). أقل من سنتين: لا شيء. م88: التسوية خلال أسبوع."},
+    "resignation":     {"kw": ["استقالة","أستقيل","ترك العمل","تقديم استقالة"], "ref": "م75,م81,م84,م85,م88", "label": "الاستقالة",
+        "facts": "م75: إشعار مسبق 60 يوم. م81: ترك بدون إشعار إذا أخل صاحب العمل. م84: حساب المكافأة الأساسية. م85: نسب الاستقالة. م88: تسوية خلال أسبوع."},
+    "contracts":       {"kw": ["عقد","عقود","محدد المدة","غير محدد","تجديد","عقد عمل","تحويل العقد"], "ref": "م49-60", "label": "العقود",
+        "facts": "م50: عقد مكتوب من نسختين. م51: يتضمن الاسم والجنسية والأجر ونوع العمل والمدة. م53: فترة تجربة 90 يوم قابلة للتمديد لـ 180. م55: يتحول لغير محدد بعد 3 تجديدات أو 4 سنوات."},
+    "wages":           {"kw": ["راتب","أجر","رواتب","بدل","بدلات","خصم","تأخير رواتب","أجور"], "ref": "م89-97", "label": "الأجور",
+        "facts": "م89: يُدفع بالريال. م90: التزام بالدفع في الموعد. م92: لا يجوز خصم أكثر من نصف الأجر. م94: حماية الأجر."},
+    "working_hours":   {"kw": ["ساعات","ساعات العمل","دوام","عمل إضافي","أوفرتايم","overtime"], "ref": "م98-107", "label": "ساعات العمل",
+        "facts": "م98: 8 ساعات/يوم أو 48/أسبوع. م99: رمضان 6 ساعات/36 أسبوع. م101: راحة نصف ساعة كل 5 ساعات. م107: إضافي 150%."},
+    "leave":           {"kw": ["إجازة","إجازات","سنوية","مرضية","وفاة","زواج","حج","مولود","إجازة سنوية"], "ref": "م109-116", "label": "الإجازات",
+        "facts": "م109: سنوية 21 يوم (أول 5 سنوات) ثم 30 يوم. م110: يجوز تأجيلها بموافقة. م112: وفاة 5 أيام، زواج 5، مولود 3. م113: مرضية 30 يوم كامل + 60 يوم 75% + 30 بدون. م115: حج 10-15 يوم لمرة واحدة."},
+    "training":        {"kw": ["تدريب","تأهيل","تدريب مهني","دورة تدريبية","عقد تأهيل"], "ref": "م42-48", "label": "التدريب والتأهيل",
+        "facts": "م42: على صاحب العمل تأهيل عماله السعوديين. م43: تدريب 12% سنوياً. م44: الوزارة تحدد المهن. م45: عقد التأهيل يتضمن المهنة والمدة والمراحل والمكافأة. م46: إلزام المتدرب بالعمل أو رد التكاليف. م47: إنهاء التدريب إذا ثبت عدم القدرة. م48: النفقات على صاحب العمل."},
+    "probation":       {"kw": ["تجربة","فترة التجربة","فترة الاختبار"], "ref": "م53-54", "label": "فترة التجربة",
+        "facts": "م53: 90 يوم كحد أقصى، تمديد لـ 180 بموافقة كتابية. لا تدخل فيها إجازة العيدين والمرضية. لكلا الطرفين الإنهاء بدون تعويض أو مكافأة."},
+    "women":           {"kw": ["المرأة","حامل","وضع","رضاعة","أمومة","إجازة وضع","حقوق المرأة"], "ref": "م121-130,م151", "label": "المرأة العاملة",
+        "facts": "م151: إجازة وضع 10 أسابيع (4 قبل كحد أقصى). ساعة رضاعة يومياً لـ 24 شهر. حماية من الفصل أثناء الحمل والوضع وبعده 180 يوم. عدة 4 أشهر و10 أيام."},
+    "insurance":       {"kw": ["تأمين","تأمينات","تأمينات اجتماعية","gosi","ساند","تقاعد","اشتراك","معاش"], "ref": "نظام التأمينات", "label": "التأمينات الاجتماعية",
+        "facts": "سعودي: 10.5% خصم + 12.5% شركة. غير سعودي: 2% أخطار فقط. ساند: 0.75%+0.75%. التقاعد: سن 60 + 120 شهر أو 300 شهر مبكر. ساند: 60% لـ 3 أشهر ثم 50% لـ 9 أشهر أقصى 9000."},
+    "medical":         {"kw": ["تأمين طبي","تأمين صحي","ضمان صحي","علاج","CCHI"], "ref": "نظام CCHI", "label": "التأمين الطبي",
+        "facts": "التأمين الصحي إلزامي على صاحب العمل لجميع العاملين ومعاليهم. الحد الأدنى للتغطية حسب وثيقة الضمان الصحي الموحدة."},
+    "disciplinary":    {"kw": ["جزاء","عقوبة","إنذار","خصم","لفت نظر","مخالفة","تأديب","جزاءات"], "ref": "م66-72", "label": "الجزاءات التأديبية",
+        "facts": "م66: لائحة جزاءات معتمدة. م67: الجزاءات: إنذار، غرامة، تأجيل ترقية، إيقاف بدون أجر، فصل. م69: لا يجوز جزاء بعد 30 يوم من اكتشاف المخالفة. م71: التحقيق كتابياً."},
+    "safety":          {"kw": ["سلامة","إصابة","حادث عمل","إصابة مهنية","خطر","وفاة عمل"], "ref": "م131-155", "label": "السلامة وإصابات العمل",
+        "facts": "م133-141: صاحب العمل يتحمل العلاج. أجر كامل خلال العلاج (سنة). عجز كلي: معاش كامل. وفاة: تعويض أجر 3 سنوات (أدنى 54,000)."},
+    "disputes":        {"kw": ["شكوى","نزاع","محكمة عمالية","مكتب العمل","خلاف","تظلم","ودي"], "ref": "م200-231", "label": "تسوية النزاعات",
+        "facts": "منصة ودي: تسوية ودية 21 يوم. المحكمة العمالية: بعد فشل التسوية. مدة التقادم: 12 شهر."},
+    "saudization":     {"kw": ["نطاقات","سعودة","توطين","نسبة السعودة"], "ref": "م26+قرارات", "label": "نطاقات والتوطين",
+        "facts": "نطاقات: بلاتيني > أخضر عالي > أخضر منخفض > أصفر > أحمر. النسب حسب النشاط والحجم."},
+    "transfer":        {"kw": ["نقل كفالة","نقل خدمات","كفالتي","تنقل وظيفي"], "ref": "مبادرة تعاقدية", "label": "نقل الخدمات",
+        "facts": "نظام تعاقدي جديد عبر منصة قوى. إشعار 90 يوم. التنقل حق للعامل بعد انتهاء العقد."},
+    "absence":         {"kw": ["غياب","تغيب","انقطاع","عدم حضور"], "ref": "م80", "label": "الغياب",
+        "facts": "م80: فسخ بدون تعويض إذا تغيب 30 يوم متفرقة أو 15 متتالية في السنة بعد إنذار كتابي."},
+    "certificate":     {"kw": ["شهادة خبرة","شهادة عمل","خطاب تعريف"], "ref": "م64", "label": "الشهادات",
+        "facts": "م64: يلتزم صاحب العمل بإعطاء شهادة خبرة مجاناً عند انتهاء العقد."},
 }
 
-# --- HR Topics (comprehensive) ---
+# --- HR Topics with framework references ---
 HR_TOPICS = {
-    "learning_development": {"kw": ["تدريب","تطوير","L&D","دورة","تعليم","برنامج تدريبي","تصميم تعليمي","محتوى تدريبي"], "fw": "ADDIE,Kirkpatrick,Phillips ROI,70-20-10,Bloom,SAM,Gagné", "certs": "APTD,PHRi,CIPD L5", "label": "التعلم والتطوير"},
-    "performance":          {"kw": ["أداء","تقييم","تقييم الأداء","KPI","OKR","أهداف","إدارة الأداء","تقييم سنوي"], "fw": "9-Box,MBO,BARS,360-degree,BSC,SMART", "certs": "SPHRi,CIPD L7,SHRM", "label": "إدارة الأداء"},
-    "recruitment":          {"kw": ["استقطاب","توظيف","مقابلة","ATS","اختيار","تعيين","وصف وظيفي","إعلان وظيفي"], "fw": "Competency-Based,Structured Interview,EVP,Employer Brand", "certs": "PHRi,SHRM,CIPD L5", "label": "الاستقطاب والتوظيف"},
-    "compensation":         {"kw": ["رواتب","تعويضات","هيكل رواتب","بدلات","مكافآت","حوافز","درجات وظيفية"], "fw": "Total Rewards,Job Evaluation,Compa-Ratio,Salary Survey,Hay,Mercer", "certs": "PHRi,SPHRi,CIPD L7", "label": "التعويضات والمزايا"},
-    "engagement":           {"kw": ["رضا","تجربة الموظف","احتفاظ","دوران","engagement","تحفيز","ولاء"], "fw": "Gallup Q12,eNPS,Pulse Survey,EX Journey Map", "certs": "SHRM,CIPD L5,PHRi", "label": "تجربة الموظف والاحتفاظ"},
+    "learning_development": {"kw": ["تدريب","تطوير","L&D","دورة","تعليم","برنامج تدريبي","تصميم تعليمي"], "fw": "ADDIE,Kirkpatrick,Phillips ROI,70-20-10,Bloom,SAM", "certs": "APTD,PHRi,CIPD L5", "label": "التعلم والتطوير"},
+    "performance":          {"kw": ["أداء","تقييم","تقييم الأداء","KPI","OKR","أهداف","إدارة الأداء"], "fw": "9-Box,MBO,BARS,360-degree,BSC,SMART", "certs": "SPHRi,CIPD L7,SHRM", "label": "إدارة الأداء"},
+    "recruitment":          {"kw": ["استقطاب","توظيف","مقابلة","ATS","اختيار","تعيين","وصف وظيفي"], "fw": "Competency-Based,Structured Interview,EVP,Employer Brand", "certs": "PHRi,SHRM,CIPD L5", "label": "الاستقطاب والتوظيف"},
+    "compensation":         {"kw": ["رواتب","تعويضات","هيكل رواتب","بدلات","مكافآت","حوافز","درجات وظيفية"], "fw": "Total Rewards,Job Evaluation,Compa-Ratio,Salary Survey,Hay", "certs": "PHRi,SPHRi,CIPD L7", "label": "التعويضات والمزايا"},
+    "engagement":           {"kw": ["رضا","تجربة الموظف","احتفاظ","دوران","engagement","تحفيز","ولاء"], "fw": "Gallup Q12,eNPS,Pulse Survey,EX Journey Map", "certs": "SHRM,CIPD L5,PHRi", "label": "تجربة الموظف"},
     "org_development":      {"kw": ["تطوير مؤسسي","تغيير","OD","هيكلة","إعادة هيكلة","تحول"], "fw": "Burke-Litwin,Kotter 8-Step,ADKAR,Lewin,McKinsey 7S", "certs": "CIPD L7,SPHRi", "label": "التطوير المؤسسي"},
-    "leadership":           {"kw": ["قيادة","تطوير قيادي","إدارة","كوتشنج","coaching","توجيه","mentoring"], "fw": "Ulrich,Situational Leadership,Coaching Models,GROW", "certs": "CIPD L7,SPHRi,APTD", "label": "القيادة والتطوير القيادي"},
+    "leadership":           {"kw": ["قيادة","تطوير قيادي","إدارة","كوتشنج","coaching","توجيه","mentoring"], "fw": "Ulrich,Situational Leadership,GROW,Coaching Models", "certs": "CIPD L7,SPHRi,APTD", "label": "القيادة"},
     "talent":               {"kw": ["مواهب","talent","تعاقب","succession","خلافة","مسار وظيفي","career"], "fw": "9-Box,Talent Pipeline,HIPO,Career Lattice", "certs": "SPHRi,CIPD L7,PHRi", "label": "إدارة المواهب"},
-    "analytics":            {"kw": ["تحليلات","analytics","بيانات","مؤشرات","تقارير","لوحة معلومات"], "fw": "Descriptive→Diagnostic→Predictive→Prescriptive,ROI", "certs": "PHRi,SPHRi,CIPD L7", "label": "تحليلات الموارد البشرية"},
-    "competency":           {"kw": ["كفاءات","competency","مهارات","جدارات","إطار كفاءات","skills"], "fw": "Competency Framework,Skills Matrix,Gap Analysis,TNA", "certs": "SHRM,PHRi,CIPD L5", "label": "إدارة الكفاءات"},
-    "onboarding":           {"kw": ["تهيئة","onboarding","تعريف","استقبال","موظف جديد","أول يوم"], "fw": "30-60-90 Plan,Buddy System,Orientation Program", "certs": "aPHRi,PHRi,SHRM", "label": "التهيئة والاندماج"},
-    "culture":              {"kw": ["ثقافة","بيئة عمل","قيم","diversity","DEI","شمولية"], "fw": "Schein Model,Denison,Competing Values,Great Place to Work", "certs": "CIPD L7,SHRM,SPHRi", "label": "الثقافة المؤسسية"},
-    "workforce_planning":   {"kw": ["تخطيط القوى","workforce planning","احتياج وظيفي","حجم القوى"], "fw": "Supply-Demand Analysis,Scenario Planning,FTE Analysis", "certs": "SPHRi,CIPD L7", "label": "تخطيط القوى العاملة"},
-    "policy_design":        {"kw": ["سياسة","لائحة داخلية","نظام داخلي","ضوابط","إعداد سياسة"], "fw": "Policy Framework,Governance,Compliance Matrix", "certs": "SHRM,SPHRi,CIPD L7", "label": "تصميم السياسات"},
-    "job_design":           {"kw": ["تصميم وظيفي","وصف وظيفي","تحليل وظيفي","job design","job analysis"], "fw": "Job Analysis,Job Description,Job Evaluation,Role Profiling", "certs": "PHRi,SHRM", "label": "التصميم الوظيفي"},
-    "hr_strategy":          {"kw": ["استراتيجية","خطة استراتيجية","رؤية","أهداف استراتيجية","HR strategy"], "fw": "BSC,Strategy Map,Ulrich Model,HR Value Chain", "certs": "SPHRi,CIPD L7,SHRM", "label": "الاستراتيجية"},
-    "employee_relations":   {"kw": ["علاقات موظفين","شكاوى داخلية","تظلم","صراع","نزاع داخلي"], "fw": "Conflict Resolution,Mediation,Grievance Process", "certs": "PHRi,SHRM,CIPD L5", "label": "علاقات الموظفين"},
-    "wellbeing":            {"kw": ["رفاهية","صحة نفسية","wellbeing","توازن","work-life","إرهاق"], "fw": "Wellbeing Framework,EAP,Burnout Prevention", "certs": "CIPD L5,SHRM", "label": "رفاهية الموظفين"},
+    "analytics":            {"kw": ["تحليلات","analytics","بيانات","مؤشرات","تقارير","لوحة معلومات"], "fw": "Descriptive→Diagnostic→Predictive→Prescriptive", "certs": "PHRi,SPHRi,CIPD L7", "label": "تحليلات HR"},
+    "competency":           {"kw": ["كفاءات","competency","مهارات","جدارات","إطار كفاءات"], "fw": "Competency Framework,Skills Matrix,Gap Analysis,TNA", "certs": "SHRM,PHRi,CIPD L5", "label": "إدارة الكفاءات"},
+    "onboarding":           {"kw": ["تهيئة","onboarding","تعريف","استقبال","موظف جديد"], "fw": "30-60-90 Plan,Buddy System,Orientation", "certs": "aPHRi,PHRi,SHRM", "label": "التهيئة"},
+    "culture":              {"kw": ["ثقافة","بيئة عمل","قيم","diversity","DEI","شمولية"], "fw": "Schein,Denison,Competing Values,Great Place to Work", "certs": "CIPD L7,SHRM,SPHRi", "label": "الثقافة المؤسسية"},
+    "workforce_planning":   {"kw": ["تخطيط القوى","workforce planning","احتياج وظيفي"], "fw": "Supply-Demand,Scenario Planning,FTE", "certs": "SPHRi,CIPD L7", "label": "تخطيط القوى العاملة"},
+    "policy_design":        {"kw": ["سياسة","لائحة داخلية","نظام داخلي","ضوابط","إعداد سياسة"], "fw": "Policy Framework,Governance,Compliance", "certs": "SHRM,SPHRi", "label": "تصميم السياسات"},
+    "job_design":           {"kw": ["تصميم وظيفي","وصف وظيفي","تحليل وظيفي","job design"], "fw": "Job Analysis,Job Description,Job Evaluation", "certs": "PHRi,SHRM", "label": "التصميم الوظيفي"},
+    "employee_relations":   {"kw": ["علاقات موظفين","شكاوى داخلية","تظلم","صراع","نزاع داخلي"], "fw": "Conflict Resolution,Mediation,Grievance Process", "certs": "PHRi,SHRM", "label": "علاقات الموظفين"},
+    "wellbeing":            {"kw": ["رفاهية","صحة نفسية","wellbeing","توازن","إرهاق"], "fw": "Wellbeing Framework,EAP,Burnout Prevention", "certs": "CIPD L5,SHRM", "label": "رفاهية الموظفين"},
 }
+
+def identify_asking_party(question):
+    """Identify who is asking: employee, employer, hr_officer, manager, neutral."""
+    q = question.lower()
+    scores = {}
+    for party, patterns in PARTY_PATTERNS.items():
+        score = sum(1 for p in patterns if p in q)
+        if score > 0: scores[party] = score
+    if not scores: return "neutral"
+    return max(scores, key=scores.get)
 
 def analyze_question(question, advisor_type):
-    """General-purpose question analysis for both advisors."""
+    """Rich question analysis: topic, intent, party, entities, confidence."""
     q = question.lower().strip()
     analysis = {
         "topic": "general", "subtopic": "", "intent": "explanation",
-        "label": "", "reference": "", "certs": "",
+        "label": "", "reference": "", "certs": "", "facts": "",
+        "asking_party": identify_asking_party(question),
         "entities": {}, "needs_calculation": False, "needs_comparison": False,
-        "needs_case_application": False, "needs_recommendation": False,
-        "missing_info": [], "confidence": 0.0
+        "needs_case_application": False, "missing_info": [], "confidence": 0.0,
     }
-
-    # 1. Detect topic
     topics = LEGAL_TOPICS if advisor_type == "legal" else HR_TOPICS
     best_score = 0
     for key, tdef in topics.items():
@@ -1291,298 +1246,257 @@ def analyze_question(question, advisor_type):
             analysis['label'] = tdef['label']
             analysis['reference'] = tdef.get('ref', tdef.get('fw', ''))
             analysis['certs'] = tdef.get('certs', '')
+            analysis['facts'] = tdef.get('facts', '')
             analysis['confidence'] = min(score / 9.0, 1.0)
-
-    # 2. Detect intent (general, works for both)
     for intent, patterns in INTENT_PATTERNS.items():
         if any(p in q for p in patterns):
-            analysis['intent'] = intent
-            break
-
-    # 3. Set flags based on intent
+            analysis['intent'] = intent; break
     analysis['needs_calculation'] = analysis['intent'] == 'calculation'
     analysis['needs_comparison'] = analysis['intent'] in ('comparison', 'pros_cons')
-    analysis['needs_case_application'] = analysis['intent'] == 'case_application'
-    analysis['needs_recommendation'] = analysis['intent'] in ('recommendation', 'diagnosis')
-
-    # 4. Extract entities
+    analysis['needs_case_application'] = analysis['intent'] == 'case_application' or analysis['asking_party'] != 'neutral'
     import re
     years = re.findall(r'(\d+)\s*(?:سنة|سنوات|عام|أعوام|شهر|أشهر)', q)
     if years: analysis['entities']['duration'] = years[0]
     amounts = re.findall(r'(\d[\d,]+)\s*(?:ريال|راتب|أجر)', q)
     if amounts: analysis['entities']['amount'] = amounts[0].replace(',','')
-    pct = re.findall(r'(\d+)\s*%', q)
-    if pct: analysis['entities']['percentage'] = pct[0]
-
-    # 5. Detect missing info
     if analysis['needs_calculation']:
         if 'duration' not in analysis['entities']: analysis['missing_info'].append('المدة/سنوات الخدمة')
         if 'amount' not in analysis['entities']: analysis['missing_info'].append('المبلغ/الراتب')
-
     return analysis
 
 def apply_reasoning_rules(analysis, advisor_type):
-    """Infer what kind of reasoning is needed based on topic + intent."""
-    rules = {
-        "reasoning_mode": "general", "emphasis": [],
-        "requires_articles": False, "requires_frameworks": False,
-        "requires_calculation": False, "requires_steps": False,
-        "requires_comparison": False, "requires_kpis": False,
-        "depth": "standard"
-    }
-
+    """Infer reasoning mode from topic + intent + party."""
+    rules = {"reasoning_mode": "general", "emphasis": [], "depth": "standard"}
     intent = analysis.get('intent', 'explanation')
-    topic = analysis.get('topic', 'general')
-
+    party = analysis.get('asking_party', 'neutral')
     if advisor_type == "legal":
-        rules["requires_articles"] = True
-
-        # Determine reasoning mode
-        if intent == "case_application":
-            rules["reasoning_mode"] = "legal_case_analysis"
-            rules["emphasis"] = ["تحديد الواقعة","تكييفها قانونياً","المواد المنطبقة","النتيجة"]
-            rules["depth"] = "deep"
-        elif intent == "calculation":
-            rules["reasoning_mode"] = "legal_calculation"
-            rules["emphasis"] = ["المعادلة","المدخلات","الحساب التفصيلي","النتيجة"]
-            rules["requires_calculation"] = True
-        elif intent == "comparison":
-            rules["reasoning_mode"] = "legal_comparison"
-            rules["emphasis"] = ["الحالة الأولى","الحالة الثانية","الفروقات","الأثر القانوني"]
-            rules["requires_comparison"] = True
-        elif intent == "process":
-            rules["reasoning_mode"] = "legal_procedure"
-            rules["emphasis"] = ["الخطوات","المدد الزمنية","الجهات المختصة","المستندات"]
-            rules["requires_steps"] = True
-        elif intent == "rights":
-            rules["reasoning_mode"] = "rights_obligations"
-            rules["emphasis"] = ["حقوق العامل","حقوق صاحب العمل","الالتزامات","العقوبات"]
-        elif intent == "diagnosis":
-            rules["reasoning_mode"] = "legal_diagnosis"
-            rules["emphasis"] = ["تحليل المشكلة","المخالفة المحتملة","الحل القانوني","الإجراء"]
-        else:
-            rules["reasoning_mode"] = "legal_explanation"
-            rules["emphasis"] = ["المفهوم القانوني","المواد ذات العلاقة","الشرح","التطبيق"]
-
-    else:  # HR
-        rules["requires_frameworks"] = True
-
-        if intent == "methodology":
-            rules["reasoning_mode"] = "hr_methodology"
-            rules["emphasis"] = ["الإطار المنهجي","المراحل","التطبيق","القياس"]
-            rules["requires_steps"] = True
-        elif intent == "diagnosis":
-            rules["reasoning_mode"] = "hr_diagnosis"
-            rules["emphasis"] = ["تحليل الوضع","الأسباب الجذرية","الحل المقترح","خطة التنفيذ"]
-            rules["depth"] = "deep"
-        elif intent == "comparison":
-            rules["reasoning_mode"] = "hr_comparison"
-            rules["emphasis"] = ["النموذج الأول","النموذج الثاني","المقارنة","التوصية"]
-            rules["requires_comparison"] = True
-        elif intent == "kpi_design":
-            rules["reasoning_mode"] = "hr_kpi_design"
-            rules["emphasis"] = ["المؤشرات","طريقة القياس","المستهدف","التكرار"]
-            rules["requires_kpis"] = True
-        elif intent == "policy":
-            rules["reasoning_mode"] = "hr_policy_design"
-            rules["emphasis"] = ["الهدف","النطاق","الضوابط","الإجراءات","المسؤوليات"]
-            rules["requires_steps"] = True
-        elif intent == "process":
-            rules["reasoning_mode"] = "hr_process_design"
-            rules["emphasis"] = ["المراحل","المدخلات","المخرجات","المسؤوليات","الأدوات"]
-            rules["requires_steps"] = True
-        elif intent == "recommendation":
-            rules["reasoning_mode"] = "hr_recommendation"
-            rules["emphasis"] = ["التحليل","الخيارات","التوصية","مبررات التوصية"]
-        elif intent == "pros_cons":
-            rules["reasoning_mode"] = "hr_evaluation"
-            rules["emphasis"] = ["المزايا","العيوب","الملاءمة","البديل"]
-            rules["requires_comparison"] = True
-        else:
-            rules["reasoning_mode"] = "hr_explanation"
-            rules["emphasis"] = ["المفهوم","الإطار المرجعي","التطبيق","أفضل الممارسات"]
-
+        if intent == "case_application" or party in ("employee","employer"):
+            rules["reasoning_mode"] = "legal_case_analysis"; rules["depth"] = "deep"
+        elif intent == "calculation": rules["reasoning_mode"] = "legal_calculation"
+        elif intent == "comparison": rules["reasoning_mode"] = "legal_comparison"
+        elif intent == "process": rules["reasoning_mode"] = "legal_procedure"
+        elif intent == "rights": rules["reasoning_mode"] = "rights_obligations"
+        elif intent == "diagnosis": rules["reasoning_mode"] = "legal_diagnosis"
+        else: rules["reasoning_mode"] = "legal_explanation"
+    else:
+        if intent == "methodology": rules["reasoning_mode"] = "hr_methodology"
+        elif intent == "diagnosis": rules["reasoning_mode"] = "hr_diagnosis"; rules["depth"] = "deep"
+        elif intent == "comparison": rules["reasoning_mode"] = "hr_comparison"
+        elif intent == "kpi_design": rules["reasoning_mode"] = "hr_kpi_design"
+        elif intent == "policy": rules["reasoning_mode"] = "hr_policy_design"
+        elif intent == "process": rules["reasoning_mode"] = "hr_process_design"
+        elif intent == "recommendation": rules["reasoning_mode"] = "hr_recommendation"
+        elif intent == "case_application" or party in ("hr_officer","manager"):
+            rules["reasoning_mode"] = "hr_applied_guidance"; rules["depth"] = "deep"
+        else: rules["reasoning_mode"] = "hr_explanation"
     return rules
 
-# --- Correct Legal Facts (injected into prompt to prevent hallucination) ---
-LEGAL_FACTS = {
-    "leave": "المادة 109: إجازة سنوية 21 يوم (أول 5 سنوات) ثم 30 يوم. المادة 110: يجوز تأجيلها بموافقة. المادة 112: إجازات خاصة: وفاة 5 أيام، زواج 5 أيام، مولود 3 أيام. المادة 113: مرضية 30 يوم كامل + 60 يوم 75% + 30 يوم بدون. المادة 115: حج 10-15 يوم لمرة واحدة.",
-    "training": "المادة 42: على صاحب العمل تأهيل عماله السعوديين. المادة 43: تدريب 12% من السعوديين سنوياً. المادة 44: الوزارة تحدد المهن. المادة 45: عقد التأهيل يتضمن المهنة والمدة والمراحل والمكافأة. المادة 46: إلزام المتدرب بالعمل أو رد التكاليف. المادة 47: إنهاء التدريب إذا ثبت عدم القدرة. المادة 48: النفقات على صاحب العمل.",
-    "termination": "المادة 74: حالات انتهاء العقد (اتفاق، انتهاء مدة، إرادة أحد الطرفين، قوة قاهرة، إغلاق، تقاعد). المادة 75: إشعار مسبق 60 يوم (أجر شهري) أو 30 يوم. المادة 77: تعويض فسخ غير مشروع: 15 يوم/سنة (غير محدد) أو المدة الباقية (محدد)، حد أدنى شهرين. المادة 80: فسخ مشروع بدون تعويض (اعتداء، إخلال، غياب 30 متفرقة أو 15 متتالية...). المادة 81: حق العامل بالترك (إخلال صاحب العمل، غش، اعتداء).",
-    "end_of_service": "المادة 84: مكافأة نهاية الخدمة: نصف شهر/سنة (أول 5) + شهر/سنة (بعدها). تُحسب على آخر أجر. المادة 85: عند الاستقالة: ثلث (2-5 سنوات)، ثلثان (5-10)، كاملة (10+). أقل من سنتين: لا شيء. المادة 88: التسوية خلال أسبوع.",
-    "resignation": "المادة 75: إشعار مسبق 60 يوم. المادة 81: ترك بدون إشعار إذا أخل صاحب العمل. المادة 85: مكافأة الاستقالة: ثلث (2-5)، ثلثان (5-10)، كاملة (10+). المادة 84: حساب المكافأة الأساسية. المادة 88: تسوية خلال أسبوع.",
-    "contracts": "المادة 50: عقد مكتوب من نسختين. المادة 51: يتضمن الاسم والجنسية والأجر ونوع العمل والمدة. المادة 53: فترة تجربة 90 يوم قابلة للتمديد لـ 180. المادة 55: يتحول لغير محدد بعد 3 تجديدات أو 4 سنوات.",
-    "wages": "المادة 89: يُدفع بالريال. المادة 90: التزام بالدفع في الموعد. المادة 92: لا يجوز خصم أكثر من نصف الأجر. المادة 94: حماية الأجر.",
-    "working_hours": "المادة 98: 8 ساعات/يوم أو 48/أسبوع. المادة 99: رمضان 6 ساعات/36 أسبوع. المادة 101: راحة نصف ساعة كل 5 ساعات. المادة 107: إضافي 150%.",
-    "probation": "المادة 53: فترة التجربة 90 يوم كحد أقصى، تمديد لـ 180 بموافقة كتابية. لا تدخل فيها إجازة العيدين والمرضية. لكلا الطرفين الإنهاء بدون تعويض أو مكافأة.",
-    "women": "المادة 151: إجازة وضع 10 أسابيع (4 قبل كحد أقصى). ساعة رضاعة يومياً لـ 24 شهر. حماية من الفصل أثناء الحمل والوضع وبعده 180 يوم. عدة 4 أشهر و10 أيام.",
-    "insurance": "GOSI: سعودي 10.5% خصم + 12.5% شركة. غير سعودي 2% أخطار فقط. ساند: 0.75%+0.75%. التقاعد: سن 60 + 120 شهر أو 300 شهر مبكر.",
-    "disciplinary": "المادة 66: لائحة جزاءات معتمدة. المادة 67: الجزاءات: إنذار، غرامة، تأجيل ترقية، إيقاف بدون أجر، فصل. المادة 69: لا يجوز جزاء بعد 30 يوم من اكتشاف المخالفة. المادة 71: التحقيق كتابياً.",
-    "safety": "المادة 133-141: صاحب العمل يتحمل العلاج. أجر كامل خلال العلاج (سنة). عجز كلي: معاش كامل. وفاة: تعويض أجر 3 سنوات (أدنى 54,000).",
-    "disputes": "المادة 215: هيئات تسوية خلافات عمالية. منصة ودي: تسوية ودية 21 يوم. المحكمة العمالية: بعد فشل التسوية. مدة التقادم: 12 شهر.",
-    "absence": "المادة 80: يحق لصاحب العمل الفصل بدون تعويض إذا تغيب العامل 30 يوم متفرقة أو 15 يوم متتالية في السنة، بعد إنذار كتابي.",
-    "certificate": "المادة 64: يلتزم صاحب العمل بإعطاء العامل شهادة خبرة مجاناً عند انتهاء العقد، تتضمن مدة الخدمة والمسمى والأجر.",
-    "transfer": "نظام تعاقدي جديد: نقل الخدمات عبر منصة قوى. العامل يحق له التنقل بعد انتهاء العقد. إشعار 90 يوم.",
-    "saudization": "نطاقات: بلاتيني (فوق المطلوب) > أخضر عالي > أخضر منخفض > أصفر > أحمر. النسب حسب النشاط والحجم.",
-    "medical": "CCHI: التأمين الصحي إلزامي على صاحب العمل لجميع العاملين ومعاليهم. الحد الأدنى للتغطية حسب وثيقة الضمان الصحي الموحدة.",
-}
-
 def build_reasoning_context(question, advisor_type, analysis, retrieved_context=""):
-    """Build dynamic reasoning prompt based on analysis + rules."""
+    """Build dynamic, party-aware reasoning prompt with verified facts."""
     rules = apply_reasoning_rules(analysis, advisor_type)
     mode = rules["reasoning_mode"]
-    emphasis = rules["emphasis"]
     label = analysis.get("label", "")
     ref = analysis.get("reference", "")
+    facts = analysis.get("facts", "")
     certs = analysis.get("certs", "")
+    party = analysis.get("asking_party", "neutral")
+    confidence = analysis.get("confidence", 0)
+
+    # Party context
+    party_labels = {"employee":"عامل/موظف","employer":"صاحب عمل","hr_officer":"مسؤول موارد بشرية","manager":"مدير","neutral":"مستفسر عام"}
+    party_text = party_labels.get(party, "مستفسر")
 
     if advisor_type == "legal":
-        header = f"أنت المستشار القانوني لنظام العمل السعودي.\nالمسألة: {label} | المواد: {ref} | نوع التحليل: {mode}\n"
-        header += "❌ لا تذكر أي إطار منهجي أو مصطلح HR. فقط مواد قانونية.\n"
-        # Inject correct article facts to prevent hallucination
-        topic = analysis.get('topic','')
-        if topic in LEGAL_FACTS:
-            header += f"\n📋 **المواد الصحيحة لهذا الموضوع (استخدم هذه فقط):**\n{LEGAL_FACTS[topic]}\n\n⚠️ لا تستخدم أي أرقام مواد غير المذكورة أعلاه.\n\n"
-        else:
-            header += "\n"
-
-        if mode == "legal_case_analysis":
-            body = "اتبع هذا المنهج:\n🔍 **تحديد الواقعة القانونية:** حدد الوقائع الجوهرية\n📋 **التكييف القانوني:** كيّف الواقعة وحدد المواد المنطبقة\n⚖️ **تطبيق النص:** طبّق كل مادة على الوقائع\n👤 **حقوق الأطراف:** حقوق والتزامات كل طرف\n💡 **النتيجة:** الحكم القانوني المتوقع\n⚠️ **ملاحظات:** معلومات ناقصة أو احتمالات"
-        elif mode == "legal_calculation":
-            body = "اتبع هذا المنهج:\n📋 **الأساس القانوني:** المواد التي تحكم الحساب\n🔢 **المعادلة:** اكتب المعادلة بوضوح\n📊 **الحساب التفصيلي:** خطوة بخطوة مع الأرقام\n💰 **النتيجة:** المبلغ النهائي\n⚠️ **ملاحظات:** حالات خاصة أو استثناءات"
-        elif mode == "legal_comparison":
-            body = "اتبع هذا المنهج:\n📋 **الحالة الأولى:** الوصف والمواد المنطبقة\n📋 **الحالة الثانية:** الوصف والمواد المنطبقة\n⚖️ **المقارنة:** الفروقات في الحقوق والالتزامات\n💡 **الأثر القانوني:** النتائج المترتبة على كل حالة"
-        elif mode == "legal_procedure":
-            body = "اتبع هذا المنهج:\n📋 **الأساس النظامي:** المواد ذات العلاقة\n📝 **الخطوات:** رقّم كل خطوة بالترتيب\n⏰ **المدد الزمنية:** حدد المهل لكل خطوة\n🏛️ **الجهات:** حدد الجهة المختصة لكل إجراء\n📄 **المستندات:** المطلوبة لكل خطوة"
-        elif mode == "rights_obligations":
-            body = "اتبع هذا المنهج:\n👤 **حقوق العامل:** اسردها مع المواد\n🏢 **حقوق صاحب العمل:** اسردها مع المواد\n📋 **التزامات الطرفين:** لكل طرف\n⚠️ **المخالفات والعقوبات:** ما يترتب على الإخلال"
-        elif mode == "legal_diagnosis":
-            body = "اتبع هذا المنهج:\n🔍 **تحليل المشكلة:** حدد الإشكالية القانونية\n📋 **المخالفة المحتملة:** هل هناك مخالفة نظامية؟\n⚖️ **الحل القانوني:** ما الخيارات المتاحة؟\n📝 **الإجراء المطلوب:** خطوات عملية للحل"
-        else:
-            body = "اتبع هذا المنهج:\n🔍 **تحديد المسألة:** حدد الموضوع القانوني\n📋 **الأساس النظامي:** المواد ذات العلاقة\n⚖️ **الشرح:** اشرح الحكم القانوني\n💡 **التطبيق:** كيف ينطبق عملياً\n⚠️ **تحذيرات:** استثناءات أو حالات خاصة"
+        header = f"أنت المستشار القانوني لنظام العمل السعودي.\n"
+        header += f"المسألة: {label} | المواد: {ref} | السائل: {party_text} | نوع التحليل: {mode}\n"
+        header += "❌ لا تذكر أي إطار منهجي HR. فقط مواد قانونية.\n"
+        if facts:
+            header += f"\n📋 **المواد الصحيحة (استخدم هذه فقط ولا تخترع أرقاماً أخرى):**\n{facts}\n"
+        header += f"\n⚠️ إذا لم تجد المادة الدقيقة، قل 'لم أتمكن من تحديد المادة بدقة' ولا تخترع رقماً.\n\n"
+        # Party-aware instructions
+        if party == "employee":
+            header += "السائل عامل/موظف. ركّز على حقوقه ومستحقاته والخطوات التي يجب أن يتخذها.\n"
+        elif party == "employer":
+            header += "السائل صاحب عمل. ركّز على التزاماته القانونية والإجراءات الصحيحة وتبعات المخالفة.\n"
+        # Dynamic template
+        templates = {
+            "legal_case_analysis": f"حلّل الحالة القانونية:\n🔍 **المسألة:** حدد الواقعة من منظور {party_text}\n📋 **المواد المنطبقة:** اسرد كل مادة ذات علاقة\n⚖️ **التطبيق:** طبّق كل مادة على الوقائع\n👤 **موقف {party_text}:** حقوقه والتزاماته تحديداً\n💡 **التوصية:** خطوات عملية لـ{party_text}\n⚠️ **تحذيرات:** مخاطر قانونية",
+            "legal_calculation": f"احسب المستحقات:\n📋 **الأساس:** المواد التي تحكم الحساب\n🔢 **المعادلة:** اكتبها بوضوح\n📊 **الحساب:** خطوة بخطوة\n💰 **النتيجة لـ{party_text}:** المبلغ النهائي\n⚠️ **استثناءات:** حالات خاصة",
+            "legal_comparison": "قارن الحالتين:\n📋 **الحالة الأولى:** المواد والنتائج\n📋 **الحالة الثانية:** المواد والنتائج\n⚖️ **الفرق:** في الحقوق والالتزامات\n💡 **الأثر:** على كل طرف",
+            "legal_procedure": f"اشرح الإجراءات لـ{party_text}:\n📋 **الأساس:** المواد ذات العلاقة\n📝 **الخطوات:** بالترتيب مع المدد\n🏛️ **الجهات:** المختصة\n📄 **المستندات:** المطلوبة",
+            "rights_obligations": f"اشرح الحقوق والالتزامات:\n👤 **حقوق {party_text}:** مع المواد\n📋 **التزامات {party_text}:** مع المواد\n⚖️ **الطرف الآخر:** حقوقه والتزاماته\n⚠️ **المخالفات:** والعقوبات",
+            "legal_diagnosis": f"شخّص المشكلة القانونية:\n🔍 **المشكلة:** من منظور {party_text}\n📋 **المخالفة:** هل هناك مخالفة نظامية؟\n⚖️ **الحل:** الخيارات القانونية المتاحة\n📝 **الإجراء:** خطوات عملية",
+            "legal_explanation": f"اشرح الحكم القانوني:\n🔍 **المسألة:** تحديد الموضوع\n📋 **المواد:** ذات العلاقة مع شرحها\n⚖️ **التطبيق:** كيف ينطبق عملياً\n💡 **الأثر على {party_text}:** تحديداً\n⚠️ **ملاحظات:** استثناءات",
+        }
+        body = templates.get(mode, templates["legal_explanation"])
 
     else:  # HR
-        header = f"أنت مستشار الموارد البشرية المهني.\nالموضوع: {label} | المناهج: {certs} | الأطر: {ref} | نوع التحليل: {mode}\n"
-        header += "❌ لا تذكر أي مادة قانونية أو رقم مادة. فقط مفاهيم ومناهج مهنية.\nفي كل نقطة اذكر المنهج المرجعي مثل **(PHRi - المجال)**\n\n"
+        header = f"أنت مستشار الموارد البشرية المهني.\n"
+        header += f"الموضوع: {label} | المناهج: {certs} | الأطر: {ref} | السائل: {party_text} | نوع التحليل: {mode}\n"
+        header += "❌ لا تذكر أي مادة قانونية. فقط مفاهيم ومناهج مهنية.\n"
+        header += "في كل نقطة اذكر المنهج مثل **(PHRi - المجال)** أو **(CIPD L7 - المجال)**\n"
+        header += f"\n⚠️ إذا لم تتأكد من إطار منهجي محدد، قل 'بحسب أفضل الممارسات المهنية' ولا تخترع مرجعاً.\n\n"
+        if party == "hr_officer":
+            header += "السائل مسؤول موارد بشرية. قدم إرشادات تنفيذية وأدوات عملية.\n"
+        elif party == "manager":
+            header += "السائل مدير. ركّز على التطبيق الإداري والقيادي.\n"
+        templates = {
+            "hr_methodology": f"اشرح المنهجية لـ{party_text}:\n🎯 **المجال:** تصنيف الموضوع\n📚 **الإطار:** النموذج ومراحله ({ref})\n🔬 **التطبيق:** خطوات لـ{party_text}\n📊 **القياس:** KPIs\n🌍 **ممارسات عالمية:** أمثلة",
+            "hr_diagnosis": f"شخّص المشكلة لـ{party_text}:\n🔍 **التحليل:** الوضع الحالي\n🔬 **الأسباب الجذرية:** (5 Whys / Ishikawa)\n💡 **الحل:** الإطار المناسب ({ref})\n📝 **خطة لـ{party_text}:** مراحل وجدول زمني\n📊 **قياس التحسن:** مؤشرات",
+            "hr_comparison": "قارن النهجين:\n📚 **الأول:** التعريف والمصدر\n📚 **الثاني:** التعريف والمصدر\n⚖️ **المقارنة:** جدول واضح\n💡 **التوصية:** الأنسب ولماذا",
+            "hr_kpi_design": f"صمم مؤشرات لـ{party_text}:\n🎯 **الهدف:** ماذا نقيس\n📊 **المؤشرات:** 5-7 KPIs مع المعادلة\n🎯 **المستهدف:** benchmark\n⏰ **التكرار:** دوري\n🛠️ **الأدوات:** لجمع البيانات",
+            "hr_policy_design": f"صمم السياسة لـ{party_text}:\n🎯 **الهدف:** لماذا نحتاجها\n📋 **النطاق:** من يشمل\n📝 **الضوابط:** القواعد\n🔄 **الإجراءات:** خطوات التطبيق\n👥 **المسؤوليات:** RACI",
+            "hr_process_design": f"صمم العملية لـ{party_text}:\n📋 **نظرة عامة:** الأهداف\n🔄 **المراحل:** مرقّمة\n📥 **المدخلات/المخرجات:** لكل مرحلة\n👥 **المسؤوليات:** RACI\n🛠️ **الأدوات:** تقنيات مطلوبة",
+            "hr_recommendation": f"قدم توصية لـ{party_text}:\n🔍 **التحليل:** الوضع والسياق\n📋 **الخيارات:** 2-3 بدائل\n💡 **التوصية:** الأفضل مع المبررات\n📝 **التنفيذ:** كيف يبدأ {party_text}",
+            "hr_applied_guidance": f"إرشاد تطبيقي لـ{party_text}:\n🎯 **الموضوع:** تصنيف وتحديد\n📚 **الإطار:** المنهج المناسب ({ref})\n🔬 **التطبيق:** خطوات عملية لـ{party_text}\n📊 **القياس:** كيف يعرف {party_text} أنه نجح\n⚠️ **تحديات شائعة:** وكيفية التعامل معها",
+            "hr_explanation": f"اشرح المفهوم لـ{party_text}:\n🎯 **المجال:** تصنيف\n📚 **المفهوم:** التعريف ({certs})\n🔬 **التطبيق:** عملياً\n📊 **القياس:** مؤشرات\n🌍 **ممارسات عالمية:** أمثلة",
+        }
+        body = templates.get(mode, templates["hr_explanation"])
 
-        if mode == "hr_methodology":
-            body = "اتبع هذا المنهج:\n🎯 **تحديد المجال:** صنّف الموضوع\n📚 **الإطار المنهجي:** النموذج المناسب ومراحله\n🔬 **التطبيق:** خطوات تنفيذية مفصّلة\n📊 **القياس:** KPIs لتقييم النجاح\n🌍 **أفضل الممارسات:** أمثلة عالمية"
-        elif mode == "hr_diagnosis":
-            body = "اتبع هذا المنهج:\n🔍 **تحليل الوضع الحالي:** ما المشكلة بالضبط؟\n🔬 **الأسباب الجذرية:** لماذا تحدث؟ (5 Whys / Ishikawa)\n💡 **الحل المقترح:** الإطار المنهجي المناسب\n📝 **خطة التنفيذ:** مراحل وجدول زمني\n📊 **قياس التحسن:** مؤشرات المتابعة"
-        elif mode == "hr_comparison":
-            body = "اتبع هذا المنهج:\n📚 **النموذج/النهج الأول:** التعريف والمصدر المرجعي\n📚 **النموذج/النهج الثاني:** التعريف والمصدر المرجعي\n⚖️ **المقارنة:** جدول مقارنة واضح\n💡 **التوصية:** أيهما أنسب ولماذا"
-        elif mode == "hr_kpi_design":
-            body = "اتبع هذا المنهج:\n🎯 **الهدف:** ماذا نريد قياسه ولماذا\n📊 **المؤشرات:** 5-7 KPIs مع المعادلة لكل منها\n🎯 **المستهدف:** القيمة المرجعية (benchmark)\n⏰ **التكرار:** دوري/شهري/ربعي\n🛠️ **الأدوات:** كيف نجمع البيانات"
-        elif mode == "hr_policy_design":
-            body = "اتبع هذا المنهج:\n🎯 **الهدف:** لماذا نحتاج هذه السياسة\n📋 **النطاق:** من يشمل ومن يُستثنى\n📝 **الضوابط:** القواعد والشروط\n🔄 **الإجراءات:** خطوات التطبيق\n👥 **المسؤوليات:** من المسؤول عن ماذا\n📊 **القياس:** كيف نقيّم فعالية السياسة"
-        elif mode == "hr_process_design":
-            body = "اتبع هذا المنهج:\n📋 **نظرة عامة:** وصف العملية وأهدافها\n🔄 **المراحل:** خطوات مرقّمة بالترتيب\n📥 **المدخلات والمخرجات:** لكل مرحلة\n👥 **المسؤوليات:** RACI matrix\n🛠️ **الأدوات:** تقنيات وأنظمة مطلوبة\n📊 **مؤشرات:** لقياس كفاءة العملية"
-        elif mode == "hr_recommendation":
-            body = "اتبع هذا المنهج:\n🔍 **التحليل:** فهم الوضع والسياق\n📋 **الخيارات:** 2-3 بدائل ممكنة\n💡 **التوصية:** البديل الأفضل مع المبررات\n📝 **خطة التنفيذ:** كيف ننفذ التوصية\n📊 **القياس:** كيف نعرف أنها نجحت"
-        elif mode == "hr_evaluation":
-            body = "اتبع هذا المنهج:\n✅ **المزايا:** نقاط القوة\n❌ **العيوب:** نقاط الضعف\n🎯 **الملاءمة:** متى يُستخدم هذا النهج\n🔄 **البديل:** ما الخيار الآخر إن لم يناسب"
-        else:
-            body = "اتبع هذا المنهج:\n🎯 **تحديد المجال:** صنّف الموضوع في HR\n📚 **المفهوم:** التعريف والإطار المرجعي\n🔬 **التطبيق:** كيف يُطبّق عملياً\n📊 **القياس:** مؤشرات النجاح\n🌍 **أفضل الممارسات:** تجارب عالمية"
+    # Confidence warning
+    if confidence < 0.3:
+        body += f"\n\n⚠️ مستوى الثقة في تصنيف السؤال منخفض ({confidence:.0%}). أجب بحذر واذكر أنك غير متأكد من التصنيف الدقيق."
 
-    # Add entities context
-    entities = analysis.get('entities', {})
-    if entities:
-        header += f"**بيانات مستخرجة:** {entities}\n"
-    if analysis.get('missing_info'):
-        header += f"**معلومات ناقصة:** {', '.join(analysis['missing_info'])} - اذكر أنك تحتاج هذه المعلومات لإجابة أدق.\n"
+    # Missing info
+    missing = analysis.get('missing_info', [])
+    if missing:
+        body += f"\n\n📝 **معلومات ناقصة:** {', '.join(missing)}. اذكر أنك تحتاج هذه المعلومات لإجابة أدق."
 
     prompt = header + body
     if retrieved_context:
         prompt += f"\n\n**سياق من قاعدة المعرفة:**\n{retrieved_context[:1500]}"
     return prompt
 
-def validate_generated_answer(answer, analysis, advisor_type):
-    """Validate answer quality, domain compliance, and factual accuracy."""
-    if not answer or len(answer) < 30: return False, ["short"]
+def verify_answer(answer, analysis, advisor_type):
+    """Verify answer: no hallucinated citations, domain compliance, party awareness."""
+    if not answer or len(answer) < 30: return False, ["too_short"], 0.0
     issues = []
+    confidence = 0.7
+
     if advisor_type == "legal":
-        legal_markers = ['المادة','مادة','م4','م5','م7','م8','م9','م1','الباب','نظام العمل']
-        if not any(m in answer for m in legal_markers):
-            if analysis.get('intent') not in ('definition','explanation'):
-                issues.append("no_legal_basis")
-        hr_leak = ['PHRi','SHRM','CIPD','APTD','ADDIE','Kirkpatrick','competency framework']
-        if any(m in answer for m in hr_leak):
+        # Check for hallucinated articles
+        import re
+        cited_articles = re.findall(r'(?:المادة|مادة|م)\s*(\d+)', answer)
+        facts = analysis.get('facts', '')
+        if cited_articles and facts:
+            facts_articles = re.findall(r'م(\d+)', facts)
+            hallucinated = [a for a in cited_articles if a not in facts_articles and int(a) > 6]
+            if hallucinated:
+                issues.append(f"hallucinated_articles:{','.join(hallucinated)}")
+                confidence -= 0.3
+        # Check HR contamination
+        if any(m in answer for m in ['PHRi','SHRM','CIPD','APTD','ADDIE','Kirkpatrick']):
             issues.append("hr_contamination")
-        # Validate article-topic consistency
-        topic = analysis.get('topic','')
-        CORRECT_ARTICLES = {
-            'leave': ['109','110','111','112','113','114','115','116'],
-            'training': ['42','43','44','45','46','47','48'],
-            'termination': ['74','75','76','77','78','79','80','81','82'],
-            'end_of_service': ['84','85','86','87','88'],
-            'resignation': ['75','81','84','85','88'],
-            'contracts': ['49','50','51','52','53','54','55','56','57','58','59','60'],
-            'wages': ['89','90','91','92','93','94','95','96','97'],
-            'working_hours': ['98','99','100','101','102','103','104','105','106','107'],
-            'probation': ['53','54'],
-            'women': ['121','122','123','124','125','126','127','128','129','130','151'],
-            'disciplinary': ['66','67','68','69','70','71','72'],
-            'safety': ['131','132','133','134','135','136','137','138','139','140','141','142','143','144','145'],
-        }
-        if topic in CORRECT_ARTICLES:
-            import re
-            cited = re.findall(r'(?:المادة|مادة|م)\s*(\d+)', answer)
-            wrong = [a for a in cited if a not in CORRECT_ARTICLES[topic] and int(a) > 0]
-            if wrong and len(wrong) > len(cited) // 2:
-                issues.append("wrong_articles")
+            confidence -= 0.2
+        # Check has legal basis
+        if not any(m in answer for m in ['المادة','مادة','م4','م5','م7','م8','م9','م1','الباب','نظام']):
+            if analysis.get('intent') not in ('explanation',):
+                issues.append("no_legal_basis")
+                confidence -= 0.1
     else:
-        hr_markers = ['PHRi','SHRM','CIPD','APTD','SPHRi','aPHRi','framework','model','نموذج','إطار']
-        if not any(m in answer for m in hr_markers):
-            issues.append("no_hr_framework")
-        legal_leak = ['المادة ','م42','م50','م53','م74','م77','م80','م84','م88','م98','م109','م151','نظام العمل السعودي']
-        if any(m in answer for m in legal_leak):
+        # Check legal contamination
+        if any(m in answer for m in ['المادة ','م42','م50','م53','م74','م77','م80','م84','م88','م98','م109','م151']):
             issues.append("legal_contamination")
-    return len(issues) == 0, issues
+            confidence -= 0.2
+        # Check has framework reference
+        if not any(m in answer for m in ['PHRi','SHRM','CIPD','APTD','SPHRi','aPHRi','framework','model','نموذج','إطار','منهج']):
+            issues.append("no_hr_framework")
+            confidence -= 0.1
+
+    # Check party awareness
+    party = analysis.get('asking_party', 'neutral')
+    if party != 'neutral':
+        party_labels = {"employee":"عامل","employer":"صاحب العمل","hr_officer":"موارد بشرية","manager":"مدير"}
+        if party in party_labels and party_labels[party] not in answer.lower():
+            confidence -= 0.05
+
+    return len(issues) == 0, issues, max(confidence, 0.1)
+
+def filter_response(text, consultant_type):
+    """Remove domain-inappropriate content from responses."""
+    if not text: return text
+    lines = text.split('\n')
+    filtered = []
+    for line in lines:
+        if consultant_type == "hr":
+            skip = False
+            for marker in ['المادة ','مادة ','نظام العمل','اللائحة التنفيذية',
+                'المحكمة العمالية','مكتب العمل','الباب ال',
+                'م42','م43','م44','م45','م46','م47','م48',
+                'م50','م51','م53','م55','م74','م75','م77','م80','م81',
+                'م84','م85','م88','م89','م90','م98','م99','م107',
+                'م109','م112','م113','م115','م151','م164']:
+                if marker in line and not any(h in line for h in ['PHRi','SHRM','CIPD','APTD','SPHRi']):
+                    skip = True; break
+            if not skip: filtered.append(line)
+        elif consultant_type == "legal":
+            skip = False
+            for marker in ['PHRi','SHRM','CIPD','APTD','SPHRi','aPHRi','ADDIE',
+                'Kirkpatrick','Phillips ROI','Instructional Design','Ulrich',
+                '9-Box','Balanced Scorecard','70-20-10','HPT','Bloom']:
+                if marker in line: skip = True; break
+            if not skip: filtered.append(line)
+        else:
+            filtered.append(line)
+    result = '\n'.join(filtered).strip()
+    if len(result) < 30 and len(text) > 100:
+        if consultant_type == "hr":
+            return "هذا السؤال يتعلق بالجانب القانوني. يرجى استخدام **المستشار القانوني ⚖️**."
+        else:
+            return "هذا السؤال يتعلق بالموارد البشرية. يرجى استخدام **مستشار الموارد البشرية 📚**."
+    return result if len(result) > 20 else text
 
 def generate_advisor_answer(question, advisor_type, system_prompt=None):
-    """Full reasoning pipeline: analyze → rules → RAG → reason → generate → validate."""
+    """Full advisory pipeline: analyze → rules → retrieve → reason → generate → verify."""
     import requests as req_lib
 
+    # Step 1: Analyze
     analysis = analyze_question(question, advisor_type)
+
+    # Step 2: Rules
     rules = apply_reasoning_rules(analysis, advisor_type)
 
-    # Retrieve from RAG only
+    # Step 3: Retrieve from RAG (advisor-specific vector search)
     retrieved = ""
     try:
         if '_knowledge_engine' in st.session_state:
             retrieved = st.session_state._knowledge_engine.search(question, advisor_type=advisor_type)
     except: pass
 
-    # Build reasoning context (LEGAL_FACTS injected automatically in build_reasoning_context)
+    # Step 4: Build reasoning context
     reasoning_prompt = build_reasoning_context(question, advisor_type, analysis, retrieved)
 
     # Step 5: Generate
-    answer = _call_llm_with_reasoning(question, reasoning_prompt, req_lib)
+    answer = _call_llm(question, reasoning_prompt, req_lib)
 
-    # Step 6: Validate
+    # Step 6: Verify
     if answer:
-        is_valid, issues = validate_generated_answer(answer, analysis, advisor_type)
+        is_valid, issues, conf = verify_answer(answer, analysis, advisor_type)
         if not is_valid:
+            # Filter contamination
             answer = filter_response(answer, advisor_type)
-            if answer and len(answer) > 30:
+            if answer and len(answer) > 30 and "hallucinated" not in str(issues):
                 return answer
-            # Retry with stronger guidance
-            retry_prompt = reasoning_prompt + "\n\n⚠️ الإجابة السابقة لم تكن مناسبة. "
-            if "hr_contamination" in issues or "no_legal_basis" in issues:
-                retry_prompt += "اذكر المواد القانونية بأرقامها فقط. لا تذكر أي إطار منهجي HR."
-            elif "legal_contamination" in issues or "no_hr_framework" in issues:
-                retry_prompt += "اذكر المناهج المهنية (PHRi/SHRM/CIPD/APTD) فقط. لا تذكر أي مادة قانونية."
-            elif "wrong_articles" in issues:
-                ref = analysis.get('reference','')
-                retry_prompt += f"⛔ أرقام المواد خاطئة! المواد الصحيحة لهذا الموضوع هي: {ref}. استخدم هذه المواد فقط."
-            answer = _call_llm_with_reasoning(question, retry_prompt, req_lib)
+            # Retry with stronger instructions
+            retry_extra = "\n\n⚠️ الإجابة السابقة غير مقبولة. "
+            if "hallucinated_articles" in str(issues):
+                retry_extra += f"استخدم فقط هذه المواد: {analysis.get('facts','')}. لا تخترع أرقاماً."
+            elif "hr_contamination" in issues:
+                retry_extra += "لا تذكر أي إطار منهجي. فقط مواد قانونية."
+            elif "legal_contamination" in issues:
+                retry_extra += "لا تذكر أي مادة قانونية. فقط مناهج مهنية."
+            elif "no_legal_basis" in issues:
+                retry_extra += f"يجب ذكر المواد: {analysis.get('facts','')}."
+            elif "no_hr_framework" in issues:
+                retry_extra += f"يجب ذكر المناهج: {analysis.get('certs','')}."
+            answer = _call_llm(question, reasoning_prompt + retry_extra, req_lib)
             if answer:
                 return filter_response(answer, advisor_type)
         else:
             return answer
     return None
 
-def _call_llm_with_reasoning(question, reasoning_prompt, req_lib):
+def _call_llm(question, reasoning_prompt, req_lib):
     """Call available LLM providers."""
     for prov, key_name, secret_name in [('groq','groq_api_key','groq'),('gemini','gemini_api_key','gemini'),('openrouter','openrouter_api_key','openrouter')]:
         api_key = st.session_state.get(key_name,'')
@@ -1594,17 +1508,17 @@ def _call_llm_with_reasoning(question, reasoning_prompt, req_lib):
             if prov == 'groq':
                 resp = req_lib.post("https://api.groq.com/openai/v1/chat/completions",
                     json={"model":"llama-3.3-70b-versatile","messages":[
-                        {"role":"system","content":reasoning_prompt[:3000]},
+                        {"role":"system","content":reasoning_prompt[:3500]},
                         {"role":"user","content":question}],"max_tokens":2500,"temperature":0.3},
                     headers={'Authorization':f'Bearer {api_key}'},timeout=30)
             elif prov == 'gemini':
                 resp = req_lib.post(f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}",
-                    json={"contents":[{"parts":[{"text":f"{reasoning_prompt[:2500]}\n\nالسؤال: {question}"}]}],
+                    json={"contents":[{"parts":[{"text":f"{reasoning_prompt[:3000]}\n\nالسؤال: {question}"}]}],
                         "generationConfig":{"maxOutputTokens":2000,"temperature":0.3}},timeout=30)
             else:
                 resp = req_lib.post("https://openrouter.ai/api/v1/chat/completions",
                     json={"model":"meta-llama/llama-3.3-70b-instruct:free",
-                        "messages":[{"role":"user","content":f"{reasoning_prompt[:2000]}\n\n{question}"}],"max_tokens":1500},
+                        "messages":[{"role":"user","content":f"{reasoning_prompt[:2500]}\n\n{question}"}],"max_tokens":1500},
                     headers={'Authorization':f'Bearer {api_key}','HTTP-Referer':'https://hr-analytics-risal.streamlit.app'},timeout=30)
             if resp.status_code == 200:
                 if prov == 'gemini':
@@ -1614,17 +1528,18 @@ def _call_llm_with_reasoning(question, reasoning_prompt, req_lib):
                 if text and len(text) > 20: return text
         except: continue
     return None
+
 def get_best_kb_answer(question, system_prompt=None):
-    """ALL questions go through Reasoning Pipeline. No shallow fallback."""
+    """Main entry: ALL questions go through full advisory reasoning pipeline."""
     consultant_type = "legal" if system_prompt and 'المستشار القانوني' in system_prompt else "hr"
 
-    # REASONING PIPELINE ONLY (no smart_local_answer interception)
+    # Full reasoning pipeline (no shallow fallback)
     answer = generate_advisor_answer(question, consultant_type, system_prompt)
     if answer and len(answer) > 30:
         auto_learn_from_answer(question, answer, consultant_type)
         return answer
 
-    # If API failed, return diagnostic (NOT a shallow KB answer)
+    # Diagnostic only (no shallow answers)
     k_status = []
     for p in ['groq','gemini','openrouter']:
         has = bool(st.session_state.get(f'{p}_api_key',''))
@@ -1633,8 +1548,8 @@ def get_best_kb_answer(question, system_prompt=None):
             f"المزودين: {' | '.join(k_status)}\n\n"
             f"**الحلول:**\n"
             f"1. تأكد من إضافة مفتاح Groq في الإعدادات\n"
-            f"2. أعد المحاولة بعد لحظات\n"
-            f"3. أعد صياغة السؤال بشكل أوضح")
+            f"2. أعد المحاولة بعد لحظات")
+
 
 def auto_learn_from_answer(question, answer, consultant_type="legal"):
     """Save good AI answers and improve them over time."""
