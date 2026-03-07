@@ -1105,6 +1105,8 @@ def smart_local_answer(question, kb=None):
     """Smart answer from local knowledge base - prioritizes full phrase matches."""
     if kb is None: kb = LABOR_KB
     q = question.lower().strip().rstrip('؟?')
+    # Remove Arabic article for better matching
+    q_clean = q.replace('ال', ' ').strip()
 
     best_score = 0
     best_answer = None
@@ -1113,21 +1115,24 @@ def smart_local_answer(question, kb=None):
         score = 0
         for kw in kw_list:
             kw_lower = kw.lower()
-            # Full multi-word phrase match (highest priority)
+            # Full multi-word phrase match
             if len(kw_lower) > 8 and kw_lower in q: score += 10
             elif len(kw_lower) > 5 and kw_lower in q: score += 6
-            elif kw_lower in q: score += 3
-            # Check if question contains the keyword with Arabic prefix ال
-            elif f"ال{kw_lower}" in q or kw_lower.replace('ال','') in q.replace('ال',''): score += 2
+            # Exact keyword in question (with or without ال)
+            elif kw_lower in q: score += 4
+            elif kw_lower in q_clean: score += 3
+            # Check with Arabic prefix
+            elif f"ال{kw_lower}" in q: score += 3
             else:
                 for word in q.split():
                     if len(word) > 2 and len(kw_lower) > 2:
-                        if word == kw_lower: score += 2
+                        word_clean = word.lstrip('ال')
+                        if word_clean == kw_lower or kw_lower == word_clean: score += 3
                         elif word in kw_lower or kw_lower in word: score += 1
         if score > best_score:
             best_score = score
             best_answer = answer
-    return best_answer if best_score >= 3 else None
+    return best_answer if best_score >= 2 else None
 
 def filter_response(text, consultant_type):
     """Remove wrong content from responses - enforce separation."""
@@ -1179,18 +1184,25 @@ def get_best_kb_answer(question, system_prompt=None):
 
     consultant_type = "legal" if system_prompt and 'المستشار القانوني' in system_prompt else "hr"
 
-    # 0. Check previously learned answers (filtered by type)
+    # 0. Clean old untagged learned answers, then check tagged ones
     try:
         conn = get_conn(); c = conn.cursor()
         c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_learned",))
         row = c.fetchone()
         if row:
             learned = json.loads(row[0])
+            # Remove old entries without type tag (contaminated)
+            clean = [item for item in learned if item.get('type','')]
+            if len(clean) < len(learned):
+                _upsert_config(c, "rag_learned", json.dumps(clean, ensure_ascii=False))
+                conn.commit()
+                learned = clean
             q_lower = question.lower().strip()
             for item in learned:
-                if item.get('type','') != consultant_type: continue
+                if item.get('type', '') != consultant_type:
+                    continue
                 saved_q = item.get('q','').lower()
-                if saved_q and (saved_q in q_lower or q_lower in saved_q):
+                if saved_q == q_lower:
                     conn.close()
                     return item['a']
         conn.close()
@@ -1204,12 +1216,15 @@ def get_best_kb_answer(question, system_prompt=None):
     if answer:
         return answer
 
-    # 1.5 RAG Knowledge Base search (filtered by advisor_type)
+    # 1.5 RAG Knowledge Base (ONLY if local KB had no match, filtered by advisor_type)
     try:
         if '_knowledge_engine' in st.session_state:
             rag_result = st.session_state._knowledge_engine.search(question, advisor_type=consultant_type)
-            if rag_result and len(rag_result) > 30:
-                return f"**من قاعدة المعرفة:**\n\n{rag_result[:2000]}"
+            if rag_result and len(rag_result) > 50:
+                # Apply filter to RAG results too
+                filtered_rag = filter_response(rag_result, consultant_type)
+                if filtered_rag and len(filtered_rag) > 30:
+                    return f"**من قاعدة المعرفة:**\n\n{filtered_rag[:2000]}"
     except: pass
 
     # 2. Try API (with filter to enforce separation)
@@ -1292,8 +1307,11 @@ def get_best_kb_answer(question, system_prompt=None):
     return f"**لم أتمكن من الاتصال بمزودي الذكاء الاصطناعي**\n\n**المفاتيح:** {keys_info}\n**الأخطاء:** {err_info}"
 
 def auto_learn_from_answer(question, answer, consultant_type="legal"):
-    """Save good AI answers to RAG knowledge base for future retrieval."""
-    if not answer or len(answer) < 50 or "لم أتمكن" in answer: return
+    """Save good AI answers - skip filtered/redirect/error responses."""
+    if not answer or len(answer) < 50: return
+    # Don't save redirect messages or error messages
+    skip_phrases = ["لم أتمكن", "يرجى استخدام", "المستشار القانوني ⚖️", "مستشار الموارد البشرية 📚", "المفاتيح:", "الأخطاء:"]
+    if any(p in answer for p in skip_phrases): return
     try:
         conn = get_conn(); c = conn.cursor()
         c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_learned",))
