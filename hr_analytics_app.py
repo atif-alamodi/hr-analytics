@@ -51,14 +51,16 @@ class ModelOrchestrator:
         self._cache = {}
         self._call_count = 0
         self._token_estimate = 0
-        # Pre-cached instant responses for common questions
-        self._instant = {
+        # Pre-cached instant responses for common questions, separated by domain
+        self._instant_labor = {
             "ما هي حقوقي عند الفصل وفق المادة 77؟": "**المادة 77 من نظام العمل السعودي:**\n\nإذا أُنهي العقد لسبب غير مشروع، يحق للطرف المتضرر تعويض:\n\n**عقد غير محدد المدة:** أجر 15 يوماً عن كل سنة خدمة\n**عقد محدد المدة:** أجر المدة الباقية من العقد\n**الحد الأدنى:** لا يقل التعويض عن أجر شهرين في كلا الحالتين\n\n**بالإضافة إلى:**\n- مكافأة نهاية الخدمة (المادة 84)\n- بدل إجازة غير مستخدمة\n- أجر الشهر الأخير كاملاً\n- شهادة خبرة",
             "متى يتحول العقد المحدد لغير محدد المدة؟": "**المادة 55 من نظام العمل:**\n\nيتحول العقد محدد المدة إلى غير محدد في الحالات التالية:\n\n1. **التجديد 3 مرات متتالية** أو بلوغ 4 سنوات أيهما أقل\n2. **استمرار العمل** بعد انتهاء العقد دون تجديد\n3. **نص العقد** على التحول التلقائي\n\nيحق للعامل بعد التحول الاستفادة من مزايا العقد غير المحدد في الإشعار والتعويض.",
             "كيف تُحسب مكافأة نهاية الخدمة؟": "**المادة 84 من نظام العمل:**\n\n**الحساب:**\n- **أول 5 سنوات:** نصف راتب شهري عن كل سنة\n- **بعد 5 سنوات:** راتب شهري كامل عن كل سنة\n\n**عند الاستقالة (المادة 85):**\n- أقل من سنتين: لا يستحق\n- 2-5 سنوات: ثلث المكافأة\n- 5-10 سنوات: ثلثا المكافأة\n- أكثر من 10 سنوات: المكافأة كاملة\n\n**المدة:** يُلزم صاحب العمل بدفعها خلال أسبوع (المادة 88).",
             "ما هي نسبة اشتراكات التأمينات الاجتماعية؟": "**نسب الاشتراك في التأمينات الاجتماعية (GOSI):**\n\n**السعوديون:**\n- المعاشات: 9.75% (الموظف) + 9.75% (صاحب العمل)\n- الأخطار المهنية: 2% (صاحب العمل)\n- ساند (التعطل): 0.75% + 0.75%\n- **إجمالي خصم الموظف: 10.5%**\n- **إجمالي على الشركة: 12.5%**\n\n**غير السعوديين:**\n- الأخطار المهنية فقط: 2% (صاحب العمل)\n- لا يوجد خصم على الموظف",
             "ما هي فترة التجربة وشروطها؟": "**المادة 53 من نظام العمل:**\n\n- **المدة الأساسية:** 90 يوماً كحد أقصى\n- **التمديد:** يمكن تمديدها إلى 180 يوماً بموافقة مكتوبة\n- **لا تشمل:** إجازة عيد الفطر والأضحى والإجازات المرضية\n- **حق الإنهاء:** لأي طرف إنهاء العقد خلالها بدون تعويض أو مكافأة\n- **الإشعار:** لا يشترط إشعار مسبق\n- **لا تتكرر:** لا يجوز وضع فترة تجربة أكثر من مرة لدى نفس صاحب العمل",
             "ما هي حقوق المرأة العاملة في نظام العمل؟": "**حقوق المرأة في نظام العمل السعودي:**\n\n- **إجازة وضع:** 10 أسابيع (المادة 151)\n- **ساعة رضاعة:** ساعة يومياً لمدة 24 شهراً\n- **حماية من الفصل:** أثناء الحمل وإجازة الوضع\n- **إجازة وفاة زوج:** 4 أشهر و10 أيام (عدة)\n- **المساواة:** أجر متساوٍ للعمل المتساوي\n- **ظروف العمل:** بيئة آمنة ومناسبة\n- **ساعات العمل:** نفس الأحكام مع مراعاة خصوصيتها",
+        }
+        self._instant_hr = {
             "كيف أبني خطة استقطاب فعالة؟": "**خطة استقطاب فعالة (Talent Acquisition Strategy):**\n\n**1. التحليل:**\n- تحديد الاحتياج الفعلي (Workforce Planning)\n- تحليل سوق العمل والرواتب\n\n**2. التصميم:**\n- وصف وظيفي واضح ومحدد\n- Employee Value Proposition (EVP)\n- قنوات الاستقطاب (LinkedIn, مواقع توظيف, تزكيات)\n\n**3. التنفيذ:**\n- ATS لتتبع المتقدمين\n- مقابلات منظمة (Structured Interviews)\n- تقييم الكفاءات (Competency Assessment)\n\n**4. القياس:**\n- Time-to-Hire\n- Cost-per-Hire\n- Quality of Hire\n- Source Effectiveness",
             "ما الفرق بين OKRs و KPIs؟": "**OKRs vs KPIs:**\n\n**KPIs (مؤشرات الأداء الرئيسية):**\n- تقيس الأداء المستمر\n- أرقام محددة (مثل: معدل دوران 15%)\n- تتبع الوضع الحالي\n- ثابتة نسبياً\n\n**OKRs (الأهداف والنتائج الرئيسية):**\n- تحدد أهداف طموحة للمستقبل\n- هدف + 3-5 نتائج قابلة للقياس\n- تتغير كل ربع سنة\n- طموحة (70% إنجاز = ممتاز)\n\n**مثال HR:**\n- **KPI:** معدل الدوران = 12%\n- **OKR:** هدف: تحسين الاحتفاظ بالموظفين\n  - NR1: خفض الدوران من 15% إلى 10%\n  - NR2: رفع رضا الموظفين إلى 85%\n  - NR3: تنفيذ برنامج تطوير لـ 50 موظف",
             "ما هو نموذج Phillips ROI للتدريب؟": "**نموذج Phillips ROI (5 مستويات):**\n\n**المستوى 1: Reaction (رد الفعل)**\n- رضا المتدربين عن البرنامج\n\n**المستوى 2: Learning (التعلم)**\n- المعرفة والمهارات المكتسبة\n\n**المستوى 3: Application (التطبيق)**\n- مدى تطبيق ما تعلموه في العمل\n\n**المستوى 4: Impact (الأثر)**\n- التأثير على مؤشرات الأعمال\n\n**المستوى 5: ROI (العائد على الاستثمار)**\n- ROI % = (الفوائد - التكاليف) / التكاليف × 100\n\n**مثال:** تدريب بتكلفة 50,000 ريال أدى لزيادة إنتاجية بقيمة 150,000 ريال\nROI = (150,000 - 50,000) / 50,000 × 100 = **200%**",
@@ -92,9 +94,15 @@ class ModelOrchestrator:
             if k: return p
         return None
 
+    # Domain-specific doc_types for RAG filtering
+    LABOR_DOC_TYPES = {'legal', 'labor_law', 'labor_regulations', 'social_insurance',
+                       'health_insurance', 'minister_decisions', 'ai_learned_labor'}
+    HR_DOC_TYPES = {'hr', 'hr_expert', 'manual', 'ai_learned_hr_expert'}
+
     def build_context(self, system_prompt, user_message, model_type='general', provider='claude'):
         """Assemble full context: system prompt + RAG + learned + legal docs.
-        CRITICAL: Never truncate the system prompt - it contains the expert knowledge."""
+        CRITICAL: Never truncate the system prompt - it contains the expert knowledge.
+        Each consultant only gets context from its own dedicated knowledge domain."""
         max_ctx = self.CONTEXT_LIMITS.get(provider, 8000)
 
         # Keep the FULL system prompt - this is the expert knowledge that drives correct answers
@@ -103,26 +111,26 @@ class ModelOrchestrator:
         # Calculate remaining budget for additional context
         remaining = max(0, max_ctx - len(enhanced))
 
-        # Layer 1: RAG Knowledge Base (most relevant supplementary info)
+        # Layer 1: RAG Knowledge Base - filtered by domain
         if remaining > 500:
             try:
                 if hasattr(st.session_state, '_knowledge_engine'):
-                    rag_ctx = st.session_state._knowledge_engine.search(user_message)
+                    rag_ctx = st.session_state._knowledge_engine.search(user_message, top_k=5, model_type=model_type)
                     if rag_ctx:
                         rag_budget = min(len(rag_ctx), remaining // 2)
                         enhanced += f"\n\n**مراجع إضافية:**\n{rag_ctx[:rag_budget]}"
                         remaining -= rag_budget
             except: pass
 
-        # Layer 2: Legal documents (if available and space permits)
-        if remaining > 500:
+        # Layer 2: Legal documents - ONLY for labor law consultant
+        if model_type == 'labor' and remaining > 500:
             legal_ctx = st.session_state.get('legal_docs_context', '')
             if legal_ctx:
                 legal_budget = min(len(legal_ctx), remaining // 2)
                 enhanced += f"\n\n**نصوص قانونية:**\n{legal_ctx[:legal_budget]}"
                 remaining -= legal_budget
 
-        # Layer 3: Learned from past interactions (lowest priority, smallest budget)
+        # Layer 3: Learned from past interactions - already filtered by model_type
         if remaining > 300:
             try:
                 if hasattr(st.session_state, '_learning_system'):
@@ -139,8 +147,9 @@ class ModelOrchestrator:
 
     def call(self, system_prompt, user_message, chat_history=None, model_type='general'):
         """Main orchestrated call with routing, context, caching, fallback."""
-        # Check instant cached responses first (< 1 second)
-        for q, a in self._instant.items():
+        # Check instant cached responses from the correct domain (< 1 second)
+        instant_db = self._instant_labor if model_type == 'labor' else self._instant_hr if model_type == 'hr_expert' else {}
+        for q, a in instant_db.items():
             if user_message.strip() == q.strip() or q in user_message:
                 return a, None
 
@@ -192,16 +201,18 @@ class ModelOrchestrator:
         return None, last_error or "⚠️ لم يتمكن أي مزود من الإجابة. تحقق من مفاتيح API."
 
     def _auto_learn_to_rag(self, question, answer, model_type):
-        """Auto-save high-quality AI answers into RAG knowledge base for continuous learning."""
+        """Auto-save high-quality AI answers into RAG knowledge base for continuous learning.
+        Tags with domain-specific doc_type so each consultant only sees its own data."""
         try:
             if not answer or len(answer) < 100:
                 return
             if not hasattr(st.session_state, '_knowledge_engine'):
                 return
-            # Build a Q&A document for RAG ingestion
+            # Build a Q&A document for RAG ingestion with domain-specific doc_type
             qa_doc = f"سؤال: {question}\n\nالإجابة:\n{answer}"
             source = f"AI-{model_type}-{datetime.now().strftime('%Y%m%d')}"
-            st.session_state._knowledge_engine.ingest(qa_doc, source, doc_type="ai_learned")
+            doc_type = f"ai_learned_{model_type}"  # e.g. ai_learned_labor, ai_learned_hr_expert
+            st.session_state._knowledge_engine.ingest(qa_doc, source, doc_type=doc_type)
         except: pass
 
     def _call_provider(self, provider, system_prompt, messages):
@@ -422,30 +433,52 @@ class KnowledgeEngine:
                 self._vectors = self._vectorizer.fit_transform(texts)
         except: pass
 
-    def search(self, query, top_k=5):
-        """Semantic search using TF-IDF cosine similarity (upgraded from keyword matching)."""
+    # Domain-specific doc_type filters
+    LABOR_TYPES = {'legal', 'labor_law', 'labor_regulations', 'social_insurance',
+                   'health_insurance', 'minister_decisions', 'ai_learned_labor'}
+    HR_TYPES = {'hr', 'hr_expert', 'manual', 'ai_learned_hr_expert'}
+
+    def _filter_chunks_by_domain(self, chunks, model_type):
+        """Filter chunks to only include those from the correct domain."""
+        if model_type == 'labor':
+            return [ch for ch in chunks if ch.get('type', '') in self.LABOR_TYPES]
+        elif model_type == 'hr_expert':
+            return [ch for ch in chunks if ch.get('type', '') in self.HR_TYPES]
+        return chunks  # general: return all
+
+    def search(self, query, top_k=5, model_type=None):
+        """Semantic search using TF-IDF cosine similarity.
+        Filters results by model_type domain so each consultant only sees its own data."""
         self.load_from_db()
         if not self._chunks: return ""
 
-        # Try vector search first
+        # Filter chunks by domain first
+        domain_chunks = self._filter_chunks_by_domain(self._chunks, model_type) if model_type else self._chunks
+        if not domain_chunks: return ""
+
+        # Try vector search first (on full index, then filter)
         if self._vectors is not None and self._vectorizer not in [None, "unavailable"]:
             try:
                 query_vec = self._vectorizer.transform([query])
                 scores = self._cosine(query_vec, self._vectors).flatten()
-                top_indices = scores.argsort()[-top_k:][::-1]
+                top_indices = scores.argsort()[::-1]
                 results = []
                 for idx in top_indices:
-                    if scores[idx] > 0.05:  # Minimum relevance threshold
-                        ch = self._chunks[idx]
-                        results.append(f"[Source: {ch.get('source','')} | Score: {scores[idx]:.2f}]\n{ch['text']}")
+                    if scores[idx] < 0.05: break  # Below relevance threshold
+                    ch = self._chunks[idx]
+                    # Only include chunks from the correct domain
+                    if model_type and ch not in domain_chunks:
+                        continue
+                    results.append(f"[المصدر: {ch.get('source','')} | النوع: {ch.get('type','')}]\n{ch['text']}")
+                    if len(results) >= top_k: break
                 if results:
                     return "\n\n---\n".join(results)
             except: pass
 
-        # Fallback to keyword search
+        # Fallback to keyword search (on domain-filtered chunks)
         query_words = set(query.lower().split())
         scored = []
-        for ch in self._chunks:
+        for ch in domain_chunks:
             chunk_words = set(ch.get('text','').lower().split())
             match = len(query_words & chunk_words)
             if match > 0:
