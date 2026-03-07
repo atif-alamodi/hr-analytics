@@ -1080,6 +1080,20 @@ LABOR_KB = {
     "إصابة عمل|إصابة مهنية|حادث عمل|سلامة|occupational": "**إصابات العمل (المادة 133-141):**\n\n- صاحب العمل يتحمل علاج المصاب بالكامل\n- أجر كامل خلال فترة العلاج (حتى سنة)\n- **عجز كلي:** 100% من الأجر كمعاش\n- **عجز جزئي:** نسبة من الأجر حسب نسبة العجز\n- **وفاة:** تعويض الورثة بأجر 3 سنوات (بحد أدنى 54,000 ريال)\n\n**واجبات صاحب العمل:** توفير وسائل السلامة + التدريب + التأمين",
 }
 
+# ===== HR KNOWLEDGE BASE (Frameworks & Best Practices ONLY - NO legal articles) =====
+HR_KB = {
+    "تدريب|تطوير|training|أطور|تأهيل|دورة|دورات": "**التدريب والتطوير** *(APTD - Instructional Design | PHRi - L&D)*\n\n**نموذج ADDIE** *(APTD):*\n1. Analysis: تحليل الاحتياجات التدريبية\n2. Design: تصميم البرنامج والأهداف\n3. Development: تطوير المحتوى والمواد\n4. Implementation: تنفيذ البرنامج\n5. Evaluation: تقييم الفعالية\n\n**تقييم التدريب Kirkpatrick** *(APTD/PHRi):*\n- المستوى 1: رد الفعل (رضا المتدربين)\n- المستوى 2: التعلم (المعرفة المكتسبة)\n- المستوى 3: السلوك (التطبيق في العمل)\n- المستوى 4: النتائج (الأثر على الأعمال)\n\n**70-20-10** *(CIPD L5):* 70% خبرة عملية + 20% تعلم اجتماعي + 10% تدريب رسمي",
+    "استقطاب|توظيف|recruitment|hiring|مقابلة|أوظف|تعيين": "**الاستقطاب والتوظيف** *(PHRi - Talent Acquisition | SHRM - People)*\n\n**العملية** *(PHRi):*\n1. تحليل الاحتياج (Workforce Planning)\n2. الوصف الوظيفي (Job Description)\n3. EVP (عرض قيمة صاحب العمل)\n4. المصادر: LinkedIn, Referrals, Job Boards\n5. فرز السير الذاتية (ATS)\n6. مقابلات منظمة (Structured Interviews)\n7. تقييم الكفاءات (Competency Assessment)\n8. العرض والتهيئة (Offer & Onboarding)\n\n**مؤشرات** *(SPHRi):* Time-to-Hire | Cost-per-Hire | Quality of Hire",
+    "أداء|تقييم|performance|kpi|أهداف|okr": "**إدارة الأداء** *(SPHRi - Strategic HR | CIPD L7 - Performance)*\n\n**أهداف SMART** *(PHRi):* محددة + قابلة للقياس + قابلة للتحقيق + ذات صلة + محددة زمنياً\n\n**9-Box Grid** *(SPHRi):* مصفوفة الأداء × الإمكانات لتصنيف المواهب\n\n**OKRs vs KPIs** *(SHRM):*\n- KPIs: مؤشرات ثابتة تقيس الأداء الحالي\n- OKRs: أهداف طموحة ربع سنوية (70% إنجاز = ممتاز)\n\n**التغذية الراجعة** *(CIPD L5):* مستمرة + بنّاءة + 360 درجة",
+    "رواتب|تعويضات|compensation|أجور|هيكل رواتب|بدلات": "**التعويضات والمزايا** *(PHRi - Compensation | SPHRi - Total Rewards)*\n\n**Total Rewards** *(SHRM):*\n1. الراتب الأساسي\n2. المزايا والبدلات\n3. التوازن بين العمل والحياة\n4. التقدير والاعتراف\n5. التطوير المهني\n\n**هيكل الرواتب** *(CIPD L7 - Reward):*\n- Job Evaluation → Job Grading → Salary Bands (Min-Mid-Max)\n- Compa-Ratio = الراتب الفعلي / وسط النطاق\n- Salary Survey: P25, P50, P75",
+    "دوران|turnover|استبقاء|retention|احتفاظ": "**إدارة الدوران والاحتفاظ** *(PHRi - HR Analytics | SPHRi - Workforce Planning)*\n\n**المعادلة:** Turnover = (المغادرين / متوسط العدد) × 100\n\n**المعايير** *(SHRM):* أقل من 10% ممتاز | 10-15% جيد | أكثر من 25% مشكلة\n\n**استراتيجيات الاحتفاظ** *(CIPD L7):*\n1. Total Rewards تنافسية\n2. مسار وظيفي واضح\n3. بيئة عمل محفزة\n4. تقدير ومكافآت\n5. تطوير القيادات\n6. استبيانات رضا + خطط تحسين",
+    "تجربة الموظف|employee experience|ex|onboarding|تهيئة": "**تجربة الموظف** *(SHRM - EX | CIPD L7)*\n\n1. **الاستقطاب** *(PHRi):* عملية سلسة وشفافة\n2. **التهيئة** *(aPHRi):* خطة 30/60/90 يوم + Buddy System\n3. **التطوير** *(APTD):* تدريب مستمر + 70-20-10\n4. **الاحتفاظ** *(SPHRi):* Total Rewards + مرونة\n5. **الانتقال** *(PHRi):* مقابلة خروج + Alumni Network",
+    "قيادة|leader|إدارة|management|تطوير قيادي": "**تطوير القيادات** *(CIPD L7 - Leadership | SPHRi)*\n\n**نموذج Ulrich** *(CIPD L7):*\n- شريك استراتيجي\n- وكيل تغيير\n- خبير إداري\n- بطل الموظفين\n\n**Kotter 8 Steps** *(CIPD L7):* إدارة التغيير المؤسسي\n\n**Coaching vs Mentoring** *(APTD):*\n- Coaching: قصير المدى، مهارة محددة\n- Mentoring: طويل المدى، تطوير شامل",
+    "تحليلات|analytics|بيانات|data|مؤشرات": "**تحليلات الموارد البشرية** *(PHRi - HR Analytics | SPHRi)*\n\n**4 مستويات:**\n1. **وصفي:** ماذا حدث؟ (تقارير، dashboards)\n2. **تشخيصي:** لماذا حدث؟ (تحليل الأسباب)\n3. **تنبؤي:** ماذا سيحدث؟ (نماذج تنبؤية)\n4. **توصيفي:** ماذا نفعل؟ (توصيات)\n\n**مؤشرات أساسية:** Turnover Rate | Time-to-Hire | Cost-per-Hire | Employee NPS | Absence Rate",
+    "تغيير|change|تطوير مؤسسي|od|تنظيمي": "**إدارة التغيير والتطوير المؤسسي** *(CIPD L7 - OD)*\n\n**Burke-Litwin Model:** تحليل أداء المنظمة وعوامل التغيير\n\n**Kotter 8 Steps:**\n1. خلق الإلحاح\n2. بناء تحالف قيادي\n3. تطوير الرؤية\n4. التواصل\n5. تمكين العمل\n6. تحقيق مكاسب سريعة\n7. البناء على المكاسب\n8. ترسيخ التغيير\n\n**ADKAR** *(SHRM):* Awareness → Desire → Knowledge → Ability → Reinforcement",
+    "كفاءات|competency|مهارات|skills|جدارات": "**إدارة الكفاءات** *(SHRM - Competency | PHRi)*\n\n**Competency Framework:** تحديد الكفاءات المطلوبة لكل وظيفة\n\n**أنواع الكفاءات:**\n- Core: قيم المنظمة (للجميع)\n- Functional: مهارات الوظيفة\n- Leadership: كفاءات قيادية\n\n**التطبيق:** التوظيف + التطوير + التقييم + الترقية + التعاقب الوظيفي",
+}
+
 def smart_local_answer(question, kb=None):
     """Smart answer from local knowledge base - prioritizes full phrase matches."""
     if kb is None: kb = LABOR_KB
@@ -1233,10 +1247,12 @@ def get_best_kb_answer(question, system_prompt=None):
         except Exception as e:
             errors.append(f"OpenRouter: {str(e)[:60]}")
 
-    # 4. Local KB fallback (only for legal consultant, not HR)
-    if system_prompt and 'المستشار القانوني' in system_prompt:
-        answer = smart_local_answer(question)
-        if answer: return answer
+    # 4. Local KB fallback (use correct KB per consultant)
+    if consultant_type == "legal":
+        answer = smart_local_answer(question, LABOR_KB)
+    else:
+        answer = smart_local_answer(question, HR_KB)
+    if answer: return answer
 
     # 5. Diagnostic
     keys_info = f"Groq: {'✅' if groq_key else '❌'} | Gemini: {'✅' if gemini_key else '❌'} | OpenRouter: {'✅' if or_key else '❌'}"
