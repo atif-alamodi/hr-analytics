@@ -53,20 +53,20 @@ class ModelOrchestrator:
         claude_key = st.session_state.get('claude_api_key', '')
         groq_key = st.session_state.get('groq_api_key', '')
         or_key = st.session_state.get('openrouter_api_key', '')
+        claude_ok = claude_key and not st.session_state.get('_claude_no_credit')
 
         if provider == 'auto':
             legal_kw = ['مادة','قانون','نظام العمل','تعويض','فصل','إنهاء','article','labor law','termination']
             is_legal = any(kw in question_type.lower() for kw in legal_kw)
-            if is_legal and claude_key: return 'claude'
+            if is_legal and claude_ok: return 'claude'
             if groq_key: return 'groq'
             if or_key: return 'openrouter'
-            if claude_key: return 'claude'
+            if claude_ok: return 'claude'
             return None
-        if provider == 'claude' and claude_key: return 'claude'
+        if provider == 'claude' and claude_ok: return 'claude'
         if provider == 'groq' and groq_key: return 'groq'
         if provider == 'openrouter' and or_key: return 'openrouter'
-        # Fallback chain
-        for p, k in [('groq',groq_key),('openrouter',or_key),('claude',claude_key)]:
+        for p, k in [('groq',groq_key),('openrouter',or_key),('claude',claude_ok)]:
             if k: return p
         return None
 
@@ -143,19 +143,21 @@ class ModelOrchestrator:
                 if hasattr(st.session_state, '_learning_system'):
                     st.session_state._learning_system.save_interaction(user_message, result, model_type)
                 return result, None
-            last_error = error
-        # If all providers failed
-        if last_error in ("no_credit", "rate_limit"):
-            return None, "⚠️ جميع المزودين غير متاحين. تحقق من المفاتيح أو أضف رصيد."
-        return None, last_error or "خطأ غير متوقع"
+            if error != "fallback":
+                last_error = error
+        return None, last_error or "⚠️ لم يتمكن أي مزود من الإجابة. تحقق من مفاتيح API."
 
     def _call_provider(self, provider, system_prompt, messages):
         """Execute API call to specific provider."""
         api_key = st.session_state.get(f'{provider}_api_key', '')
-        if not api_key: return None, f"مفتاح {provider} غير موجود"
+        if not api_key: return None, "fallback"
 
         config = self.MODELS.get(provider)
-        if not config: return None, f"مزود {provider} غير معروف"
+        if not config: return None, "fallback"
+
+        # Skip Claude if previously failed with no credit
+        if provider == 'claude' and st.session_state.get('_claude_no_credit'):
+            return None, "fallback"
 
         if provider in ('groq', 'openrouter'):
             payload = json.dumps({
@@ -174,11 +176,11 @@ class ModelOrchestrator:
                     text = result.get('choices',[{}])[0].get('message',{}).get('content','')
                     return text, None
             except urllib.request.HTTPError as he:
-                err = he.read().decode('utf-8',errors='ignore')[:200]
-                if he.code == 429: return None, "rate_limit"
-                return None, f"خطأ {provider} {he.code}: {err}"
-            except Exception as e:
-                return None, f"خطأ {provider}: {e}"
+                try: err = he.read().decode('utf-8',errors='ignore')[:200]
+                except: err = str(he.code)
+                return None, "fallback"
+            except:
+                return None, "fallback"
 
         else:  # claude
             for use_web in [True, False]:
@@ -197,19 +199,20 @@ class ModelOrchestrator:
                         text = "\n".join([b.get('text','') for b in result.get('content',[]) if b.get('type')=='text'])
                         return text, None
                 except urllib.request.HTTPError as he:
+                    try: err_body = he.read().decode('utf-8',errors='ignore')[:300]
+                    except: err_body = ""
+                    # No credit - remember and fallback
+                    if 'credit' in err_body.lower() or 'balance' in err_body.lower():
+                        st.session_state['_claude_no_credit'] = True
+                        return None, "fallback"
+                    # Web search not supported - retry without
                     if use_web and he.code == 400:
-                        err_body = he.read().decode('utf-8',errors='ignore')[:300]
-                        if 'credit' in err_body.lower() or 'balance' in err_body.lower():
-                            return None, "no_credit"  # Trigger fallback
                         continue
-                    err = he.read().decode('utf-8',errors='ignore')[:200]
-                    if he.code == 429: return None, "rate_limit"
-                    if he.code == 400 and 'credit' in err.lower(): return None, "no_credit"
-                    return None, f"خطأ Claude {he.code}: {err}"
-                except Exception as e:
+                    return None, "fallback"
+                except:
                     if use_web: continue
-                    return None, f"خطأ Claude: {e}"
-            return None, "فشل الاتصال بـ Claude"
+                    return None, "fallback"
+            return None, "fallback"
 
     def get_stats(self):
         """Return orchestrator statistics."""
