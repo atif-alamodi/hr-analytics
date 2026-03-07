@@ -188,52 +188,65 @@ class ModelOrchestrator:
             return None, "fallback"
 
         if provider == 'gemini':
-            url = f"{config['url']}?key={api_key}"
-            # Build Gemini format
-            user_text = messages[-1]['content'] if messages else ""
-            gemini_contents = []
-            for m in messages[-4:]:
-                role = "user" if m['role'] == 'user' else "model"
-                gemini_contents.append({"role":role,"parts":[{"text":m['content'][:500]}]})
-            payload = json.dumps({
-                "contents": gemini_contents,
-                "systemInstruction": {"parts":[{"text":system_prompt[:4000]}]},
-                "generationConfig": {"maxOutputTokens": config['max_tokens'], "temperature": 0.3}
-            })
-            headers = {'Content-Type':'application/json'}
             try:
-                req = urllib.request.Request(url, data=payload.encode('utf-8'), headers=headers, method='POST')
-                with urllib.request.urlopen(req, timeout=30) as resp:
-                    result = json.loads(resp.read().decode())
-                    text = result.get('candidates',[{}])[0].get('content',{}).get('parts',[{}])[0].get('text','')
+                import requests as req_lib
+                url = f"{config['url']}?key={api_key}"
+                user_text = messages[-1]['content'] if messages else ""
+                gemini_contents = []
+                for m in messages[-4:]:
+                    role = "user" if m['role'] == 'user' else "model"
+                    gemini_contents.append({"role":role,"parts":[{"text":m['content'][:500]}]})
+                resp = req_lib.post(url, json={
+                    "contents": gemini_contents,
+                    "systemInstruction": {"parts":[{"text":system_prompt[:4000]}]},
+                    "generationConfig": {"maxOutputTokens": config['max_tokens'], "temperature": 0.3}
+                }, timeout=30)
+                if resp.status_code == 200:
+                    text = resp.json().get('candidates',[{}])[0].get('content',{}).get('parts',[{}])[0].get('text','')
                     if text: return text, None
             except: pass
             return None, "fallback"
 
         elif provider in ('groq', 'openrouter', 'huggingface'):
+            try:
+                import requests as req_lib
+            except:
+                import urllib.request as _ur
+                # Fallback to urllib if requests not available
+                models_to_try = self.OR_MODELS if provider == 'openrouter' else [config['model']]
+                for model_name in models_to_try:
+                    try:
+                        payload = json.dumps({"model":model_name,"max_tokens":config['max_tokens'],"messages":[{"role":"system","content":system_prompt}]+messages,"temperature":0.3})
+                        headers = {'Content-Type':'application/json','Authorization':f'Bearer {api_key}'}
+                        req = _ur.Request(config['url'], data=payload.encode('utf-8'), headers=headers, method='POST')
+                        with _ur.urlopen(req, timeout=30) as resp:
+                            text = json.loads(resp.read().decode()).get('choices',[{}])[0].get('message',{}).get('content','')
+                            if text: return text, None
+                    except: continue
+                return None, "fallback"
+
             models_to_try = self.OR_MODELS if provider == 'openrouter' else [config['model']]
             for model_name in models_to_try:
-                payload = json.dumps({
-                    "model": model_name, "max_tokens": config['max_tokens'],
-                    "messages": [{"role":"system","content":system_prompt}] + messages,
-                    "temperature": 0.3
-                })
-                headers = {'Content-Type':'application/json','Authorization':f'Bearer {api_key}'}
-                if provider == 'openrouter':
-                    headers['HTTP-Referer'] = 'https://hr-analytics-risal.streamlit.app'
-                    headers['X-Title'] = 'HR Analytics Platform'
                 try:
-                    timeout = 30 if provider == 'openrouter' else 60
-                    req = urllib.request.Request(config['url'], data=payload.encode('utf-8'), headers=headers, method='POST')
-                    with urllib.request.urlopen(req, timeout=timeout) as resp:
-                        result = json.loads(resp.read().decode())
-                        text = result.get('choices',[{}])[0].get('message',{}).get('content','')
+                    headers = {'Authorization':f'Bearer {api_key}'}
+                    if provider == 'openrouter':
+                        headers['HTTP-Referer'] = 'https://hr-analytics-risal.streamlit.app'
+                    resp = req_lib.post(config['url'],
+                        json={"model":model_name,"max_tokens":config['max_tokens'],
+                            "messages":[{"role":"system","content":system_prompt}]+messages,
+                            "temperature":0.3},
+                        headers=headers, timeout=30)
+                    if resp.status_code == 200:
+                        text = resp.json().get('choices',[{}])[0].get('message',{}).get('content','')
                         if text: return text, None
-                except:
-                    continue  # Try next model
+                except: continue
             return None, "fallback"
 
         else:  # claude
+            try:
+                import requests as req_lib
+            except:
+                return None, "fallback"
             for use_web in [True, False]:
                 payload_dict = {
                     "model": config['model'], "max_tokens": config['max_tokens'],
@@ -241,25 +254,23 @@ class ModelOrchestrator:
                 }
                 if use_web:
                     payload_dict["tools"] = [{"type":"web_search_20250305","name":"web_search"}]
-                payload = json.dumps(payload_dict)
-                headers = {'Content-Type':'application/json','x-api-key':api_key,'anthropic-version':'2023-06-01'}
                 try:
-                    req = urllib.request.Request(config['url'], data=payload.encode('utf-8'), headers=headers, method='POST')
-                    with urllib.request.urlopen(req, timeout=90) as resp:
-                        result = json.loads(resp.read().decode())
-                        text = "\n".join([b.get('text','') for b in result.get('content',[]) if b.get('type')=='text'])
-                        return text, None
-                except urllib.request.HTTPError as he:
-                    try: err_body = he.read().decode('utf-8',errors='ignore')[:300]
-                    except: err_body = ""
-                    # No credit - remember and fallback
-                    if 'credit' in err_body.lower() or 'balance' in err_body.lower():
-                        st.session_state['_claude_no_credit'] = True
-                        return None, "fallback"
-                    # Web search not supported - retry without
-                    if use_web and he.code == 400:
+                    resp = req_lib.post(config['url'], json=payload_dict,
+                        headers={'x-api-key':api_key,'anthropic-version':'2023-06-01'},
+                        timeout=90)
+                    if resp.status_code == 200:
+                        text = "\n".join([b.get('text','') for b in resp.json().get('content',[]) if b.get('type')=='text'])
+                        if text: return text, None
+                    elif resp.status_code == 400 and use_web:
+                        body = resp.text[:200]
+                        if 'credit' in body.lower() or 'balance' in body.lower():
+                            st.session_state['_claude_no_credit'] = True
+                            return None, "fallback"
                         continue
-                    return None, "fallback"
+                    else:
+                        if 'credit' in resp.text.lower():
+                            st.session_state['_claude_no_credit'] = True
+                        return None, "fallback"
                 except:
                     if use_web: continue
                     return None, "fallback"
@@ -1098,78 +1109,78 @@ def smart_local_answer(question, kb=None):
     return best_answer if best_score >= 3 else None
 
 def get_best_kb_answer(question):
-    """Call AI directly - simple and reliable."""
-    import urllib.request
+    """Call AI directly using requests library (bypasses Cloudflare)."""
+    import requests as req_lib
     errors = []
 
-    # 1. Try Groq DIRECTLY (no orchestrator, no layers)
+    # 1. Try Groq with requests library (bypasses Cloudflare)
     groq_key = st.session_state.get('groq_api_key', '')
     if not groq_key:
         try: groq_key = st.secrets.get("groq", {}).get("api_key", "")
         except: pass
     if groq_key:
         try:
-            payload = json.dumps({
-                "model": "llama-3.3-70b-versatile",
-                "messages": [
-                    {"role":"system","content":"أنت مستشار قانوني وخبير موارد بشرية سعودي متخصص. أجب دائماً بالعربية بدقة ووضوح مع ذكر المواد القانونية. لا تعتذر أبداً ولا تقل لا أعرف."},
-                    {"role":"user","content":question}
-                ],
-                "max_tokens": 2000, "temperature": 0.3
-            })
-            req = urllib.request.Request("https://api.groq.com/openai/v1/chat/completions",
-                data=payload.encode('utf-8'),
-                headers={'Content-Type':'application/json','Authorization':f'Bearer {groq_key}'},
-                method='POST')
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                result = json.loads(resp.read().decode())
-                text = result.get('choices',[{}])[0].get('message',{}).get('content','')
+            resp = req_lib.post("https://api.groq.com/openai/v1/chat/completions",
+                json={
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [
+                        {"role":"system","content":"أنت مستشار قانوني وخبير موارد بشرية سعودي متخصص. أجب دائماً بالعربية بدقة ووضوح مع ذكر المواد القانونية. لا تعتذر أبداً."},
+                        {"role":"user","content":question}
+                    ],
+                    "max_tokens": 2000, "temperature": 0.3
+                },
+                headers={'Authorization':f'Bearer {groq_key}'},
+                timeout=30)
+            if resp.status_code == 200:
+                text = resp.json().get('choices',[{}])[0].get('message',{}).get('content','')
                 if text and len(text) > 10: return text
+            else:
+                errors.append(f"Groq: {resp.status_code}")
         except Exception as e:
             errors.append(f"Groq: {str(e)[:60]}")
 
-    # 2. Try Gemini DIRECTLY
+    # 2. Try Gemini
     gemini_key = st.session_state.get('gemini_api_key', '')
     if not gemini_key:
         try: gemini_key = st.secrets.get("gemini", {}).get("api_key", "")
         except: pass
     if gemini_key:
         try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_key}"
-            payload = json.dumps({
-                "contents":[{"parts":[{"text":f"أنت مستشار قانوني سعودي. أجب بالعربية بدقة.\n\nالسؤال: {question}"}]}],
-                "generationConfig":{"maxOutputTokens":2000,"temperature":0.3}
-            })
-            req = urllib.request.Request(url, data=payload.encode('utf-8'),
-                headers={'Content-Type':'application/json'}, method='POST')
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                result = json.loads(resp.read().decode())
-                text = result.get('candidates',[{}])[0].get('content',{}).get('parts',[{}])[0].get('text','')
+            resp = req_lib.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_key}",
+                json={
+                    "contents":[{"parts":[{"text":f"أنت مستشار قانوني سعودي متخصص. أجب بالعربية بدقة.\n\nالسؤال: {question}"}]}],
+                    "generationConfig":{"maxOutputTokens":2000,"temperature":0.3}
+                },
+                timeout=30)
+            if resp.status_code == 200:
+                text = resp.json().get('candidates',[{}])[0].get('content',{}).get('parts',[{}])[0].get('text','')
                 if text and len(text) > 10: return text
+            else:
+                errors.append(f"Gemini: {resp.status_code}")
         except Exception as e:
             errors.append(f"Gemini: {str(e)[:60]}")
 
-    # 3. Try OpenRouter DIRECTLY
+    # 3. Try OpenRouter
     or_key = st.session_state.get('openrouter_api_key', '')
     if not or_key:
         try: or_key = st.secrets.get("openrouter", {}).get("api_key", "")
         except: pass
     if or_key:
         try:
-            payload = json.dumps({
-                "model": "meta-llama/llama-3.3-70b-instruct:free",
-                "messages": [{"role":"user","content":f"أنت مستشار قانوني سعودي. أجب بالعربية.\n\n{question}"}],
-                "max_tokens": 1500
-            })
-            req = urllib.request.Request("https://openrouter.ai/api/v1/chat/completions",
-                data=payload.encode('utf-8'),
-                headers={'Content-Type':'application/json','Authorization':f'Bearer {or_key}',
-                    'HTTP-Referer':'https://hr-analytics-risal.streamlit.app'},
-                method='POST')
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                result = json.loads(resp.read().decode())
-                text = result.get('choices',[{}])[0].get('message',{}).get('content','')
+            resp = req_lib.post("https://openrouter.ai/api/v1/chat/completions",
+                json={
+                    "model": "meta-llama/llama-3.3-70b-instruct:free",
+                    "messages": [{"role":"user","content":f"أنت مستشار قانوني سعودي. أجب بالعربية.\n\n{question}"}],
+                    "max_tokens": 1500
+                },
+                headers={'Authorization':f'Bearer {or_key}','HTTP-Referer':'https://hr-analytics-risal.streamlit.app'},
+                timeout=30)
+            if resp.status_code == 200:
+                text = resp.json().get('choices',[{}])[0].get('message',{}).get('content','')
                 if text and len(text) > 10: return text
+            else:
+                errors.append(f"OpenRouter: {resp.status_code}")
         except Exception as e:
             errors.append(f"OpenRouter: {str(e)[:60]}")
 
@@ -1177,7 +1188,7 @@ def get_best_kb_answer(question):
     answer = smart_local_answer(question)
     if answer: return answer
 
-    # 5. Diagnostic - show what failed
+    # 5. Diagnostic
     keys_info = f"Groq: {'✅' if groq_key else '❌'} | Gemini: {'✅' if gemini_key else '❌'} | OpenRouter: {'✅' if or_key else '❌'}"
     err_info = " | ".join(errors) if errors else "لا أخطاء"
     return f"**لم أتمكن من الاتصال بمزودي الذكاء الاصطناعي**\n\n**المفاتيح:** {keys_info}\n**الأخطاء:** {err_info}\n\n**الحل:** تحقق من إعدادات API Keys في قسم إدارة المستخدمين."
