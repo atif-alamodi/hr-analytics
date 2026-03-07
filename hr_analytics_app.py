@@ -1115,7 +1115,8 @@ def get_best_kb_answer(question, system_prompt=None):
     if not system_prompt:
         system_prompt = "أنت مستشار قانوني وخبير موارد بشرية سعودي متخصص. أجب دائماً بالعربية بدقة ووضوح مع ذكر المواد القانونية. لا تعتذر أبداً."
 
-    # 0. Check previously learned answers (RAG auto-learning)
+    # 0. Check previously learned answers (filtered by consultant type)
+    consultant_type = "legal" if system_prompt and 'المستشار القانوني' in system_prompt else "hr"
     try:
         conn = get_conn(); c = conn.cursor()
         c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_learned",))
@@ -1124,16 +1125,9 @@ def get_best_kb_answer(question, system_prompt=None):
             learned = json.loads(row[0])
             q_lower = question.lower().strip()
             for item in learned:
+                if item.get('type','') != consultant_type: continue
                 saved_q = item.get('q','').lower()
                 if saved_q and (saved_q in q_lower or q_lower in saved_q):
-                    conn.close()
-                    return item['a']
-            # Keyword matching for learned answers
-            q_words = set(q_lower.split())
-            for item in learned:
-                saved_words = set(item.get('q','').lower().split())
-                overlap = len(q_words & saved_words)
-                if overlap >= 3 and len(item.get('a','')) > 50:
                     conn.close()
                     return item['a']
         conn.close()
@@ -1220,23 +1214,24 @@ def get_best_kb_answer(question, system_prompt=None):
     err_info = " | ".join(errors) if errors else "لا أخطاء"
     return f"**لم أتمكن من الاتصال بمزودي الذكاء الاصطناعي**\n\n**المفاتيح:** {keys_info}\n**الأخطاء:** {err_info}\n\n**الحل:** تحقق من إعدادات API Keys في قسم إدارة المستخدمين."
 
-def auto_learn_from_answer(question, answer):
+def auto_learn_from_answer(question, answer, consultant_type="legal"):
     """Save good AI answers to RAG knowledge base for future retrieval."""
-    if not answer or len(answer) < 50: return
+    if not answer or len(answer) < 50 or "لم أتمكن" in answer: return
     try:
         conn = get_conn(); c = conn.cursor()
         c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_learned",))
         row = c.fetchone()
         learned = json.loads(row[0]) if row else []
-        # Avoid duplicates
         q_hash = hashlib.md5(question.encode()).hexdigest()[:10]
-        if any(l.get('hash') == q_hash for l in learned): return
+        if any(l.get('hash') == q_hash for l in learned): conn.close(); return
         learned.append({"q": question[:200], "a": answer[:1500], "hash": q_hash,
-            "date": datetime.now().strftime("%Y-%m-%d")})
+            "type": consultant_type, "date": datetime.now().strftime("%Y-%m-%d")})
         if len(learned) > 500: learned = learned[-500:]
         _upsert_config(c, "rag_learned", json.dumps(learned, ensure_ascii=False))
         conn.commit(); conn.close()
     except: pass
+
+def export_widget(dataframes, title="تقرير", key_prefix="exp"):
     """Universal export: Excel (with charts) + CSV + PDF (with interactive charts)"""
     if dataframes is None: return
     if isinstance(dataframes, pd.DataFrame):
@@ -2696,7 +2691,7 @@ def main():
         elif section == "📜 العقود":
             page = st.radio("📌", ["📜 إنشاء عقد","🔍 تحليل العقود","📋 العقود المحفوظة","📥 تصدير العقود"], label_visibility="collapsed")
         elif section == "🤖 المستشار الذكي":
-            page = st.radio("📌", ["⚖️ مستشار القضايا العمالية","📚 مستشار الموارد البشرية","🧠 قاعدة المعرفة RAG","📊 التعلم والتحسين","📋 إدارة المراجع"], label_visibility="collapsed")
+            page = st.radio("📌", ["⚖️ المستشار القانوني","📚 مستشار الموارد البشرية","🧠 قاعدة المعرفة RAG","📊 التعلم والتحسين","📋 إدارة المراجع"], label_visibility="collapsed")
         elif section == "🏗️ التطوير المؤسسي OD":
             page = st.radio("📌", ["🔍 تشخيص المنظمة","📊 تحليل OD","🎯 استراتيجية OD","📋 خطة التنفيذ","📥 تصدير OD"], label_visibility="collapsed")
         elif section == "📈 التحليلات المتقدمة":
@@ -7871,8 +7866,8 @@ GOSI: سعودي 10.5% خصم + 12.5% شركة | غير سعودي 2% شركة
         else: st.session_state.ai_provider = 'auto'
 
         # ===== MODEL 1: Labor Law Consultant =====
-        if page == "⚖️ مستشار القضايا العمالية":
-            hdr("⚖️ مستشار القضايا العمالية بالذكاء الاصطناعي",
+        if page == "⚖️ المستشار القانوني":
+            hdr("⚖️ المستشار القانوني بالذكاء الاصطناعي",
                 "مدعوم بنظام العمل السعودي + التأمينات + الضمان الصحي + قرارات وزارة الموارد البشرية")
 
             st.markdown("""
@@ -7934,7 +7929,7 @@ GOSI: سعودي 10.5% خصم + 12.5% شركة | غير سعودي 2% شركة
                     # Always gets an answer - never fails
                     with st.spinner("جاري تحليل القضية..."):
                         response = get_best_kb_answer(labor_q, LABOR_LAW_SYSTEM_PROMPT)
-                        auto_learn_from_answer(labor_q, response)
+                        auto_learn_from_answer(labor_q, response, "legal")
                         st.session_state.labor_chat = [{"role":"user","content":labor_q},{"role":"assistant","content":response}]
                         st.rerun()
 
@@ -8005,7 +8000,7 @@ GOSI: سعودي 10.5% خصم + 12.5% شركة | غير سعودي 2% شركة
                 else:
                     with st.spinner("جاري البحث في المراجع..."):
                         response = get_best_kb_answer(hr_q, HR_EXPERT_SYSTEM_PROMPT)
-                        auto_learn_from_answer(hr_q, response)
+                        auto_learn_from_answer(hr_q, response, "hr")
                         st.session_state.hr_chat = [{"role":"user","content":hr_q},{"role":"assistant","content":response}]
                         st.rerun()
 
