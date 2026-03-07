@@ -929,40 +929,122 @@ def generate_employee_pdf(result):
 # Initialize database on startup
 init_db()
 
-# ===== STYLES =====
+# ===== SALESFORCE LIGHTNING DESIGN SYSTEM =====
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;500;600;700;800&display=swap');
-*{font-family:'Noto Sans Arabic',sans-serif}
-.main .block-container{padding-top:.8rem;max-width:1400px}
-[data-testid="stSidebar"]{background:linear-gradient(180deg,#0F4C5C 0%,#1A1A2E 100%)}
-[data-testid="stSidebar"] *{color:white !important}
-[data-testid="stMetric"]{background:white;border-radius:12px;padding:14px 18px;box-shadow:0 1px 3px rgba(0,0,0,.06);border:1px solid #E2E8F0}
-[data-testid="stMetric"] label{font-size:12px !important;color:#64748B !important}
-[data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:20px !important;font-weight:700 !important}
-h1{color:#0F4C5C !important;font-weight:800 !important}
-.hdr{background:linear-gradient(135deg,#0F4C5C,#1A1A2E);padding:20px 28px;border-radius:14px;margin-bottom:20px;color:white}
-.hdr h1{color:white !important;margin:0;font-size:24px}
-.hdr p{color:rgba(255,255,255,.7);margin:4px 0 0;font-size:13px}
-.ibox{background:#EFF6FF;border-radius:10px;padding:12px 16px;border-right:4px solid #3B82F6;margin-bottom:8px;font-size:13px;line-height:1.7}
-.ibox.warn{background:#FFF7ED;border-right-color:#F97316}
-.ibox.ok{background:#F0FDF4;border-right-color:#22C55E}
-.ibox.bad{background:#FEF2F2;border-right-color:#EF4444}
-.kpi{background:linear-gradient(135deg,#0F4C5C,#1B4D5C);color:white;border-radius:12px;padding:16px;text-align:center;margin-bottom:10px}
-.kpi h3{font-size:24px;margin:6px 0 2px;font-weight:800}
-.kpi p{font-size:11px;opacity:.7;margin:0}
-#MainMenu,footer{visibility:hidden}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+Arabic:wght@300;400;500;600;700;800&display=swap');
+*{font-family:'Inter','Noto Sans Arabic',sans-serif}
+
+/* === Global Layout === */
+.main .block-container{padding-top:.5rem;max-width:1440px}
+.main{background-color:#F3F3F3}
+
+/* === Sidebar (Salesforce Navigation) === */
+[data-testid="stSidebar"]{background:#032D60;border-right:none}
+[data-testid="stSidebar"] *{color:#FFFFFF !important}
+[data-testid="stSidebar"] .stRadio label{
+    font-size:13px;padding:6px 12px;border-radius:6px;transition:all .2s;
+    display:block;margin:1px 0}
+[data-testid="stSidebar"] .stRadio label:hover{background:rgba(255,255,255,.12)}
+[data-testid="stSidebar"] hr{border-color:rgba(255,255,255,.15) !important}
+
+/* === Metrics (KPI Cards) === */
+[data-testid="stMetric"]{
+    background:white;border-radius:8px;padding:16px 20px;
+    box-shadow:0 2px 4px rgba(0,0,0,.07);border:1px solid #E5E5E5;
+    border-top:3px solid #0176D3}
+[data-testid="stMetric"] label{font-size:11px !important;color:#706E6B !important;text-transform:uppercase;letter-spacing:.5px}
+[data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:22px !important;font-weight:700 !important;color:#032D60 !important}
+
+/* === Headers === */
+h1{color:#032D60 !important;font-weight:700 !important;font-size:22px !important}
+h2{color:#032D60 !important;font-weight:600 !important}
+h3{color:#181818 !important;font-weight:600 !important}
+
+/* === Header Banner (Salesforce Page Header) === */
+.sf-header{
+    background:white;padding:20px 28px;border-radius:8px;margin-bottom:16px;
+    border:1px solid #E5E5E5;border-left:4px solid #0176D3;
+    box-shadow:0 2px 4px rgba(0,0,0,.05)}
+.sf-header h1{color:#032D60 !important;margin:0;font-size:22px;font-weight:700}
+.sf-header p{color:#706E6B;margin:4px 0 0;font-size:12px;letter-spacing:.3px}
+
+/* === KPI Card (Lightning) === */
+.sf-kpi{
+    background:white;border-radius:8px;padding:16px 20px;text-align:center;margin-bottom:10px;
+    border:1px solid #E5E5E5;box-shadow:0 2px 4px rgba(0,0,0,.05);
+    border-top:3px solid #0176D3;transition:box-shadow .2s}
+.sf-kpi:hover{box-shadow:0 4px 12px rgba(1,118,211,.15)}
+.sf-kpi h3{font-size:26px;margin:6px 0 2px;font-weight:800;color:#032D60}
+.sf-kpi p{font-size:11px;color:#706E6B;margin:0;text-transform:uppercase;letter-spacing:.5px}
+
+/* === Info Box (Salesforce Alert) === */
+.sf-alert{background:white;border-radius:8px;padding:14px 18px;margin-bottom:10px;font-size:13px;line-height:1.7;
+    border:1px solid #E5E5E5;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.sf-alert.info{border-left:4px solid #0176D3;background:#EFF6FF}
+.sf-alert.warn{border-left:4px solid #FE9339;background:#FFF8F0}
+.sf-alert.ok{border-left:4px solid #2E844A;background:#F0FDF4}
+.sf-alert.bad{border-left:4px solid #EA001E;background:#FEF2F2}
+
+/* === Data Tables === */
+[data-testid="stDataFrame"]{border-radius:8px;overflow:hidden;box-shadow:0 2px 4px rgba(0,0,0,.05)}
+.stDataFrame th{background:#032D60 !important;color:white !important;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+
+/* === Buttons (Salesforce Style) === */
+.stButton button[kind="primary"]{
+    background:#0176D3 !important;border:none !important;border-radius:6px !important;
+    font-weight:600 !important;letter-spacing:.3px;transition:all .2s}
+.stButton button[kind="primary"]:hover{background:#014486 !important;box-shadow:0 2px 8px rgba(1,118,211,.3) !important}
+.stButton button{border-radius:6px !important;font-weight:500 !important}
+
+/* === Tabs === */
+.stTabs [data-baseweb="tab-list"]{gap:0;border-bottom:2px solid #E5E5E5}
+.stTabs [data-baseweb="tab"]{
+    font-weight:500;color:#706E6B;padding:10px 16px;border-bottom:3px solid transparent}
+.stTabs [data-baseweb="tab"][aria-selected="true"]{
+    color:#0176D3;border-bottom-color:#0176D3;font-weight:700}
+
+/* === Expanders === */
+.streamlit-expanderHeader{background:white !important;border:1px solid #E5E5E5 !important;border-radius:8px !important;font-weight:600 !important}
+.streamlit-expanderContent{background:white !important;border:1px solid #E5E5E5 !important;border-top:none !important}
+
+/* === Cards/Containers === */
+[data-testid="stExpander"]{border-radius:8px;overflow:hidden}
+.stSelectbox,.stTextInput,.stNumberInput,.stTextArea{border-radius:6px !important}
+
+/* === Download Buttons === */
+.stDownloadButton button{
+    background:white !important;color:#0176D3 !important;border:1px solid #0176D3 !important;
+    border-radius:6px !important;font-weight:600 !important}
+.stDownloadButton button:hover{background:#0176D3 !important;color:white !important}
+
+/* === Chat Messages === */
+.sf-msg-user{background:#032D60;color:white;padding:12px 16px;border-radius:8px;margin:8px 0;font-size:14px}
+.sf-msg-ai{background:white;color:#181818;padding:12px 16px;border-radius:8px;margin:8px 0;
+    border:1px solid #E5E5E5;border-left:4px solid #0176D3}
+
+/* === Hide Streamlit defaults === */
+#MainMenu,footer,.stDeployButton{visibility:hidden}
+
+/* === Scrollbar === */
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-thumb{background:#C9C7C5;border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:#706E6B}
 </style>
 """, unsafe_allow_html=True)
 
-CL = {'p':'#0F4C5C','a':'#E36414','s':'#2D6A4F','d':'#9A031E','dept':px.colors.qualitative.Set2,'sal':px.colors.qualitative.Pastel}
+# Salesforce Color Palette
+CL = {'p':'#0176D3','a':'#032D60','s':'#2E844A','d':'#EA001E',
+    'warn':'#FE9339','dept':px.colors.qualitative.Set2,'sal':px.colors.qualitative.Pastel}
 
-def hdr(t,s=""): st.markdown(f'<div class="hdr"><h1>{t}</h1><p>{s}</p></div>',unsafe_allow_html=True)
+def hdr(t,s=""):
+    st.markdown(f'<div class="sf-header"><h1>{t}</h1><p>{s}</p></div>',unsafe_allow_html=True)
 def ibox(t,tp="info"):
-    c={"info":"ibox","warning":"ibox warn","success":"ibox ok","danger":"ibox bad"}
-    ic={"info":"💡","warning":"⚠️","success":"✅","danger":"🚨"}
-    st.markdown(f'<div class="{c.get(tp,"ibox")}">{ic.get(tp,"💡")} {t}</div>',unsafe_allow_html=True)
-def kpi(l,v): st.markdown(f'<div class="kpi"><p>{l}</p><h3>{v}</h3></div>',unsafe_allow_html=True)
+    c={"info":"sf-alert info","warning":"sf-alert warn","success":"sf-alert ok","danger":"sf-alert bad"}
+    ic={"info":"ℹ️","warning":"⚠️","success":"✅","danger":"🚨"}
+    st.markdown(f'<div class="{c.get(tp,"sf-alert info")}">{ic.get(tp,"ℹ️")} {t}</div>',unsafe_allow_html=True)
+def kpi(l,v):
+    st.markdown(f'<div class="sf-kpi"><p>{l}</p><h3>{v}</h3></div>',unsafe_allow_html=True)
 
 def export_widget(dataframes, title="تقرير", key_prefix="exp"):
     """Universal export: Excel (with charts) + CSV + PDF (with interactive charts)"""
@@ -989,7 +1071,7 @@ def export_widget(dataframes, title="تقرير", key_prefix="exp"):
                     clean = str(sname)[:31].replace('/','_').replace('\\','_')
                     df.to_excel(w, sheet_name=clean, index=False)
                     ws = w.sheets[clean]; ws.set_column('A:Z', 18)
-                    hf = w.book.add_format({'bold':True,'bg_color':'#0F4C5C','font_color':'white','border':1})
+                    hf = w.book.add_format({'bold':True,'bg_color':'#0176D3','font_color':'white','border':1})
                     for ci, col in enumerate(df.columns): ws.write(0, ci, str(col), hf)
                     # Auto-charts
                     num_c = df.select_dtypes('number').columns.tolist()
@@ -1001,7 +1083,7 @@ def export_widget(dataframes, title="تقرير", key_prefix="exp"):
                         cws.write(0,0,cat_c[0],hf); cws.write(0,1,num_c[0],hf)
                         for j,(idx,val) in enumerate(grp.items()): cws.write(j+1,0,str(idx)); cws.write(j+1,1,val)
                         ch = w.book.add_chart({'type':'bar'})
-                        ch.add_series({'categories':[csn,1,0,len(grp),0],'values':[csn,1,1,len(grp),1],'fill':{'color':'#2A9D8F'}})
+                        ch.add_series({'categories':[csn,1,0,len(grp),0],'values':[csn,1,1,len(grp),1],'fill':{'color':'#0176D3'}})
                         ch.set_title({'name':f'{cat_c[0]} vs {num_c[0]}'}); ch.set_size({'width':520,'height':320}); ch.set_legend({'none':True})
                         cws.insert_chart('D1',ch)
                         ch2 = w.book.add_chart({'type':'pie'})
@@ -1041,7 +1123,7 @@ def export_widget(dataframes, title="تقرير", key_prefix="exp"):
                 # Bar chart
                 if cat_c and num_c:
                     grp = df.groupby(cat_c[0])[num_c[0]].sum().head(12).sort_values()
-                    fig = px.bar(x=grp.values,y=grp.index,orientation='h',title=f'{cat_c[0]} vs {num_c[0]}',color=grp.values,color_continuous_scale='teal')
+                    fig = px.bar(x=grp.values,y=grp.index,orientation='h',title=f'{cat_c[0]} vs {num_c[0]}',color=grp.values,color_continuous_scale='Blues')
                     fig.update_layout(height=350,margin=dict(l=10,r=10,t=40,b=10),showlegend=False,coloraxis_showscale=False)
                     charts_html += fig.to_html(full_html=False,include_plotlyjs="cdn")
                 # Pie chart
@@ -1052,7 +1134,7 @@ def export_widget(dataframes, title="تقرير", key_prefix="exp"):
                     charts_html += fig.to_html(full_html=False,include_plotlyjs='cdn')
                 # Histogram
                 if num_c:
-                    fig = px.histogram(df,x=num_c[0],nbins=20,title=f'توزيع {num_c[0]}',color_discrete_sequence=['#E36414'])
+                    fig = px.histogram(df,x=num_c[0],nbins=20,title=f'توزيع {num_c[0]}',color_discrete_sequence=['#0176D3'])
                     fig.add_vline(x=df[num_c[0]].mean(),line_dash="dash",line_color="red",annotation_text=f"المتوسط: {df[num_c[0]].mean():,.0f}")
                     fig.update_layout(height=350,margin=dict(l=10,r=10,t=40,b=10))
                     charts_html += fig.to_html(full_html=False,include_plotlyjs='cdn')
@@ -1066,14 +1148,14 @@ def export_widget(dataframes, title="تقرير", key_prefix="exp"):
             kpi_html += "</div>"
             pdf_html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
             <style>body{{font-family:Arial,sans-serif;padding:20px;direction:rtl;color:#333}}
-            h1{{color:#0F4C5C;text-align:center;border-bottom:3px solid #E36414;padding-bottom:10px}}
+            h1{{color:#0176D3;text-align:center;border-bottom:3px solid #E36414;padding-bottom:10px}}
             h2{{color:#264653;margin-top:25px;border-bottom:1px solid #eee;padding-bottom:5px}}
             .tbl{{border-collapse:collapse;width:100%;margin:10px 0}}
-            .tbl th{{background:#0F4C5C;color:white;padding:8px;border:1px solid #ddd;text-align:center}}
+            .tbl th{{background:#0176D3;color:white;padding:8px;border:1px solid #ddd;text-align:center}}
             .tbl td{{padding:6px;border:1px solid #ddd;text-align:center}}
             .tbl tr:nth-child(even){{background:#f8f9fa}}
             .kb{{background:#f0f4f8;border-radius:8px;padding:12px 20px;border-right:4px solid #E36414;min-width:110px}}
-            .kv{{font-size:1.3em;font-weight:700;color:#0F4C5C}} .kl{{font-size:0.7em;color:#888}}
+            .kv{{font-size:1.3em;font-weight:700;color:#0176D3}} .kl{{font-size:0.7em;color:#888}}
             .footer{{margin-top:30px;color:#888;font-size:0.8em;text-align:center;border-top:1px solid #ddd;padding-top:10px}}
             @media print{{@page{{margin:0.5cm}} .js-plotly-plot{{break-inside:avoid}}}}</style>
             
@@ -1529,13 +1611,13 @@ def send_test_email(to_email, emp_name, tests, deadline, assigned_by, app_url=""
 <head><meta charset="UTF-8"></head>
 <body style="font-family:'Segoe UI',Arial,sans-serif;direction:rtl;text-align:right;margin:0;padding:0;background:#f4f4f4;">
 <div style="max-width:600px;margin:20px auto;background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.1);">
-    <div style="background:linear-gradient(135deg,#0F4C5C,#1A1A2E);color:white;padding:24px;text-align:center;">
+    <div style="background:linear-gradient(135deg,#0176D3,#032D60);color:white;padding:24px;text-align:center;">
         <div style="background:rgba(255,255,255,0.15);width:60px;height:60px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;margin-bottom:10px;">HR</div>
         <h2 style="margin:8px 0 0;color:white;font-size:20px;">منصة تحليلات الموارد البشرية</h2>
         <p style="margin:4px 0 0;opacity:0.7;font-size:13px;">رسال الود لتقنية المعلومات</p>
     </div>
     <div style="padding:28px 24px;">
-        <h3 style="color:#0F4C5C;margin:0 0 15px;font-size:18px;">مرحباً {emp_name},</h3>
+        <h3 style="color:#0176D3;margin:0 0 15px;font-size:18px;">مرحباً {emp_name},</h3>
         <p style="color:#333;line-height:1.7;font-size:14px;">تم تعيين اختبارات شخصية جديدة لك من قبل <strong style="color:#E36414;">{assigned_by}</strong>.</p>
 
         <div style="background:linear-gradient(135deg,#fff8f3,#fff);border-right:4px solid #E36414;padding:18px;margin:20px 0;border-radius:8px;">
@@ -1742,7 +1824,7 @@ def _restore_login():
     return False
 
 def login_page():
-    st.markdown("<div style='text-align:center;padding:40px 0;'><div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:80px;height:80px;border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:32px;font-weight:800;color:white;'>HR</div><h1 style='color:#0F4C5C;'>منصة تحليلات الموارد البشرية</h1><p style='color:#64748B;'>رسال الود لتقنية المعلومات</p></div>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align:center;padding:40px 0;'><div style='background:#0176D3;width:80px;height:80px;border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:32px;font-weight:800;color:white;box-shadow:0 4px 16px rgba(1,118,211,.3)'>HR</div><h1 style='color:#032D60;'>منصة تحليلات الموارد البشرية</h1><p style='color:#706E6B;'>رسال الود لتقنية المعلومات</p></div>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
         login_tab, forgot_tab = st.tabs(["🔐 تسجيل الدخول", "🔑 استرجاع كلمة السر"])
@@ -2100,7 +2182,7 @@ BIG5_TRAITS = {
         "low": "تنافسي، مباشر، ناقد، يتحدى الأفكار، مستقل الرأي",
         "jobs_high": "خدمة العملاء، الموارد البشرية، التمريض، الإرشاد",
         "jobs_low": "المحاماة، التفاوض، إدارة المخاطر، مراقبة الجودة"},
-    "C": {"name": "الإتقان", "en": "Conscientiousness", "color": "#0F4C5C",
+    "C": {"name": "الإتقان", "en": "Conscientiousness", "color": "#0176D3",
         "desc": "مستوى التنظيم والانضباط والمسؤولية والإنجاز",
         "high": "منظم، منضبط، مسؤول، يركز على التفاصيل، موثوق",
         "low": "مرن، عفوي، يتكيف بسرعة، أقل تنظيماً، مبدع",
@@ -2397,7 +2479,7 @@ def main():
 
     # Sidebar
     with st.sidebar:
-        st.markdown(f"<div style='text-align:center;padding:16px 0;'><div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:56px;height:56px;border-radius:12px;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:22px;font-weight:800;color:white;'>HR</div><h2 style='margin:0;font-size:16px;'>تحليلات الموارد البشرية</h2><p style='opacity:.6;font-size:11px;'>رسال الود لتقنية المعلومات v5</p><p style='opacity:.8;font-size:11px;'>👤 {st.session_state.user_name} ({st.session_state.user_role})</p></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align:center;padding:20px 0;'><div style='background:#0176D3;width:52px;height:52px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:20px;font-weight:800;color:white;box-shadow:0 2px 8px rgba(1,118,211,.4)'>HR</div><h2 style='margin:0;font-size:15px;font-weight:700;color:white'>تحليلات الموارد البشرية</h2><p style='opacity:.5;font-size:10px;margin:2px 0'>Risal Al-Wud IT v5</p><div style='background:rgba(255,255,255,.1);border-radius:6px;padding:6px 10px;margin-top:8px;font-size:11px'>👤 {st.session_state.user_name} <span style='opacity:.6'>| {st.session_state.user_role}</span></div></div>", unsafe_allow_html=True)
         st.markdown("---")
 
         # Filter sections by access
@@ -2655,7 +2737,7 @@ def main():
                     dc = data[dept_col].value_counts().head(15).reset_index()
                     dc.columns = [dept_col, 'العدد']
                     fig = px.bar(dc.sort_values('العدد'), x='العدد', y=dept_col, orientation='h',
-                        color='العدد', color_continuous_scale='teal', title='📊 Headcount حسب القسم')
+                        color='العدد', color_continuous_scale='Blues', title='📊 Headcount حسب القسم')
                     fig.update_layout(font=dict(family="Noto Sans Arabic"), height=420, showlegend=False, coloraxis_showscale=False)
                     st.plotly_chart(fig, use_container_width=True)
             with r2c2:
@@ -2689,7 +2771,7 @@ def main():
                     lc = data[loc_col].value_counts().head(10).reset_index()
                     lc.columns = [loc_col, 'العدد']
                     fig = px.bar(lc, x=loc_col, y='العدد', title='📍 التوزيع الجغرافي', color='العدد',
-                        color_continuous_scale='oranges')
+                        color_continuous_scale='Blues')
                     fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380, showlegend=False, coloraxis_showscale=False)
                     st.plotly_chart(fig, use_container_width=True)
 
@@ -2698,7 +2780,7 @@ def main():
             with r4c1:
                 if sal_col:
                     fig = px.histogram(data, x=sal_col, nbins=25, title='💰 توزيع الرواتب',
-                        color_discrete_sequence=['#E36414'])
+                        color_discrete_sequence=['#0176D3'])
                     fig.add_vline(x=data[sal_col].mean(), line_dash="dash", line_color="red",
                         annotation_text=f"المتوسط: {data[sal_col].mean():,.0f}")
                     fig.add_vline(x=data[sal_col].median(), line_dash="dot", line_color="blue",
@@ -2757,7 +2839,7 @@ def main():
                     lv_data = data[level_col].value_counts().reset_index()
                     lv_data.columns = [level_col, 'العدد']
                     fig = px.funnel(lv_data, x='العدد', y=level_col, title='📊 التوزيع حسب المستوى الوظيفي',
-                        color_discrete_sequence=['#E36414'])
+                        color_discrete_sequence=['#0176D3'])
                     fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380)
                     st.plotly_chart(fig, use_container_width=True)
             with r6c2:
@@ -2782,7 +2864,7 @@ def main():
                         valid['_join_month'] = valid['_join_dt'].dt.to_period('M').astype(str)
                         monthly = valid.groupby('_join_month').size().reset_index(name='العدد')
                         fig = px.area(monthly, x='_join_month', y='العدد', title='📈 اتجاه التوظيف الشهري',
-                            color_discrete_sequence=['#E36414'])
+                            color_discrete_sequence=['#0176D3'])
                         fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380, xaxis_title="الشهر")
                         st.plotly_chart(fig, use_container_width=True)
             with r7c2:
@@ -2791,7 +2873,7 @@ def main():
                     tree = tree[tree['العدد'] > 0]
                     fig = px.treemap(tree, path=[dept_col, nat_col], values='العدد',
                         title='🗺️ خريطة شجرية: الأقسام × الجنسيات',
-                        color='العدد', color_continuous_scale='teal')
+                        color='العدد', color_continuous_scale='Blues')
                     fig.update_layout(font=dict(family="Noto Sans Arabic"), height=420)
                     st.plotly_chart(fig, use_container_width=True)
                 elif dept_col and loc_col:
@@ -2799,7 +2881,7 @@ def main():
                     tree = tree[tree['العدد'] > 0]
                     fig = px.treemap(tree, path=[dept_col, loc_col], values='العدد',
                         title='🗺️ خريطة شجرية: الأقسام × المواقع',
-                        color='العدد', color_continuous_scale='oranges')
+                        color='العدد', color_continuous_scale='Blues')
                     fig.update_layout(font=dict(family="Noto Sans Arabic"), height=420)
                     st.plotly_chart(fig, use_container_width=True)
 
@@ -2955,12 +3037,12 @@ def main():
                 c1,c2 = st.columns(2)
                 with c1:
                     fig = px.bar(dept_stats.sort_values('الإجمالي'), x='الإجمالي', y=dept_col, orientation='h',
-                        title=f'إجمالي التكلفة حسب {dept_col}', color='الإجمالي', color_continuous_scale='teal')
+                        title=f'إجمالي التكلفة حسب {dept_col}', color='الإجمالي', color_continuous_scale='Blues')
                     fig.update_layout(font=dict(family="Noto Sans Arabic"), height=420, xaxis_tickformat=',', coloraxis_showscale=False)
                     st.plotly_chart(fig, use_container_width=True)
                 with c2:
                     fig = px.bar(dept_stats.sort_values('المتوسط'), x='المتوسط', y=dept_col, orientation='h',
-                        title=f'متوسط الراتب حسب {dept_col}', color='المتوسط', color_continuous_scale='oranges')
+                        title=f'متوسط الراتب حسب {dept_col}', color='المتوسط', color_continuous_scale='Blues')
                     fig.update_layout(font=dict(family="Noto Sans Arabic"), height=420, xaxis_tickformat=',', coloraxis_showscale=False)
                     st.plotly_chart(fig, use_container_width=True)
 
@@ -2997,7 +3079,7 @@ def main():
                     st.plotly_chart(fig, use_container_width=True)
                 with c2:
                     fig = px.bar(nat_stats, x=nat_col, y='المتوسط', title='متوسط الراتب حسب الجنسية',
-                        color='العدد', text='العدد', color_continuous_scale='teal')
+                        color='العدد', text='العدد', color_continuous_scale='Blues')
                     fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380, yaxis_tickformat=',', coloraxis_showscale=False)
                     st.plotly_chart(fig, use_container_width=True)
 
@@ -3106,7 +3188,7 @@ def main():
                     months_order = ['January','February','March','April','May','June','July','August','September','October','November','December']
                     monthly = yr.groupby('شهر الراتب')['الراتب الإجمالي'].sum().reindex(months_order).dropna()
                     fig = go.Figure()
-                    fig.add_trace(go.Bar(x=monthly.index, y=monthly.values, marker_color=CL['p'], text=[f"{v:,.0f}" for v in monthly.values], textposition='outside'))
+                    fig.add_trace(go.Bar(x=monthly.index, y=monthly.values, marker_color='#0176D3', text=[f"{v:,.0f}" for v in monthly.values], textposition='outside'))
                     fig.update_layout(title=f'إجمالي الرواتب الشهرية - {year}', font=dict(family="Noto Sans Arabic"), height=400, yaxis_tickformat=',')
                     st.plotly_chart(fig, use_container_width=True)
 
@@ -3177,7 +3259,7 @@ def main():
                     with c2:
                         if has(data,'الراتب الإجمالي'):
                             ls = data.groupby('المستوى')['الراتب الإجمالي'].mean().reset_index().sort_values('الراتب الإجمالي',ascending=True)
-                            fig = px.bar(ls, x='الراتب الإجمالي', y='المستوى', orientation='h', title='متوسط الراتب حسب المستوى', color='الراتب الإجمالي', color_continuous_scale='teal')
+                            fig = px.bar(ls, x='الراتب الإجمالي', y='المستوى', orientation='h', title='متوسط الراتب حسب المستوى', color='الراتب الإجمالي', color_continuous_scale='Blues')
                             fig.update_layout(font=dict(family="Noto Sans Arabic"),height=350,xaxis_tickformat=','); st.plotly_chart(fig,use_container_width=True)
                 else: st.info("لا يوجد عمود مستوى")
 
@@ -3201,7 +3283,7 @@ def main():
                     ss_clean = ss.dropna(subset=['Min Salary','Max Salary'])
                     fig = go.Figure()
                     fig.add_trace(go.Bar(name='الحد الأدنى', x=ss_clean['Grade'].astype(str), y=ss_clean['Min Salary'], marker_color=CL['s']))
-                    fig.add_trace(go.Bar(name='المتوسط', x=ss_clean['Grade'].astype(str), y=ss_clean['Mid Salary'], marker_color=CL['a']))
+                    fig.add_trace(go.Bar(name='المتوسط', x=ss_clean['Grade'].astype(str), y=ss_clean['Mid Salary'], marker_color='#FE9339'))
                     fig.add_trace(go.Bar(name='الحد الأقصى', x=ss_clean['Grade'].astype(str), y=ss_clean['Max Salary'], marker_color=CL['d']))
                     fig.update_layout(title='سلم الرواتب حسب الدرجة', barmode='group', font=dict(family="Noto Sans Arabic"), height=420, yaxis_tickformat=',')
                     st.plotly_chart(fig, use_container_width=True)
@@ -3272,7 +3354,7 @@ def main():
                     labels=['<3K','3-5K','5-8K','8-12K','12-18K','18-30K','30-50K','50K+'])
                 band_counts = snap['_SalBand'].value_counts().sort_index()
                 fig = px.bar(x=band_counts.index.astype(str), y=band_counts.values, title='توزيع الموظفين حسب نطاق الراتب',
-                    color=band_counts.values, color_continuous_scale='teal')
+                    color=band_counts.values, color_continuous_scale='Blues')
                 fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380, showlegend=False, coloraxis_showscale=False)
                 st.plotly_chart(fig, use_container_width=True)
 
@@ -3347,7 +3429,7 @@ def main():
                     o = io.BytesIO()
                     with pd.ExcelWriter(o, engine='xlsxwriter') as w:
                         wb = w.book
-                        hdr_f = wb.add_format({'bold':True,'font_size':14,'bg_color':'#0F4C5C','font_color':'white','align':'center','border':1})
+                        hdr_f = wb.add_format({'bold':True,'font_size':14,'bg_color':'#0176D3','font_color':'white','align':'center','border':1})
                         num_f = wb.add_format({'num_format':'#,##0.00','border':1})
 
                         # Sheet 1: Dashboard summary
@@ -3432,7 +3514,7 @@ def main():
                         mime="text/csv", type="primary", use_container_width=True)
 
                 elif exp_format == "📝 HTML":
-                    html = f"<html dir='rtl'><head><meta charset='utf-8'><title>Salary Report</title><style>body{{font-family:Arial}}table{{border-collapse:collapse;width:100%}}th{{background:#0F4C5C;color:white;padding:8px;border:1px solid #ddd}}td{{padding:6px;border:1px solid #ddd}}</style></head><body><h1>تقرير تحليل الرواتب</h1><p>التاريخ: {datetime.now().strftime('%Y-%m-%d')}</p>{snap.to_html(index=False)}</body></html>"
+                    html = f"<html dir='rtl'><head><meta charset='utf-8'><title>Salary Report</title><style>body{{font-family:Arial}}table{{border-collapse:collapse;width:100%}}th{{background:#0176D3;color:white;padding:8px;border:1px solid #ddd}}td{{padding:6px;border:1px solid #ddd}}</style></head><body><h1>تقرير تحليل الرواتب</h1><p>التاريخ: {datetime.now().strftime('%Y-%m-%d')}</p>{snap.to_html(index=False)}</body></html>"
                     st.download_button("📥 تحميل HTML", data=html.encode('utf-8'),
                         file_name=f"Salary_Report_{datetime.now().strftime('%Y%m%d')}.html",
                         mime="text/html", type="primary", use_container_width=True)
@@ -3862,7 +3944,7 @@ def main():
                     ot = data.groupby(dept_col)['ساعات إضافية'].agg(['mean','sum']).reset_index()
                     ot.columns = [dept_col, 'المتوسط','الإجمالي']
                     fig = px.bar(ot.sort_values('المتوسط',ascending=True), x='المتوسط', y=dept_col, orientation='h',
-                        title='متوسط الساعات الإضافية حسب القسم', color='المتوسط', color_continuous_scale='oranges')
+                        title='متوسط الساعات الإضافية حسب القسم', color='المتوسط', color_continuous_scale='Blues')
                     fig.update_layout(font=dict(family="Noto Sans Arabic"),height=400); st.plotly_chart(fig,use_container_width=True)
             else:
                 st.warning("لا يوجد بيانات رواتب للتحليل. ارفع ملف رواتب أو أضف عمود Gross Salary.")
@@ -5103,7 +5185,7 @@ def main():
                     wb = w.book
 
                     # Header formats
-                    hdr_fmt = wb.add_format({'bold':True,'font_size':14,'bg_color':'#0F4C5C','font_color':'white','align':'center','valign':'vcenter','border':1})
+                    hdr_fmt = wb.add_format({'bold':True,'font_size':14,'bg_color':'#0176D3','font_color':'white','align':'center','valign':'vcenter','border':1})
                     sub_fmt = wb.add_format({'bold':True,'font_size':11,'bg_color':'#E36414','font_color':'white','align':'center','border':1})
                     col_fmt = wb.add_format({'bold':True,'bg_color':'#264653','font_color':'white','align':'center','border':1,'text_wrap':True})
                     num_fmt = wb.add_format({'num_format':'#,##0','align':'center','border':1})
@@ -6216,12 +6298,12 @@ def main():
                 vals_html = ""
                 colors = ['#E36414','#264653','#2A9D8F','#E9C46A','#F4A261']
                 for i, v in enumerate(ci.get('values',[])):
-                    vals_html += f"<div style='background:white;border-radius:12px;padding:20px;border-top:4px solid {colors[i%5]};text-align:center'><h3 style='color:{colors[i%5]};margin:0'>{v['name_ar']}</h3><p style='font-size:0.85em;color:#0F4C5C;font-weight:600;margin:5px 0'>{v['name']}</p><p style='color:#555;font-size:0.85em;margin:0'>{v['desc']}</p></div>"
+                    vals_html += f"<div style='background:white;border-radius:12px;padding:20px;border-top:4px solid {colors[i%5]};text-align:center'><h3 style='color:{colors[i%5]};margin:0'>{v['name_ar']}</h3><p style='font-size:0.85em;color:#0176D3;font-weight:600;margin:5px 0'>{v['name']}</p><p style='color:#555;font-size:0.85em;margin:0'>{v['desc']}</p></div>"
 
                 # Build products HTML
                 prods_html = ""
                 for p in ci.get('products',[]):
-                    prods_html += f"<div style='background:white;border-radius:10px;padding:18px;border-right:4px solid #E36414'><h4 style='color:#0F4C5C;margin:0 0 5px'>{p['name']}</h4><p style='color:#555;margin:0;font-size:0.9em'>{p['desc']}</p></div>"
+                    prods_html += f"<div style='background:white;border-radius:10px;padding:18px;border-right:4px solid #E36414'><h4 style='color:#0176D3;margin:0 0 5px'>{p['name']}</h4><p style='color:#555;margin:0;font-size:0.9em'>{p['desc']}</p></div>"
 
                 # Build milestones HTML
                 miles_html = ""
@@ -6257,17 +6339,17 @@ body{{font-family:'Noto Sans Arabic',sans-serif;background:#0a0a1a;color:white;o
 .slide.active{{display:flex}}
 .slide::before{{content:'';position:absolute;top:0;left:0;right:0;bottom:0;z-index:0}}
 .slide>*{{position:relative;z-index:1}}
-.s-welcome::before{{background:linear-gradient(135deg,#0F4C5C,#1A1A2E)}}
-.s-who::before{{background:linear-gradient(135deg,#1A1A2E,#264653)}}
-.s-vision::before{{background:linear-gradient(135deg,#264653,#0F4C5C)}}
+.s-welcome::before{{background:linear-gradient(135deg,#0176D3,#032D60)}}
+.s-who::before{{background:linear-gradient(135deg,#032D60,#264653)}}
+.s-vision::before{{background:linear-gradient(135deg,#264653,#0176D3)}}
 .s-values::before{{background:linear-gradient(135deg,#f8f9fa,#e9ecef);}} .s-values *{{color:#333}}
-.s-products::before{{background:linear-gradient(135deg,#1A1A2E,#0F4C5C)}}
-.s-milestones::before{{background:linear-gradient(135deg,#0F4C5C,#264653)}}
-.s-market::before{{background:linear-gradient(135deg,#264653,#1A1A2E)}}
+.s-products::before{{background:linear-gradient(135deg,#032D60,#0176D3)}}
+.s-milestones::before{{background:linear-gradient(135deg,#0176D3,#264653)}}
+.s-market::before{{background:linear-gradient(135deg,#264653,#032D60)}}
 .s-team::before{{background:linear-gradient(135deg,#E36414,#E9C46A);}}
 .s-plan::before{{background:linear-gradient(135deg,#f8f9fa,#e9ecef);}} .s-plan *{{color:#333}}
-.s-policies::before{{background:linear-gradient(135deg,#264653,#0F4C5C)}}
-.s-contact::before{{background:linear-gradient(135deg,#0F4C5C,#1A1A2E)}}
+.s-policies::before{{background:linear-gradient(135deg,#264653,#0176D3)}}
+.s-contact::before{{background:linear-gradient(135deg,#0176D3,#032D60)}}
 .logo{{width:70px;height:70px;background:linear-gradient(135deg,#E36414,#E9C46A);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;margin-bottom:20px}}
 h1{{font-size:2.8em;margin-bottom:10px}} h2{{font-size:2em;margin-bottom:15px}} h3{{margin-bottom:8px}}
 .subtitle{{opacity:0.7;font-size:1.1em;margin-bottom:30px}}
@@ -6295,7 +6377,7 @@ h1{{font-size:2.8em;margin-bottom:10px}} h2{{font-size:2em;margin-bottom:15px}} 
 
 {"<div class='slide s-vision'><h2>🎯 Our Purpose, Mission & Vision</h2><div style='margin:20px 0'><div style='background:rgba(255,255,255,0.1);padding:20px;border-radius:12px;margin:12px 0;border-right:4px solid #E9C46A'><h3 style='color:#E9C46A'>Purpose (Why)</h3><p>" + ci.get('purpose','') + "</p></div><div style='background:rgba(255,255,255,0.1);padding:20px;border-radius:12px;margin:12px 0;border-right:4px solid #E36414'><h3 style='color:#E36414'>Mission (What)</h3><p>" + ci.get('mission','') + "</p></div><div style='background:rgba(255,255,255,0.1);padding:20px;border-radius:12px;margin:12px 0;border-right:4px solid #2A9D8F'><h3 style='color:#2A9D8F'>Vision (Where)</h3><p>" + ci.get('vision','') + "</p></div></div></div>" if "رؤيتنا ورسالتنا" in slides_sel else ""}
 
-{"<div class='slide s-values'><h2 style='color:#0F4C5C'>💎 Our Values</h2><div class='grid5'>" + vals_html + "</div></div>" if "قيمنا" in slides_sel else ""}
+{"<div class='slide s-values'><h2 style='color:#0176D3'>💎 Our Values</h2><div class='grid5'>" + vals_html + "</div></div>" if "قيمنا" in slides_sel else ""}
 
 {"<div class='slide s-products'><h2>📦 Our Products</h2><div class='grid2' style='gap:12px'>" + prods_html + "</div></div>" if "منتجاتنا" in slides_sel else ""}
 
@@ -6305,7 +6387,7 @@ h1{{font-size:2.8em;margin-bottom:10px}} h2{{font-size:2em;margin-bottom:15px}} 
 
 {"<div class='slide s-team'><h2>👥 Your Team</h2><div class='grid2'><div class='stat'><div class='lbl'>Department</div><div class='num' style='font-size:1.3em'>" + plan['dept'] + "</div></div><div class='stat'><div class='lbl'>Manager</div><div class='num' style='font-size:1.3em'>" + plan.get('manager','') + "</div></div><div class='stat'><div class='lbl'>Start Date</div><div class='num' style='font-size:1.3em'>" + plan['start_date'] + "</div></div><div class='stat'><div class='lbl'>Type</div><div class='num' style='font-size:1.3em'>" + plan.get('type','Full-Time') + "</div></div></div></div>" if "فريقك" in slides_sel else ""}
 
-{"<div class='slide s-plan'><h2 style='color:#0F4C5C'>📋 Your 30/60/90 Day Plan</h2><div style='max-height:70vh;overflow-y:auto'>" + tasks_html + "</div></div>" if "خطة 30/60/90" in slides_sel else ""}
+{"<div class='slide s-plan'><h2 style='color:#0176D3'>📋 Your 30/60/90 Day Plan</h2><div style='max-height:70vh;overflow-y:auto'>" + tasks_html + "</div></div>" if "خطة 30/60/90" in slides_sel else ""}
 
 {"<div class='slide s-policies'><h2>📌 Key Policies</h2><div class='grid2'>" + "".join([f"<div class='stat'><div class='lbl'>{k}</div><div style='font-size:1em;margin-top:6px'>{v}</div></div>" for k,v in ci.get('work_policies',{}).items()]) + "</div></div>" if "سياسات" in slides_sel else ""}
 
@@ -7245,9 +7327,9 @@ function stopSpeak(){{speechSynthesis.cancel()}}
             # Display chat history
             for msg in st.session_state.labor_chat:
                 if msg['role'] == 'user':
-                    st.markdown(f"<div style='background:#1e3a5f;color:white;padding:12px;border-radius:10px;margin:8px 0'>👤 {msg['content']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='background:#032D60;color:white;padding:12px 16px;border-radius:8px;margin:8px 0;font-size:14px'>👤 {msg['content']}</div>", unsafe_allow_html=True)
                 else:
-                    st.markdown(f"<div style='background:#f0f4f8;color:#333;padding:12px;border-radius:10px;margin:8px 0;border-right:4px solid #0F4C5C'>⚖️ {msg['content']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='background:white;color:#181818;padding:12px 16px;border-radius:8px;margin:8px 0;border:1px solid #E5E5E5;border-left:4px solid #0176D3'>⚖️ {msg['content']}</div>", unsafe_allow_html=True)
 
             # Quick questions
             st.markdown("### 💡 أسئلة شائعة")
@@ -7304,9 +7386,9 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 
             for msg in st.session_state.hr_chat:
                 if msg['role'] == 'user':
-                    st.markdown(f"<div style='background:#1e3a5f;color:white;padding:12px;border-radius:10px;margin:8px 0'>👤 {msg['content']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='background:#032D60;color:white;padding:12px 16px;border-radius:8px;margin:8px 0;font-size:14px'>👤 {msg['content']}</div>", unsafe_allow_html=True)
                 else:
-                    st.markdown(f"<div style='background:#f0faf5;color:#333;padding:12px;border-radius:10px;margin:8px 0;border-right:4px solid #2A9D8F'>📚 {msg['content']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='background:white;color:#181818;padding:12px 16px;border-radius:8px;margin:8px 0;border:1px solid #E5E5E5;border-left:4px solid #2E844A'>📚 {msg['content']}</div>", unsafe_allow_html=True)
 
             # Quick topics
             st.markdown("### 💡 مواضيع شائعة")
@@ -7523,7 +7605,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                     daily[day] = daily.get(day, 0) + 1
                 if daily:
                     fig = px.bar(x=list(daily.keys()), y=list(daily.values()),
-                        title='📈 استخدام المستشار الذكي يومياً', color_discrete_sequence=['#E36414'])
+                        title='📈 استخدام المستشار الذكي يومياً', color_discrete_sequence=['#0176D3'])
                     fig.update_layout(font=dict(family="Noto Sans Arabic"), height=300)
                     st.plotly_chart(fig, use_container_width=True)
 
@@ -7833,12 +7915,12 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                 oc1, oc2 = st.columns(2)
                 with oc1:
                     fig = px.treemap(dc, path=[dept_col_od], values='العدد', title='الهيكل التنظيمي (Treemap)',
-                        color='العدد', color_continuous_scale='teal')
+                        color='العدد', color_continuous_scale='Blues')
                     fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
                     st.plotly_chart(fig, use_container_width=True)
                 with oc2:
                     fig = px.funnel(dc.head(10), x='العدد', y=dept_col_od, title='حجم الأقسام (Funnel)',
-                        color_discrete_sequence=['#E36414'])
+                        color_discrete_sequence=['#0176D3'])
                     fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
                     st.plotly_chart(fig, use_container_width=True)
 
@@ -8274,7 +8356,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                     st.dataframe(risk_df.head(20), use_container_width=True, hide_index=True)
 
                     fig = px.histogram(risk_df, x='مؤشر الخطر', nbins=10, title='توزيع مؤشر خطر الاستقالة',
-                        color_discrete_sequence=['#E36414'])
+                        color_discrete_sequence=['#0176D3'])
                     fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350)
                     st.plotly_chart(fig, use_container_width=True)
 
@@ -8310,7 +8392,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                             cohort = cohort.dropna().sort_values('سنة التعيين')
 
                             fig = px.bar(cohort, x='سنة التعيين', y='العدد', title='توزيع الموظفين حسب سنة التعيين (Cohort)',
-                                color='العدد', color_continuous_scale='teal')
+                                color='العدد', color_continuous_scale='Blues')
                             fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400, coloraxis_showscale=False)
                             st.plotly_chart(fig, use_container_width=True)
                             export_widget(cohort, "تحليل_Cohort", "coh1")
@@ -8404,7 +8486,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                     st.plotly_chart(fig, use_container_width=True)
                 with sc2:
                     fig = px.histogram(res_df, x='الدرجة', nbins=10, title='توزيع درجات المشاعر',
-                        color_discrete_sequence=['#E36414'])
+                        color_discrete_sequence=['#0176D3'])
                     fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350)
                     st.plotly_chart(fig, use_container_width=True)
 
@@ -8734,8 +8816,8 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 
                         def add_chart(fig):
                             nonlocal charts_html
-                            fig.update_layout(template='plotly_dark', paper_bgcolor='#1e1e2e', plot_bgcolor='#1e1e2e',
-                                height=350, font=dict(color='white', size=11), margin=dict(l=10,r=10,t=40,b=10),
+                            fig.update_layout(template='plotly_white', paper_bgcolor='white', plot_bgcolor='white',
+                                height=350, font=dict(color='#181818', size=11), margin=dict(l=10,r=10,t=40,b=10),
                                 showlegend=True)
                             chart_div = fig.to_html(full_html=False, include_plotlyjs='cdn')
                             charts_html += f"<div class='chart'>{chart_div}</div>"
@@ -8746,19 +8828,19 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                         if dept_col:
                             dept_counts = emp[dept_col].value_counts().head(12)
                             fig = px.bar(x=dept_counts.values, y=dept_counts.index, orientation='h',
-                                color=dept_counts.values, color_continuous_scale='teal',
+                                color=dept_counts.values, color_continuous_scale='Blues',
                                 labels={'x':'Count','y':''})
-                            fig.update_layout(title='Headcount by Department', template='plotly_dark',
-                                paper_bgcolor='#1e1e2e', plot_bgcolor='#1e1e2e', height=350,
+                            fig.update_layout(title='Headcount by Department', template='plotly_white',
+                                paper_bgcolor='white', plot_bgcolor='white', height=350,
                                 font=dict(color='white'), showlegend=False, coloraxis_showscale=False,
                                 margin=dict(l=10,r=10,t=40,b=10))
                             add_chart(fig)
 
                         # Chart 2: Salary distribution
                         if sal_col:
-                            fig = px.histogram(emp, x=sal_col, nbins=20, color_discrete_sequence=['#E36414'])
-                            fig.update_layout(title='Salary Distribution', template='plotly_dark',
-                                paper_bgcolor='#1e1e2e', plot_bgcolor='#1e1e2e', height=350,
+                            fig = px.histogram(emp, x=sal_col, nbins=20, color_discrete_sequence=['#0176D3'])
+                            fig.update_layout(title='Salary Distribution', template='plotly_white',
+                                paper_bgcolor='white', plot_bgcolor='white', height=350,
                                 font=dict(color='white'), margin=dict(l=10,r=10,t=40,b=10))
                             add_chart(fig)
 
@@ -8767,8 +8849,8 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                             nat_counts = emp[nat_col].value_counts().head(8)
                             fig = px.pie(values=nat_counts.values, names=nat_counts.index, hole=0.4,
                                 color_discrete_sequence=px.colors.qualitative.Set2)
-                            fig.update_layout(title='Nationality Distribution', template='plotly_dark',
-                                paper_bgcolor='#1e1e2e', plot_bgcolor='#1e1e2e', height=350,
+                            fig.update_layout(title='Nationality Distribution', template='plotly_white',
+                                paper_bgcolor='white', plot_bgcolor='white', height=350,
                                 font=dict(color='white'), margin=dict(l=10,r=10,t=40,b=10))
                             add_chart(fig)
 
@@ -8777,8 +8859,8 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                             stat_counts = emp[status_col].value_counts()
                             fig = px.pie(values=stat_counts.values, names=stat_counts.index, hole=0.5,
                                 color_discrete_sequence=['#27AE60','#E74C3C','#F39C12','#3498DB'])
-                            fig.update_layout(title='Employment Status', template='plotly_dark',
-                                paper_bgcolor='#1e1e2e', plot_bgcolor='#1e1e2e', height=350,
+                            fig.update_layout(title='Employment Status', template='plotly_white',
+                                paper_bgcolor='white', plot_bgcolor='white', height=350,
                                 font=dict(color='white'), margin=dict(l=10,r=10,t=40,b=10))
                             add_chart(fig)
 
@@ -8787,8 +8869,8 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                             loc_counts = emp[loc_col].value_counts().head(8)
                             fig = px.bar(x=loc_counts.index, y=loc_counts.values,
                                 color_discrete_sequence=['#2A9D8F'])
-                            fig.update_layout(title='Distribution by Location', template='plotly_dark',
-                                paper_bgcolor='#1e1e2e', plot_bgcolor='#1e1e2e', height=350,
+                            fig.update_layout(title='Distribution by Location', template='plotly_white',
+                                paper_bgcolor='white', plot_bgcolor='white', height=350,
                                 font=dict(color='white'), margin=dict(l=10,r=10,t=40,b=10))
                             add_chart(fig)
 
@@ -8797,8 +8879,8 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                             top_depts = emp[dept_col].value_counts().head(8).index
                             fig = px.box(emp[emp[dept_col].isin(top_depts)], x=dept_col, y=sal_col,
                                 color_discrete_sequence=['#E9C46A'])
-                            fig.update_layout(title='Salary Range by Department', template='plotly_dark',
-                                paper_bgcolor='#1e1e2e', plot_bgcolor='#1e1e2e', height=350,
+                            fig.update_layout(title='Salary Range by Department', template='plotly_white',
+                                paper_bgcolor='white', plot_bgcolor='white', height=350,
                                 font=dict(color='white'), margin=dict(l=10,r=10,t=40,b=10))
                             add_chart(fig)
 
@@ -8860,35 +8942,35 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 *{{margin:0;padding:0;box-sizing:border-box}}
-body{{font-family:'Inter',sans-serif;background:#0f0f1a;color:#e0e0e0;padding:0}}
-.header{{background:linear-gradient(135deg,#0F4C5C,#1A1A2E);padding:30px 40px;border-bottom:3px solid #E36414}}
+body{{font-family:'Inter',sans-serif;background:white;color:#e0e0e0;padding:0}}
+.header{{background:linear-gradient(135deg,#0176D3,#032D60);padding:30px 40px;border-bottom:3px solid #E36414}}
 .header h1{{font-size:1.8em;color:white;margin-bottom:5px}}
 .header .sub{{color:rgba(255,255,255,0.6);font-size:0.9em}}
 .header .logo{{float:right;width:50px;height:50px;background:linear-gradient(135deg,#E36414,#E9C46A);border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800;color:white;font-size:18px}}
 .container{{max-width:1200px;margin:0 auto;padding:20px}}
 .kpi-row{{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:20px 0}}
-.kpi{{background:linear-gradient(135deg,#1e1e2e,#252540);border-radius:12px;padding:18px;border-left:4px solid #E36414;position:relative;overflow:hidden}}
+.kpi{{background:linear-gradient(135deg,white,#252540);border-radius:12px;padding:18px;border-left:4px solid #E36414;position:relative;overflow:hidden}}
 .kpi::after{{content:'';position:absolute;top:0;right:0;width:60px;height:100%;background:linear-gradient(90deg,transparent,rgba(227,100,20,0.05))}}
 .kpi .value{{font-size:1.6em;font-weight:700;color:#E9C46A;margin-bottom:2px}}
 .kpi .label{{font-size:0.75em;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:1px}}
 .section{{margin:25px 0}}
 .section h2{{font-size:1.2em;color:#E9C46A;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.1)}}
 .charts-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(500px,1fr));gap:15px}}
-.chart{{background:#1e1e2e;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,0.05)}}
+.chart{{background:white;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,0.05)}}
 .chart img{{width:100%;height:auto;display:block}}
-table{{width:100%;border-collapse:collapse;background:#1e1e2e;border-radius:10px;overflow:hidden;margin:10px 0}}
+table{{width:100%;border-collapse:collapse;background:white;border-radius:10px;overflow:hidden;margin:10px 0}}
 thead{{background:#252540}} th{{padding:10px 12px;text-align:left;font-size:0.8em;text-transform:uppercase;letter-spacing:1px;color:#E9C46A;border-bottom:2px solid #E36414}}
 td{{padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.05);font-size:0.85em}}
 tr:hover{{background:rgba(227,100,20,0.05)}}
 .bar{{height:8px;background:linear-gradient(90deg,#E36414,#E9C46A);border-radius:4px}}
-.insights{{background:linear-gradient(135deg,#1a2332,#1e1e2e);border-radius:12px;padding:20px;border:1px solid rgba(42,157,143,0.3);margin:15px 0}}
+.insights{{background:linear-gradient(135deg,#1a2332,white);border-radius:12px;padding:20px;border:1px solid rgba(42,157,143,0.3);margin:15px 0}}
 .insights h2{{color:#2A9D8F;border-bottom-color:rgba(42,157,143,0.3)}}
 .insight{{padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:0.9em;line-height:1.6;display:flex;align-items:flex-start;gap:10px}}
 .insight:last-child{{border:none}}
 .dot{{width:6px;height:6px;background:#2A9D8F;border-radius:50%;margin-top:8px;flex-shrink:0}}
 .insight strong{{color:#E9C46A}}
 .footer{{text-align:center;padding:20px;color:rgba(255,255,255,0.3);font-size:0.75em;border-top:1px solid rgba(255,255,255,0.05);margin-top:30px}}
-@media print{{body{{background:white;color:#333}} .kpi{{border-color:#0F4C5C}} .kpi .value{{color:#0F4C5C}} .section h2{{color:#0F4C5C}} th{{color:#0F4C5C}}}}
+@media print{{body{{background:white;color:#333}} .kpi{{border-color:#0176D3}} .kpi .value{{color:#0176D3}} .section h2{{color:#0176D3}} th{{color:#0176D3}}}}
 </style>
 </head>
 <body>
@@ -8934,16 +9016,16 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
 
                         # 2. PDF (via HTML with print-optimized CSS)
                         with ex2:
-                            pdf_html = html.replace('#0f0f1a','#ffffff').replace('#1e1e2e','#f8f9fa').replace('#252540','#e9ecef')
+                            pdf_html = html.replace('white','#ffffff').replace('white','#f8f9fa').replace('#252540','#e9ecef')
                             pdf_html = pdf_html.replace("color:'white'","color:'#333'").replace("color:white","color:#333")
                             pdf_html = pdf_html.replace("color:'#e0e0e0'","color:'#333'").replace("color:#e0e0e0","color:#333")
                             # Add print CSS
                             pdf_css = """<style>@media print{body{background:white!important;color:#333!important}
-                            .kpi{border-color:#0F4C5C!important;background:#f8f9fa!important}
-                            .kpi .value{color:#0F4C5C!important} .kpi .label{color:#555!important}
-                            .header{background:#0F4C5C!important;-webkit-print-color-adjust:exact}
+                            .kpi{border-color:#0176D3!important;background:#f8f9fa!important}
+                            .kpi .value{color:#0176D3!important} .kpi .label{color:#555!important}
+                            .header{background:#0176D3!important;-webkit-print-color-adjust:exact}
                             .chart{break-inside:avoid;page-break-inside:avoid}
-                            .section h2{color:#0F4C5C!important}}</style>"""
+                            .section h2{color:#0176D3!important}}</style>"""
                             pdf_html = pdf_html.replace('</head>', pdf_css + '</head>')
                             # Auto-print script
                             pdf_html = pdf_html.replace('</body>', '</body>')
@@ -8957,7 +9039,7 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                             ox = io.BytesIO()
                             with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
                                 wb = w.book
-                                hdr_f = wb.add_format({'bold':True,'font_size':12,'bg_color':'#0F4C5C','font_color':'white','align':'center','border':1})
+                                hdr_f = wb.add_format({'bold':True,'font_size':12,'bg_color':'#0176D3','font_color':'white','align':'center','border':1})
                                 sub_f = wb.add_format({'bold':True,'font_size':10,'bg_color':'#264653','font_color':'white','align':'center','border':1})
                                 num_f = wb.add_format({'num_format':'#,##0.00','border':1,'align':'center'})
                                 pct_f = wb.add_format({'num_format':'0.0%','border':1,'align':'center'})
@@ -8992,7 +9074,7 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                                     # Chart 1: Dept headcount bar
                                     chart1 = wb.add_chart({'type':'bar'})
                                     chart1.add_series({'name':'Headcount','categories':['Dashboard',7,0,6+len(dept_counts),0],
-                                        'values':['Dashboard',7,1,6+len(dept_counts),1],'fill':{'color':'#2A9D8F'}})
+                                        'values':['Dashboard',7,1,6+len(dept_counts),1],'fill':{'color':'#0176D3'}})
                                     chart1.set_title({'name':'Headcount by Department'})
                                     chart1.set_style(10); chart1.set_size({'width':520,'height':320})
                                     chart1.set_legend({'none':True})
@@ -9002,7 +9084,7 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                                     if sal_col:
                                         chart2 = wb.add_chart({'type':'column'})
                                         chart2.add_series({'name':'Avg Salary','categories':['Dashboard',7,0,6+len(dept_counts),0],
-                                            'values':['Dashboard',7,2,6+len(dept_counts),2],'fill':{'color':'#E36414'}})
+                                            'values':['Dashboard',7,2,6+len(dept_counts),2],'fill':{'color':'#032D60'}})
                                         chart2.set_title({'name':'Average Salary by Department'})
                                         chart2.set_style(10); chart2.set_size({'width':520,'height':320})
                                         chart2.set_legend({'none':True})
@@ -9078,7 +9160,7 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                                         ws3.write(9+j, 1, cnt, wb.add_format({'border':1,'align':'center'}))
                                     chart6 = wb.add_chart({'type':'column'})
                                     chart6.add_series({'name':'Distribution','categories':['Salary Analysis',9,0,8+len(bands),0],
-                                        'values':['Salary Analysis',9,1,8+len(bands),1],'fill':{'color':'#E36414'}})
+                                        'values':['Salary Analysis',9,1,8+len(bands),1],'fill':{'color':'#032D60'}})
                                     chart6.set_title({'name':'Salary Distribution'})
                                     chart6.set_size({'width':600,'height':350}); chart6.set_legend({'none':True})
                                     ws3.insert_chart('D1', chart6)
@@ -9783,7 +9865,7 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                     save_test_result(result)
                     st.markdown("---")
                     type_info = MBTI_TYPES.get(mbti_type, {"name": mbti_type, "desc": "", "strengths": "", "careers": ""})
-                    st.markdown(f"<div style='text-align:center;padding:20px;background:linear-gradient(135deg,#0F4C5C,#1A1A2E);border-radius:14px;color:white;margin-bottom:20px'><h1 style='color:white;font-size:48px;margin:0'>{mbti_type}</h1><h3 style='color:#E9C46A;margin:8px 0'>{type_info['name']}</h3><p style='opacity:.8;margin:0'>{type_info['desc']}</p></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='text-align:center;padding:20px;background:linear-gradient(135deg,#0176D3,#032D60);border-radius:14px;color:white;margin-bottom:20px'><h1 style='color:white;font-size:48px;margin:0'>{mbti_type}</h1><h3 style='color:#E9C46A;margin:8px 0'>{type_info['name']}</h3><p style='opacity:.8;margin:0'>{type_info['desc']}</p></div>", unsafe_allow_html=True)
                     # Dimension bars
                     for dim_pair in ["EI","SN","TF","JP"]:
                         a, b = dim_pair[0], dim_pair[1]
