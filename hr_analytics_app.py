@@ -29,6 +29,7 @@ class ModelOrchestrator:
     MODELS = {
         'claude': {'url':'https://api.anthropic.com/v1/messages','model':'claude-3-5-sonnet-20241022','max_tokens':4000},
         'groq': {'url':'https://api.groq.com/openai/v1/chat/completions','model':'llama-3.3-70b-versatile','max_tokens':4000},
+        'openrouter': {'url':'https://openrouter.ai/api/v1/chat/completions','model':'meta-llama/llama-3.3-70b-instruct:free','max_tokens':4000},
     }
 
     # Prompt Templates (editable registry)
@@ -48,18 +49,23 @@ class ModelOrchestrator:
         provider = st.session_state.get('ai_provider', 'auto')
         claude_key = st.session_state.get('claude_api_key', '')
         groq_key = st.session_state.get('groq_api_key', '')
+        or_key = st.session_state.get('openrouter_api_key', '')
 
         if provider == 'auto':
-            # Route complex legal questions to Claude (stronger), general to Groq (free)
             legal_kw = ['مادة','قانون','نظام العمل','تعويض','فصل','إنهاء','article','labor law','termination']
             is_legal = any(kw in question_type.lower() for kw in legal_kw)
             if is_legal and claude_key: return 'claude'
             if groq_key: return 'groq'
+            if or_key: return 'openrouter'
             if claude_key: return 'claude'
             return None
         if provider == 'claude' and claude_key: return 'claude'
         if provider == 'groq' and groq_key: return 'groq'
-        return 'groq' if groq_key else ('claude' if claude_key else None)
+        if provider == 'openrouter' and or_key: return 'openrouter'
+        # Fallback chain
+        for p, k in [('groq',groq_key),('openrouter',or_key),('claude',claude_key)]:
+            if k: return p
+        return None
 
     def build_context(self, system_prompt, user_message, model_type='general'):
         """Assemble full context: system prompt + RAG + learned + legal docs."""
@@ -116,11 +122,12 @@ class ModelOrchestrator:
         # Estimate tokens
         self._token_estimate += len(enhanced_prompt.split()) + len(user_message.split())
 
-        # Try primary provider, fallback to other
+        # Try primary provider, fallback to others
         providers_to_try = [provider]
-        other = 'claude' if provider == 'groq' else 'groq'
-        other_key = st.session_state.get(f'{other}_api_key', '')
-        if other_key: providers_to_try.append(other)
+        all_providers = ['groq','openrouter','claude']
+        for p in all_providers:
+            if p != provider and st.session_state.get(f'{p}_api_key',''):
+                providers_to_try.append(p)
 
         for prov in providers_to_try:
             result, error = self._call_provider(prov, enhanced_prompt, messages)
@@ -140,17 +147,33 @@ class ModelOrchestrator:
         api_key = st.session_state.get(f'{provider}_api_key', '')
         if not api_key: return None, f"مفتاح {provider} غير موجود"
 
-        config = self.MODELS[provider]
+        config = self.MODELS.get(provider)
+        if not config: return None, f"مزود {provider} غير معروف"
 
-        if provider == 'groq':
+        if provider in ('groq', 'openrouter'):
             payload = json.dumps({
                 "model": config['model'], "max_tokens": config['max_tokens'],
                 "messages": [{"role":"system","content":system_prompt}] + messages,
                 "temperature": 0.3
             })
             headers = {'Content-Type':'application/json','Authorization':f'Bearer {api_key}'}
+            if provider == 'openrouter':
+                headers['HTTP-Referer'] = 'https://hr-analytics-risal.streamlit.app'
+                headers['X-Title'] = 'HR Analytics Platform'
+            try:
+                req = urllib.request.Request(config['url'], data=payload.encode('utf-8'), headers=headers, method='POST')
+                with urllib.request.urlopen(req, timeout=60) as resp:
+                    result = json.loads(resp.read().decode())
+                    text = result.get('choices',[{}])[0].get('message',{}).get('content','')
+                    return text, None
+            except urllib.request.HTTPError as he:
+                err = he.read().decode('utf-8',errors='ignore')[:200]
+                if he.code == 429: return None, "rate_limit"
+                return None, f"خطأ {provider} {he.code}: {err}"
+            except Exception as e:
+                return None, f"خطأ {provider}: {e}"
+
         else:  # claude
-            # Try with and without web search
             for use_web in [True, False]:
                 payload_dict = {
                     "model": config['model'], "max_tokens": config['max_tokens'],
@@ -164,32 +187,17 @@ class ModelOrchestrator:
                     req = urllib.request.Request(config['url'], data=payload.encode('utf-8'), headers=headers, method='POST')
                     with urllib.request.urlopen(req, timeout=90) as resp:
                         result = json.loads(resp.read().decode())
-                        if provider == 'groq':
-                            text = result.get('choices',[{}])[0].get('message',{}).get('content','')
-                        else:
-                            text = "\n".join([b.get('text','') for b in result.get('content',[]) if b.get('type')=='text'])
+                        text = "\n".join([b.get('text','') for b in result.get('content',[]) if b.get('type')=='text'])
                         return text, None
                 except urllib.request.HTTPError as he:
                     if use_web and he.code == 400: continue
                     err = he.read().decode('utf-8',errors='ignore')[:200]
-                    return None, f"خطأ {he.code}: {err}"
+                    if he.code == 429: return None, "rate_limit"
+                    return None, f"خطأ Claude {he.code}: {err}"
                 except Exception as e:
                     if use_web: continue
-                    return None, f"خطأ: {e}"
-            return None, "فشل الاتصال"
-
-        try:
-            req = urllib.request.Request(config['url'], data=payload.encode('utf-8'), headers=headers, method='POST')
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                result = json.loads(resp.read().decode())
-                text = result.get('choices',[{}])[0].get('message',{}).get('content','')
-                return text, None
-        except urllib.request.HTTPError as he:
-            err = he.read().decode('utf-8',errors='ignore')[:200]
-            if he.code == 429: return None, "rate_limit"
-            return None, f"خطأ {he.code}: {err}"
-        except Exception as e:
-            return None, f"خطأ: {e}"
+                    return None, f"خطأ Claude: {e}"
+            return None, "فشل الاتصال بـ Claude"
 
     def get_stats(self):
         """Return orchestrator statistics."""
@@ -7162,23 +7170,21 @@ function stopSpeak(){{speechSynthesis.cancel()}}
         # API Keys check + auto-load (single check per session)
         if '_ai_keys_loaded' not in st.session_state:
             st.session_state._ai_keys_loaded = True
-            # Load Claude key
+            # Load all API keys from secrets
             try: st.session_state.claude_api_key = st.secrets.get("anthropic", {}).get("api_key", "")
             except: st.session_state.setdefault('claude_api_key', '')
-            # Load Groq key
             try: st.session_state.groq_api_key = st.secrets.get("groq", {}).get("api_key", "")
             except: st.session_state.setdefault('groq_api_key', '')
+            try: st.session_state.openrouter_api_key = st.secrets.get("openrouter", {}).get("api_key", "")
+            except: st.session_state.setdefault('openrouter_api_key', '')
             # Load from DB if not in secrets
             try:
                 conn = get_conn(); c = conn.cursor()
-                if not st.session_state.get('claude_api_key'):
-                    c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("claude_api_key",))
-                    row = c.fetchone()
-                    if row: st.session_state.claude_api_key = row[0]
-                if not st.session_state.get('groq_api_key'):
-                    c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("groq_api_key",))
-                    row = c.fetchone()
-                    if row: st.session_state.groq_api_key = row[0]
+                for pk, sk in [('claude_api_key','claude_api_key'),('groq_api_key','groq_api_key'),('openrouter_api_key','openrouter_api_key')]:
+                    if not st.session_state.get(pk):
+                        c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", (sk,))
+                        row = c.fetchone()
+                        if row: st.session_state[pk] = row[0]
                 # Load legal docs context
                 legal_ctx = ""
                 for dk in ["labor_law","labor_regulations","social_insurance","health_insurance","minister_decisions"]:
@@ -7195,36 +7201,43 @@ function stopSpeak(){{speechSynthesis.cancel()}}
         # Check if any key is available
         has_claude = bool(st.session_state.get('claude_api_key'))
         has_groq = bool(st.session_state.get('groq_api_key'))
+        has_or = bool(st.session_state.get('openrouter_api_key'))
 
-        if not has_claude and not has_groq:
+        if not has_claude and not has_groq and not has_or:
             st.warning("⚠️ يرجى إدخال API Key واحد على الأقل")
-            kc1, kc2 = st.columns(2)
+            kc1, kc2, kc3 = st.columns(3)
             with kc1:
                 st.markdown("### 🟢 Groq (مجاني)")
                 groq_input = st.text_input("🔑 Groq API Key:", type="password", key="groq_key_input",
                     help="مجاني من https://console.groq.com/")
                 if groq_input:
-                    st.session_state.groq_api_key = groq_input
-                    st.rerun()
-                st.caption("مجاني تماماً + Llama 3.3 70B")
+                    st.session_state.groq_api_key = groq_input; st.rerun()
+                st.caption("Llama 3.3 70B مجاني")
             with kc2:
+                st.markdown("### 🟠 OpenRouter (مجاني)")
+                or_input = st.text_input("🔑 OpenRouter Key:", type="password", key="or_key_input",
+                    help="مجاني من https://openrouter.ai/")
+                if or_input:
+                    st.session_state.openrouter_api_key = or_input; st.rerun()
+                st.caption("Llama 3.3 70B مجاني")
+            with kc3:
                 st.markdown("### 🔵 Claude (مدفوع)")
-                claude_input = st.text_input("🔑 Anthropic API Key:", type="password", key="claude_key_input",
+                claude_input = st.text_input("🔑 Claude Key:", type="password", key="claude_key_input",
                     help="من https://console.anthropic.com/")
                 if claude_input:
-                    st.session_state.claude_api_key = claude_input
-                    st.rerun()
-                st.caption("أقوى وأدق، ~$3/مليون token")
-            st.info("💡 أضف في Streamlit Secrets:\n```\n[groq]\napi_key = \"gsk_...\"\n[anthropic]\napi_key = \"sk-ant-...\"\n```")
+                    st.session_state.claude_api_key = claude_input; st.rerun()
+                st.caption("الأقوى، ~$3/مليون token")
+            st.info("💡 أضف في Streamlit Secrets:\n```\n[groq]\napi_key = \"gsk_...\"\n[openrouter]\napi_key = \"sk-or-...\"\n[anthropic]\napi_key = \"sk-ant-...\"\n```")
             return
 
-        # Provider selector in sidebar-like area
-        provider_label = "🟢 Llama (Groq مجاني)" if st.session_state.ai_provider == 'groq' else ("🔵 Claude (Anthropic)" if st.session_state.ai_provider == 'claude' else "🔄 تلقائي (Groq أولاً)")
+        # Provider selector
         available_providers = ["🔄 تلقائي"]
-        if has_groq: available_providers.append("🟢 Groq (Llama 3 مجاني)")
-        if has_claude: available_providers.append("🔵 Claude (Anthropic)")
+        if has_groq: available_providers.append("🟢 Groq (Llama)")
+        if has_or: available_providers.append("🟠 OpenRouter (Llama)")
+        if has_claude: available_providers.append("🔵 Claude")
         sel_provider = st.radio("🤖 المحرك:", available_providers, horizontal=True, key="provider_sel")
         if "Groq" in sel_provider: st.session_state.ai_provider = 'groq'
+        elif "OpenRouter" in sel_provider: st.session_state.ai_provider = 'openrouter'
         elif "Claude" in sel_provider: st.session_state.ai_provider = 'claude'
         else: st.session_state.ai_provider = 'auto'
 
@@ -7701,14 +7714,14 @@ function stopSpeak(){{speechSynthesis.cancel()}}
             # API Key management
             st.markdown("---")
             st.markdown("### 🔑 إعدادات API Keys")
-            kc1, kc2 = st.columns(2)
+            kc1, kc2, kc3 = st.columns(3)
             with kc1:
                 st.markdown("**🟢 Groq (مجاني)**")
                 cur_groq = st.session_state.get('groq_api_key','')
                 masked_g = f"gsk_...{cur_groq[-6:]}" if len(cur_groq)>8 else "غير مُعيّن"
                 st.caption(f"الحالي: {masked_g}")
                 new_groq = st.text_input("Groq API Key:", type="password", key="new_groq_key")
-                if st.button("💾 حفظ Groq Key", key="save_groq"):
+                if st.button("💾 حفظ Groq", key="save_groq"):
                     if new_groq:
                         st.session_state.groq_api_key = new_groq
                         try:
@@ -7716,14 +7729,29 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                             _upsert_config(c, "groq_api_key", new_groq)
                             conn.commit(); conn.close()
                         except: pass
-                        st.success("✅ تم حفظ Groq API Key")
+                        st.success("✅ تم الحفظ")
             with kc2:
+                st.markdown("**🟠 OpenRouter (مجاني)**")
+                cur_or = st.session_state.get('openrouter_api_key','')
+                masked_o = f"sk-or-...{cur_or[-6:]}" if len(cur_or)>8 else "غير مُعيّن"
+                st.caption(f"الحالي: {masked_o}")
+                new_or = st.text_input("OpenRouter Key:", type="password", key="new_or_key")
+                if st.button("💾 حفظ OpenRouter", key="save_or"):
+                    if new_or:
+                        st.session_state.openrouter_api_key = new_or
+                        try:
+                            conn = get_conn(); c = conn.cursor()
+                            _upsert_config(c, "openrouter_api_key", new_or)
+                            conn.commit(); conn.close()
+                        except: pass
+                        st.success("✅ تم الحفظ")
+            with kc3:
                 st.markdown("**🔵 Claude (مدفوع)**")
                 cur_claude = st.session_state.get('claude_api_key','')
                 masked_c = f"sk-ant-...{cur_claude[-8:]}" if len(cur_claude)>10 else "غير مُعيّن"
                 st.caption(f"الحالي: {masked_c}")
                 new_key = st.text_input("Claude API Key:", type="password", key="new_api_key")
-                if st.button("💾 حفظ Claude Key", key="save_api"):
+                if st.button("💾 حفظ Claude", key="save_api"):
                     if new_key:
                         st.session_state.claude_api_key = new_key
                         try:
@@ -7731,7 +7759,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                             _upsert_config(c, "claude_api_key", new_key)
                             conn.commit(); conn.close()
                         except: pass
-                        st.success("✅ تم حفظ Claude API Key")
+                        st.success("✅ تم الحفظ")
 
 
     # =========================================
