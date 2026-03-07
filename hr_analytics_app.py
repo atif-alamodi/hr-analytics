@@ -29,7 +29,7 @@ class ModelOrchestrator:
     MODELS = {
         'claude': {'url':'https://api.anthropic.com/v1/messages','model':'claude-3-5-sonnet-20241022','max_tokens':4000},
         'groq': {'url':'https://api.groq.com/openai/v1/chat/completions','model':'llama-3.3-70b-versatile','max_tokens':4000},
-        'openrouter': {'url':'https://openrouter.ai/api/v1/chat/completions','model':'meta-llama/llama-3.3-70b-instruct:free','max_tokens':2000},
+        'openrouter': {'url':'https://openrouter.ai/api/v1/chat/completions','model':'google/gemma-3-27b-it:free','max_tokens':2000},
     }
 
     # Prompt Templates (editable registry)
@@ -40,12 +40,24 @@ class ModelOrchestrator:
     }
 
     # Context size limits per provider
-    CONTEXT_LIMITS = {'claude': 15000, 'groq': 12000, 'openrouter': 6000}
+    CONTEXT_LIMITS = {'claude': 15000, 'groq': 12000, 'openrouter': 4000}
 
     def __init__(self):
         self._cache = {}
         self._call_count = 0
         self._token_estimate = 0
+        # Pre-cached instant responses for common questions
+        self._instant = {
+            "ما هي حقوقي عند الفصل وفق المادة 77؟": "**المادة 77 من نظام العمل السعودي:**\n\nإذا أُنهي العقد لسبب غير مشروع، يحق للطرف المتضرر تعويض:\n\n**عقد غير محدد المدة:** أجر 15 يوماً عن كل سنة خدمة\n**عقد محدد المدة:** أجر المدة الباقية من العقد\n**الحد الأدنى:** لا يقل التعويض عن أجر شهرين في كلا الحالتين\n\n**بالإضافة إلى:**\n- مكافأة نهاية الخدمة (المادة 84)\n- بدل إجازة غير مستخدمة\n- أجر الشهر الأخير كاملاً\n- شهادة خبرة",
+            "متى يتحول العقد المحدد لغير محدد المدة؟": "**المادة 55 من نظام العمل:**\n\nيتحول العقد محدد المدة إلى غير محدد في الحالات التالية:\n\n1. **التجديد 3 مرات متتالية** أو بلوغ 4 سنوات أيهما أقل\n2. **استمرار العمل** بعد انتهاء العقد دون تجديد\n3. **نص العقد** على التحول التلقائي\n\nيحق للعامل بعد التحول الاستفادة من مزايا العقد غير المحدد في الإشعار والتعويض.",
+            "كيف تُحسب مكافأة نهاية الخدمة؟": "**المادة 84 من نظام العمل:**\n\n**الحساب:**\n- **أول 5 سنوات:** نصف راتب شهري عن كل سنة\n- **بعد 5 سنوات:** راتب شهري كامل عن كل سنة\n\n**عند الاستقالة (المادة 85):**\n- أقل من سنتين: لا يستحق\n- 2-5 سنوات: ثلث المكافأة\n- 5-10 سنوات: ثلثا المكافأة\n- أكثر من 10 سنوات: المكافأة كاملة\n\n**المدة:** يُلزم صاحب العمل بدفعها خلال أسبوع (المادة 88).",
+            "ما هي نسبة اشتراكات التأمينات الاجتماعية؟": "**نسب الاشتراك في التأمينات الاجتماعية (GOSI):**\n\n**السعوديون:**\n- المعاشات: 9.75% (الموظف) + 9.75% (صاحب العمل)\n- الأخطار المهنية: 2% (صاحب العمل)\n- ساند (التعطل): 0.75% + 0.75%\n- **إجمالي خصم الموظف: 10.5%**\n- **إجمالي على الشركة: 12.5%**\n\n**غير السعوديين:**\n- الأخطار المهنية فقط: 2% (صاحب العمل)\n- لا يوجد خصم على الموظف",
+            "ما هي فترة التجربة وشروطها؟": "**المادة 53 من نظام العمل:**\n\n- **المدة الأساسية:** 90 يوماً كحد أقصى\n- **التمديد:** يمكن تمديدها إلى 180 يوماً بموافقة مكتوبة\n- **لا تشمل:** إجازة عيد الفطر والأضحى والإجازات المرضية\n- **حق الإنهاء:** لأي طرف إنهاء العقد خلالها بدون تعويض أو مكافأة\n- **الإشعار:** لا يشترط إشعار مسبق\n- **لا تتكرر:** لا يجوز وضع فترة تجربة أكثر من مرة لدى نفس صاحب العمل",
+            "ما هي حقوق المرأة العاملة في نظام العمل؟": "**حقوق المرأة في نظام العمل السعودي:**\n\n- **إجازة وضع:** 10 أسابيع (المادة 151)\n- **ساعة رضاعة:** ساعة يومياً لمدة 24 شهراً\n- **حماية من الفصل:** أثناء الحمل وإجازة الوضع\n- **إجازة وفاة زوج:** 4 أشهر و10 أيام (عدة)\n- **المساواة:** أجر متساوٍ للعمل المتساوي\n- **ظروف العمل:** بيئة آمنة ومناسبة\n- **ساعات العمل:** نفس الأحكام مع مراعاة خصوصيتها",
+            "كيف أبني خطة استقطاب فعالة؟": "**خطة استقطاب فعالة (Talent Acquisition Strategy):**\n\n**1. التحليل:**\n- تحديد الاحتياج الفعلي (Workforce Planning)\n- تحليل سوق العمل والرواتب\n\n**2. التصميم:**\n- وصف وظيفي واضح ومحدد\n- Employee Value Proposition (EVP)\n- قنوات الاستقطاب (LinkedIn, مواقع توظيف, تزكيات)\n\n**3. التنفيذ:**\n- ATS لتتبع المتقدمين\n- مقابلات منظمة (Structured Interviews)\n- تقييم الكفاءات (Competency Assessment)\n\n**4. القياس:**\n- Time-to-Hire\n- Cost-per-Hire\n- Quality of Hire\n- Source Effectiveness",
+            "ما الفرق بين OKRs و KPIs؟": "**OKRs vs KPIs:**\n\n**KPIs (مؤشرات الأداء الرئيسية):**\n- تقيس الأداء المستمر\n- أرقام محددة (مثل: معدل دوران 15%)\n- تتبع الوضع الحالي\n- ثابتة نسبياً\n\n**OKRs (الأهداف والنتائج الرئيسية):**\n- تحدد أهداف طموحة للمستقبل\n- هدف + 3-5 نتائج قابلة للقياس\n- تتغير كل ربع سنة\n- طموحة (70% إنجاز = ممتاز)\n\n**مثال HR:**\n- **KPI:** معدل الدوران = 12%\n- **OKR:** هدف: تحسين الاحتفاظ بالموظفين\n  - NR1: خفض الدوران من 15% إلى 10%\n  - NR2: رفع رضا الموظفين إلى 85%\n  - NR3: تنفيذ برنامج تطوير لـ 50 موظف",
+            "ما هو نموذج Phillips ROI للتدريب؟": "**نموذج Phillips ROI (5 مستويات):**\n\n**المستوى 1: Reaction (رد الفعل)**\n- رضا المتدربين عن البرنامج\n\n**المستوى 2: Learning (التعلم)**\n- المعرفة والمهارات المكتسبة\n\n**المستوى 3: Application (التطبيق)**\n- مدى تطبيق ما تعلموه في العمل\n\n**المستوى 4: Impact (الأثر)**\n- التأثير على مؤشرات الأعمال\n\n**المستوى 5: ROI (العائد على الاستثمار)**\n- ROI % = (الفوائد - التكاليف) / التكاليف × 100\n\n**مثال:** تدريب بتكلفة 50,000 ريال أدى لزيادة إنتاجية بقيمة 150,000 ريال\nROI = (150,000 - 50,000) / 50,000 × 100 = **200%**",
+        }
 
     def select_provider(self, question_type='general'):
         """Smart model routing based on question type and availability."""
@@ -104,7 +116,12 @@ class ModelOrchestrator:
 
     def call(self, system_prompt, user_message, chat_history=None, model_type='general'):
         """Main orchestrated call with routing, context, caching, fallback."""
-        # Check cache
+        # Check instant cached responses first (< 1 second)
+        for q, a in self._instant.items():
+            if user_message.strip() == q.strip() or q in user_message:
+                return a, None
+
+        # Check response cache
         cache_key = self.get_cache_key(user_message, model_type)
         if cache_key in self._cache:
             return self._cache[cache_key], None
@@ -119,8 +136,9 @@ class ModelOrchestrator:
         # Build messages
         messages = []
         if chat_history:
-            for msg in chat_history[-10:]:
-                messages.append({"role": msg['role'], "content": msg['content']})
+            # Limit history for speed (last 4 messages only)
+            for msg in chat_history[-4:]:
+                messages.append({"role": msg['role'], "content": msg['content'][:500]})
         messages.append({"role": "user", "content": user_message})
 
         # Estimate tokens
@@ -170,8 +188,9 @@ class ModelOrchestrator:
                 headers['HTTP-Referer'] = 'https://hr-analytics-risal.streamlit.app'
                 headers['X-Title'] = 'HR Analytics Platform'
             try:
+                timeout = 30 if provider == 'openrouter' else 60
                 req = urllib.request.Request(config['url'], data=payload.encode('utf-8'), headers=headers, method='POST')
-                with urllib.request.urlopen(req, timeout=60) as resp:
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
                     result = json.loads(resp.read().decode())
                     text = result.get('choices',[{}])[0].get('message',{}).get('content','')
                     return text, None
@@ -2441,7 +2460,7 @@ def main():
         elif section == "⚖️ حاسبة المستحقات":
             page = "⚖️ حاسبة المستحقات"
         elif section == "🎯 التوظيف":
-            page = st.radio("📌", ["📋 تخطيط التوظيف","🤖 Benchmark ذكاء اصطناعي","🌍 مقارنة الأسواق","📊 متابعة التوظيف","📥 تصدير التوظيف"], label_visibility="collapsed")
+            page = st.radio("📌", ["📋 تخطيط التوظيف","🤖 Benchmark ذكاء اصطناعي","🌍 مقارنة الأسواق","📊 متابعة التوظيف","📄 تحليل السير الذاتية","🎤 تحليل المقابلات","📋 ATS تتبع المتقدمين","📥 تصدير التوظيف"], label_visibility="collapsed")
         elif section == "🚀 Onboarding":
             page = st.radio("📌", ["🚀 إنشاء Onboarding","📋 خطة 30/60/90","👥 متابعة الموظفين الجدد","📊 تحليلات Onboarding","🎬 عرض تقديمي AI","🏢 معلومات الشركة","📥 تصدير Onboarding"], label_visibility="collapsed")
         elif section == "📜 العقود":
@@ -5658,6 +5677,368 @@ def main():
 
 
             export_widget(pd.DataFrame(st.session_state.get("recruit_tracking",[])) if st.session_state.get("recruit_tracking") else (data if len(data)>0 else None), "متابعة_التوظيف", "rec3")
+
+        # ===== CV ANALYSIS =====
+        elif page == "📄 تحليل السير الذاتية":
+            hdr("📄 تحليل السير الذاتية بالذكاء الاصطناعي","تقييم المرشحين مقابل الوصف الوظيفي واحتياجات الشركة")
+
+            st.markdown("### 📋 الوصف الوظيفي")
+            jd_method = st.radio("مصدر الوصف:", ["كتابة يدوية","رفع ملف"], horizontal=True, key="jd_src")
+            if jd_method == "كتابة يدوية":
+                jd_text = st.text_area("الوصف الوظيفي:", height=150, key="jd_txt",
+                    placeholder="المسمى: محلل موارد بشرية\nالمتطلبات: خبرة 3 سنوات، شهادة PHRi، إجادة Excel وPower BI...")
+            else:
+                jd_file = st.file_uploader("ارفع الوصف الوظيفي:", type=["pdf","docx","txt"], key="jd_file")
+                jd_text = ""
+                if jd_file:
+                    if jd_file.name.endswith('.txt'):
+                        jd_text = jd_file.read().decode('utf-8',errors='ignore')
+                    elif jd_file.name.endswith('.docx'):
+                        try:
+                            from docx import Document
+                            doc = Document(io.BytesIO(jd_file.read()))
+                            jd_text = "\n".join([p.text for p in doc.paragraphs])
+                        except: st.error("تعذر قراءة الملف")
+                    elif jd_file.name.endswith('.pdf'):
+                        try:
+                            import pdfplumber
+                            with pdfplumber.open(io.BytesIO(jd_file.read())) as pdf:
+                                jd_text = "\n".join([p.extract_text() or '' for p in pdf.pages])
+                        except: st.error("تعذر قراءة PDF")
+
+            st.markdown("### 📄 السيرة الذاتية")
+            cv_file = st.file_uploader("ارفع السيرة الذاتية:", type=["pdf","docx","txt"], key="cv_file")
+            cv_text = ""
+            if cv_file:
+                if cv_file.name.endswith('.txt'):
+                    cv_text = cv_file.read().decode('utf-8',errors='ignore')
+                elif cv_file.name.endswith('.docx'):
+                    try:
+                        from docx import Document
+                        doc = Document(io.BytesIO(cv_file.read()))
+                        cv_text = "\n".join([p.text for p in doc.paragraphs])
+                    except: pass
+                elif cv_file.name.endswith('.pdf'):
+                    try:
+                        import pdfplumber
+                        with pdfplumber.open(io.BytesIO(cv_file.read())) as pdf:
+                            cv_text = "\n".join([p.extract_text() or '' for p in pdf.pages])
+                    except: pass
+                if cv_text: st.success(f"✅ تم قراءة {len(cv_text)} حرف")
+
+            # Company context
+            company_goals = st.text_area("🏢 أهداف واحتياجات الشركة (اختياري):", height=80, key="cv_goals",
+                placeholder="شركة تقنية معلومات، تحتاج تعزيز فريق HR بالتحليلات والأتمتة...")
+
+            if st.button("🤖 تحليل السيرة الذاتية", type="primary", use_container_width=True, key="cv_btn") and cv_text:
+                with st.spinner("جاري التحليل الذكي..."):
+                    prompt = f"""حلل السيرة الذاتية التالية وقدم تقريراً مفصلاً بالعربية:
+
+**السيرة الذاتية:**
+{cv_text[:3000]}
+
+**الوصف الوظيفي:**
+{jd_text[:1500] if jd_text else 'غير محدد'}
+
+**أهداف الشركة:**
+{company_goals[:500] if company_goals else 'غير محدد'}
+
+قدم التحليل بالتنسيق التالي:
+1. **أفضل مميزات المرشح** (3-5 نقاط)
+2. **أفضل المهارات** مع تقييم كل مهارة من 10
+3. **أقوى الخبرات** وأقوى جوانبها
+4. **نقاط القوة** و**نقاط الضعف**
+5. **درجة المطابقة للوصف الوظيفي** من 100
+6. **درجة التوافق مع أهداف الشركة** من 100
+7. **الدرجة النهائية** من 100
+8. **التوصية** (مناسب جداً / مناسب / يحتاج تطوير / غير مناسب)
+أعط كل درجة كرقم فقط."""
+
+                    response, error = call_ai_api(prompt, prompt, model_type="hr")
+                    if response:
+                        st.session_state['_cv_result'] = response
+                        st.session_state['_cv_name'] = cv_file.name if cv_file else "مرشح"
+
+            # Display results
+            if '_cv_result' in st.session_state:
+                result = st.session_state['_cv_result']
+                st.markdown("### 📊 نتائج التحليل")
+                st.markdown(result)
+
+                # Extract scores for charts
+                import re
+                scores = re.findall(r'(\d{1,3})\s*(?:من\s*100|/100|%)', result)
+                scores = [int(s) for s in scores if 0 <= int(s) <= 100]
+
+                if scores:
+                    st.markdown("### 📊 الرسوم البيانية")
+                    labels = ["المطابقة للوظيفة","التوافق مع الشركة","الدرجة النهائية"][:len(scores)]
+                    sc1, sc2 = st.columns(2)
+                    with sc1:
+                        score_df = pd.DataFrame({"المعيار":labels,"الدرجة":scores[:len(labels)]})
+                        fig = px.bar(score_df, x='المعيار', y='الدرجة', title='تقييم المرشح',
+                            color='الدرجة', color_continuous_scale='RdYlGn', range_y=[0,100])
+                        fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350, coloraxis_showscale=False)
+                        st.plotly_chart(fig, use_container_width=True)
+                    with sc2:
+                        fig = go.Figure(go.Indicator(mode="gauge+number", value=scores[-1] if scores else 0,
+                            title={'text':'الدرجة النهائية'},
+                            gauge={'axis':{'range':[0,100]},'bar':{'color':'#E36414'},
+                                'steps':[{'range':[0,40],'color':'#EF4444'},{'range':[40,70],'color':'#F59E0B'},{'range':[70,100],'color':'#22C55E'}]}))
+                        fig.update_layout(height=350)
+                        st.plotly_chart(fig, use_container_width=True)
+
+                # Skills radar
+                skill_scores = re.findall(r'(\w[\w\s]+?)[\s:]+(\d{1,2})\s*(?:من\s*10|/10)', result)
+                if skill_scores:
+                    sk_df = pd.DataFrame(skill_scores, columns=['المهارة','الدرجة'])
+                    sk_df['الدرجة'] = sk_df['الدرجة'].astype(int)
+                    fig = go.Figure()
+                    vals = sk_df['الدرجة'].tolist() + [sk_df['الدرجة'].iloc[0]]
+                    cats = sk_df['المهارة'].tolist() + [sk_df['المهارة'].iloc[0]]
+                    fig.add_trace(go.Scatterpolar(r=vals, theta=cats, fill='toself', line=dict(color='#E36414')))
+                    fig.update_layout(polar=dict(radialaxis=dict(range=[0,10])), title='تقييم المهارات',
+                        font=dict(family="Noto Sans Arabic"), height=400)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                # Save to session for interview cross-reference
+                st.session_state['_last_cv_analysis'] = result
+
+                export_widget(pd.DataFrame([{"التحليل": result}]), "تحليل_السيرة_الذاتية", "cv1")
+
+        # ===== INTERVIEW ANALYSIS =====
+        elif page == "🎤 تحليل المقابلات":
+            hdr("🎤 تحليل المقابلات والاختبارات بالذكاء الاصطناعي","تحليل ذكي للأسئلة والإجابات مع موائمة السيرة الذاتية")
+
+            st.markdown("### ❓ الأسئلة")
+            questions_text = st.text_area("أدخل الأسئلة (سؤال واحد في كل سطر):", height=150, key="intv_q",
+                placeholder="1. لماذا تريد العمل في مجال الموارد البشرية؟\n2. كيف تتعامل مع موظف ذو أداء ضعيف؟\n3. ما خبرتك في أنظمة الرواتب؟")
+
+            st.markdown("### 💬 إجابات المرشح")
+            answers_text = st.text_area("أدخل الإجابات (إجابة واحدة في كل سطر بنفس ترتيب الأسئلة):", height=150, key="intv_a",
+                placeholder="1. لدي شغف بتطوير بيئة العمل...\n2. أبدأ بمحادثة خاصة لفهم الأسباب...\n3. عملت 3 سنوات على نظام مدد...")
+
+            # Company context
+            intv_jd = st.text_area("📋 الوصف الوظيفي:", height=80, key="intv_jd", placeholder="المسمى والمتطلبات...")
+            intv_goals = st.text_area("🏢 أهداف الشركة:", height=60, key="intv_goals", placeholder="شركة تقنية تسعى لأتمتة HR...")
+
+            # Cross-reference with CV
+            has_cv = '_last_cv_analysis' in st.session_state
+            if has_cv:
+                ibox("✅ تم العثور على تحليل سيرة ذاتية سابق. سيتم موائمته مع تحليل المقابلة.", "success")
+
+            if st.button("🤖 تحليل المقابلة", type="primary", use_container_width=True, key="intv_btn") and questions_text and answers_text:
+                with st.spinner("جاري التحليل الذكي..."):
+                    cv_ref = f"\n\n**تحليل السيرة الذاتية السابق:**\n{st.session_state.get('_last_cv_analysis','')[:1500]}" if has_cv else ""
+
+                    prompt = f"""حلل المقابلة الشخصية التالية وقدم تقريراً مفصلاً بالعربية:
+
+**الأسئلة:**
+{questions_text[:2000]}
+
+**الإجابات:**
+{answers_text[:2000]}
+
+**الوصف الوظيفي:** {intv_jd[:800] if intv_jd else 'غير محدد'}
+**أهداف الشركة:** {intv_goals[:500] if intv_goals else 'غير محدد'}
+{cv_ref}
+
+قدم التحليل:
+1. **تقييم كل إجابة** (من 10) مع وصف
+2. **نقاط القوة في المقابلة** (3-5 نقاط)
+3. **نقاط الضعف** (2-3 نقاط)
+4. **مدى تطابق الإجابات مع متطلبات الوظيفة** من 100
+5. **مدى توافق المرشح مع أهداف الشركة** من 100
+6. **التقييم العام للمقابلة** من 100
+7. **التوصية النهائية** (قبول / قبول مشروط / رفض)
+أعط كل درجة كرقم."""
+
+                    response, error = call_ai_api(prompt, prompt, model_type="hr")
+                    if response:
+                        st.session_state['_intv_result'] = response
+
+            if '_intv_result' in st.session_state:
+                result = st.session_state['_intv_result']
+                st.markdown("### 📊 نتائج تحليل المقابلة")
+                st.markdown(result)
+
+                import re
+                scores = re.findall(r'(\d{1,3})\s*(?:من\s*100|/100)', result)
+                scores = [int(s) for s in scores if 0 <= int(s) <= 100]
+                q_scores = re.findall(r'(\d{1,2})\s*(?:من\s*10|/10)', result)
+                q_scores = [int(s) for s in q_scores if 0 <= int(s) <= 10]
+
+                ic1, ic2 = st.columns(2)
+                with ic1:
+                    if scores:
+                        labels = ["مطابقة الوظيفة","توافق الشركة","التقييم العام"][:len(scores)]
+                        fig = go.Figure(go.Indicator(mode="gauge+number", value=scores[-1],
+                            title={'text':'التقييم العام للمقابلة'},
+                            gauge={'axis':{'range':[0,100]},'bar':{'color':'#2A9D8F'},
+                                'steps':[{'range':[0,40],'color':'#EF4444'},{'range':[40,70],'color':'#F59E0B'},{'range':[70,100],'color':'#22C55E'}]}))
+                        fig.update_layout(height=350)
+                        st.plotly_chart(fig, use_container_width=True)
+                with ic2:
+                    if q_scores:
+                        q_df = pd.DataFrame({"السؤال":[f"س{i+1}" for i in range(len(q_scores))],"الدرجة":q_scores})
+                        fig = px.bar(q_df, x='السؤال', y='الدرجة', title='تقييم الإجابات',
+                            color='الدرجة', color_continuous_scale='RdYlGn', range_y=[0,10])
+                        fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350, coloraxis_showscale=False)
+                        st.plotly_chart(fig, use_container_width=True)
+
+                # Combined CV + Interview score
+                if has_cv and scores:
+                    st.markdown("### 🎯 التقييم المتكامل (سيرة ذاتية + مقابلة)")
+                    cv_score = scores[0] if scores else 70
+                    intv_score = scores[-1] if scores else 70
+                    combined = round(cv_score * 0.4 + intv_score * 0.6)
+                    ck1,ck2,ck3 = st.columns(3)
+                    with ck1: kpi("📄 السيرة الذاتية (40%)", f"{cv_score}/100")
+                    with ck2: kpi("🎤 المقابلة (60%)", f"{intv_score}/100")
+                    with ck3: kpi("🎯 الدرجة النهائية", f"{combined}/100")
+
+                    rec = "✅ مناسب جداً" if combined >= 80 else ("✅ مناسب" if combined >= 65 else ("⚠️ يحتاج تطوير" if combined >= 50 else "❌ غير مناسب"))
+                    st.markdown(f"### التوصية: **{rec}**")
+
+                export_widget(pd.DataFrame([{"التحليل": result}]), "تحليل_المقابلة", "intv1")
+
+        # ===== ATS (Applicant Tracking System) =====
+        elif page == "📋 ATS تتبع المتقدمين":
+            hdr("📋 نظام تتبع المتقدمين ATS","Applicant Tracking System مع تقييم ذكي")
+
+            if 'ats_candidates' not in st.session_state:
+                st.session_state.ats_candidates = []
+
+            # Job posting
+            st.markdown("### 📋 الوظيفة المطلوبة")
+            ac1, ac2 = st.columns(2)
+            with ac1:
+                ats_title = st.text_input("المسمى الوظيفي:", key="ats_title", placeholder="محلل موارد بشرية")
+                ats_dept = st.text_input("القسم:", key="ats_dept", placeholder="الموارد البشرية")
+            with ac2:
+                ats_level = st.selectbox("المستوى:", ["مبتدئ","متوسط","أول","مدير","تنفيذي"], key="ats_level")
+                ats_type = st.selectbox("نوع التوظيف:", ["دوام كامل","دوام جزئي","عقد مؤقت","عن بُعد"], key="ats_type")
+
+            ats_req = st.text_area("المتطلبات والمهارات:", height=100, key="ats_req",
+                placeholder="خبرة 3+ سنوات في HR\nشهادة PHRi أو SHRM\nإجادة Excel وPower BI\nمعرفة نظام العمل السعودي")
+            ats_company = st.text_area("أهداف الشركة:", height=60, key="ats_company2",
+                placeholder="شركة تقنية تسعى لبناء فريق HR يعتمد على البيانات")
+
+            st.markdown("---")
+            st.markdown("### 👥 إضافة مرشح")
+            with st.form("ats_form", clear_on_submit=True):
+                af1, af2, af3 = st.columns(3)
+                with af1:
+                    cand_name = st.text_input("اسم المرشح:", key="cand_name")
+                    cand_email = st.text_input("البريد:", key="cand_email")
+                with af2:
+                    cand_phone = st.text_input("الجوال:", key="cand_phone")
+                    cand_source = st.selectbox("مصدر التقديم:", ["LinkedIn","موقع الشركة","تزكية","معرض وظائف","أخرى"], key="cand_source")
+                with af3:
+                    cand_exp = st.number_input("سنوات الخبرة:", 0, 40, 3, key="cand_exp")
+                    cand_salary = st.number_input("الراتب المتوقع:", 0, 100000, 10000, key="cand_sal")
+
+                cand_cv = st.file_uploader("السيرة الذاتية:", type=["pdf","docx","txt"], key="cand_cv")
+                cand_notes = st.text_input("ملاحظات:", key="cand_notes")
+                add_cand = st.form_submit_button("➕ إضافة المرشح", type="primary", use_container_width=True)
+
+            if add_cand and cand_name:
+                cv_text = ""
+                if cand_cv:
+                    if cand_cv.name.endswith('.txt'): cv_text = cand_cv.read().decode('utf-8',errors='ignore')
+                    elif cand_cv.name.endswith('.docx'):
+                        try:
+                            from docx import Document
+                            doc = Document(io.BytesIO(cand_cv.read()))
+                            cv_text = "\n".join([p.text for p in doc.paragraphs])
+                        except: pass
+                    elif cand_cv.name.endswith('.pdf'):
+                        try:
+                            import pdfplumber
+                            with pdfplumber.open(io.BytesIO(cand_cv.read())) as pdf:
+                                cv_text = "\n".join([p.extract_text() or '' for p in pdf.pages])
+                        except: pass
+
+                # Auto-score with AI
+                ai_score = 50
+                ai_note = ""
+                if cv_text and ats_req:
+                    try:
+                        sc_prompt = f"قيّم هذا المرشح من 100 بناءً على السيرة الذاتية والمتطلبات. أعط رقماً واحداً فقط.\nالسيرة: {cv_text[:1500]}\nالمتطلبات: {ats_req[:500]}\nأهداف الشركة: {ats_company[:300]}"
+                        sc_resp, _ = call_ai_api(sc_prompt, sc_prompt, model_type="hr")
+                        if sc_resp:
+                            import re
+                            nums = re.findall(r'\b(\d{1,3})\b', sc_resp)
+                            valid = [int(n) for n in nums if 10 <= int(n) <= 100]
+                            if valid: ai_score = valid[0]
+                            ai_note = sc_resp[:200]
+                    except: pass
+
+                candidate = {
+                    "الاسم": cand_name, "البريد": cand_email, "الجوال": cand_phone,
+                    "المصدر": cand_source, "الخبرة": cand_exp, "الراتب المتوقع": cand_salary,
+                    "المرحلة": "تقديم", "الدرجة AI": ai_score,
+                    "ملاحظات AI": ai_note, "ملاحظات": cand_notes,
+                    "تاريخ التقديم": datetime.now().strftime("%Y-%m-%d"),
+                    "الوظيفة": ats_title,
+                }
+                st.session_state.ats_candidates.append(candidate)
+                st.success(f"✅ تم إضافة {cand_name} (درجة AI: {ai_score}/100)")
+                st.rerun()
+
+            # Display candidates
+            if st.session_state.ats_candidates:
+                st.markdown("### 📊 لوحة المتقدمين")
+                cand_df = pd.DataFrame(st.session_state.ats_candidates)
+
+                # KPIs
+                ck1,ck2,ck3,ck4 = st.columns(4)
+                with ck1: kpi("👥 إجمالي المتقدمين", str(len(cand_df)))
+                with ck2: kpi("📊 متوسط الدرجة", f"{cand_df['الدرجة AI'].mean():.0f}/100")
+                with ck3: kpi("⭐ مؤهلين (70+)", str(len(cand_df[cand_df['الدرجة AI']>=70])))
+                with ck4: kpi("💰 متوسط الراتب", f"{cand_df['الراتب المتوقع'].mean():,.0f}")
+
+                # Pipeline stages
+                STAGES = ["تقديم","فرز أولي","مقابلة هاتفية","مقابلة شخصية","عرض وظيفي","قبول","رفض"]
+                st.markdown("### 🔄 مراحل التوظيف (Pipeline)")
+                for i, row in cand_df.iterrows():
+                    with st.expander(f"{'⭐' if row['الدرجة AI']>=70 else '👤'} {row['الاسم']} | درجة: {row['الدرجة AI']}/100 | {row['المرحلة']}"):
+                        ec1, ec2 = st.columns([2,1])
+                        with ec1:
+                            st.write(f"📧 {row['البريد']} | 📱 {row['الجوال']}")
+                            st.write(f"💼 خبرة: {row['الخبرة']} سنة | 💰 الراتب: {row['الراتب المتوقع']:,}")
+                            if row.get('ملاحظات AI'): st.caption(f"🤖 {row['ملاحظات AI'][:150]}")
+                        with ec2:
+                            new_stage = st.selectbox("المرحلة:", STAGES, index=STAGES.index(row['المرحلة']) if row['المرحلة'] in STAGES else 0, key=f"stg_{i}")
+                            if new_stage != row['المرحلة']:
+                                st.session_state.ats_candidates[i]['المرحلة'] = new_stage
+                                st.rerun()
+
+                # Charts
+                ch1, ch2 = st.columns(2)
+                with ch1:
+                    fig = px.bar(cand_df.sort_values('الدرجة AI',ascending=True), x='الدرجة AI', y='الاسم',
+                        orientation='h', title='تصنيف المرشحين حسب الدرجة', color='الدرجة AI',
+                        color_continuous_scale='RdYlGn', range_x=[0,100])
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=max(300, len(cand_df)*40), coloraxis_showscale=False)
+                    st.plotly_chart(fig, use_container_width=True)
+                with ch2:
+                    stage_counts = cand_df['المرحلة'].value_counts()
+                    fig = px.funnel(y=stage_counts.index, x=stage_counts.values, title='Pipeline التوظيف')
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                # Source analysis
+                if 'المصدر' in cand_df.columns:
+                    fig = px.pie(cand_df, names='المصدر', title='مصادر التقديم', hole=0.4)
+                    fig.update_layout(font=dict(family="Noto Sans Arabic"), height=300)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                export_widget(cand_df, "ATS_المتقدمين", "ats1")
+
+                if st.button("🗑️ مسح كل المتقدمين", key="ats_clear"):
+                    st.session_state.ats_candidates = []; st.rerun()
+
         elif page == "📥 تصدير التوظيف":
             hdr("📥 تصدير بيانات التوظيف")
             ox = io.BytesIO()
