@@ -94,11 +94,6 @@ class ModelOrchestrator:
             if k: return p
         return None
 
-    # Domain-specific doc_types for RAG filtering
-    LABOR_DOC_TYPES = {'legal', 'labor_law', 'labor_regulations', 'social_insurance',
-                       'health_insurance', 'minister_decisions', 'ai_learned_labor'}
-    HR_DOC_TYPES = {'hr', 'hr_expert', 'manual', 'ai_learned_hr_expert'}
-
     def build_context(self, system_prompt, user_message, model_type='general', provider='claude'):
         """Assemble full context: system prompt + RAG + learned + legal docs.
         CRITICAL: Never truncate the system prompt - it contains the expert knowledge.
@@ -433,30 +428,33 @@ class KnowledgeEngine:
                 self._vectors = self._vectorizer.fit_transform(texts)
         except: pass
 
-    # Domain-specific doc_type filters
+    # Domain-specific doc_type filters — strict separation
     LABOR_TYPES = {'legal', 'labor_law', 'labor_regulations', 'social_insurance',
                    'health_insurance', 'minister_decisions', 'ai_learned_labor'}
-    HR_TYPES = {'hr', 'hr_expert', 'manual', 'ai_learned_hr_expert'}
+    HR_TYPES = {'hr', 'hr_expert', 'ai_learned_hr_expert'}
 
-    def _filter_chunks_by_domain(self, chunks, model_type):
-        """Filter chunks to only include those from the correct domain."""
-        if model_type == 'labor':
-            return [ch for ch in chunks if ch.get('type', '') in self.LABOR_TYPES]
-        elif model_type == 'hr_expert':
-            return [ch for ch in chunks if ch.get('type', '') in self.HR_TYPES]
-        return chunks  # general: return all
+    def _get_allowed_types(self, model_type):
+        """Return the set of doc_types allowed for a given advisor."""
+        if model_type == 'labor': return self.LABOR_TYPES
+        if model_type == 'hr_expert': return self.HR_TYPES
+        return None  # None means no filter
 
     def search(self, query, top_k=5, model_type=None):
-        """Semantic search using TF-IDF cosine similarity.
-        Filters results by model_type domain so each consultant only sees its own data."""
+        """Semantic search filtered by advisor domain.
+        Each advisor only sees chunks tagged for its own domain."""
         self.load_from_db()
         if not self._chunks: return ""
 
-        # Filter chunks by domain first
-        domain_chunks = self._filter_chunks_by_domain(self._chunks, model_type) if model_type else self._chunks
-        if not domain_chunks: return ""
+        allowed = self._get_allowed_types(model_type)
 
-        # Try vector search first (on full index, then filter)
+        # Build domain-filtered index set for fast lookup
+        if allowed is not None:
+            domain_indices = {i for i, ch in enumerate(self._chunks) if ch.get('type', '') in allowed}
+            if not domain_indices: return ""
+        else:
+            domain_indices = None  # No filter
+
+        # Try vector search first
         if self._vectors is not None and self._vectorizer not in [None, "unavailable"]:
             try:
                 query_vec = self._vectorizer.transform([query])
@@ -464,21 +462,22 @@ class KnowledgeEngine:
                 top_indices = scores.argsort()[::-1]
                 results = []
                 for idx in top_indices:
-                    if scores[idx] < 0.05: break  # Below relevance threshold
-                    ch = self._chunks[idx]
-                    # Only include chunks from the correct domain
-                    if model_type and ch not in domain_chunks:
+                    if scores[idx] < 0.05: break
+                    if domain_indices is not None and idx not in domain_indices:
                         continue
+                    ch = self._chunks[idx]
                     results.append(f"[المصدر: {ch.get('source','')} | النوع: {ch.get('type','')}]\n{ch['text']}")
                     if len(results) >= top_k: break
                 if results:
                     return "\n\n---\n".join(results)
             except: pass
 
-        # Fallback to keyword search (on domain-filtered chunks)
+        # Fallback to keyword search (domain-filtered)
         query_words = set(query.lower().split())
         scored = []
-        for ch in domain_chunks:
+        for i, ch in enumerate(self._chunks):
+            if domain_indices is not None and i not in domain_indices:
+                continue
             chunk_words = set(ch.get('text','').lower().split())
             match = len(query_words & chunk_words)
             if match > 0:
@@ -1178,6 +1177,7 @@ def ibox(t,tp="info"):
 def kpi(l,v): st.markdown(f'<div class="kpi"><p>{l}</p><h3>{v}</h3></div>',unsafe_allow_html=True)
 
 # ===== LOCAL KNOWLEDGE ENGINE (No API needed) =====
+# LEGAL knowledge base — Saudi Labor Law, GOSI, CCHI, ministerial decisions
 LABOR_KB = {
     "مستحقات|تسوية|صرف|متى يجب|دفع|سداد|حقوقي المالية": "**تسوية المستحقات (المادة 88):**\n\nيلتزم صاحب العمل بتصفية جميع حقوق العامل خلال **أسبوع** من تاريخ انتهاء العلاقة. وإذا كان العامل هو من أنهى العقد فخلال **أسبوعين**.\n\n**المستحقات تشمل:**\n- الراتب حتى آخر يوم عمل\n- مكافأة نهاية الخدمة (المادة 84)\n- بدل الإجازات غير المستخدمة\n- أي بدلات مستحقة\n- شهادة الخبرة\n\n**عند التأخير:** يحق للعامل تقديم شكوى لمكتب العمل.",
     "تقاعد|معاش|pension|retirement|احتساب التقاعد|راتب تقاعدي|تقاعد مبكر": "**نظام التقاعد (التأمينات الاجتماعية):**\n\n**شروط استحقاق المعاش:**\n- بلوغ سن 60 سنة مع اشتراك لا يقل عن 120 شهراً (10 سنوات)\n- أو إكمال 300 شهر اشتراك (25 سنة) بغض النظر عن العمر (تقاعد مبكر)\n\n**حساب المعاش التقاعدي:**\n- معاش شهري = (متوسط الأجر في آخر سنتين × عدد أشهر الاشتراك) / 480\n- **مثال:** راتب 10,000 × 240 شهر / 480 = **5,000 ريال شهرياً**\n\n**الحد الأقصى:** 100% من متوسط الأجر\n**الحد الأدنى:** 1,984 ريال\n\n**تقاعد مبكر:** يمكن التقاعد قبل 60 سنة إذا أكمل 300 شهر اشتراك مع خصم 5% عن كل سنة قبل سن الـ 60.\n\n**معاش الأخطار المهنية:** 100% من الأجر في حالة العجز الكلي.",
@@ -1196,21 +1196,27 @@ LABOR_KB = {
     "حقوق|واجبات|التزامات|حق العامل": "**حقوق العامل:** أجر عادل + بيئة آمنة + إجازات + تأمين طبي + مكافأة نهاية خدمة + شهادة خبرة + عدم التمييز\n\n**واجبات العامل:** أداء العمل بإتقان + اتباع التعليمات + المحافظة على الأسرار + العناية بالممتلكات",
     "شكوى|نزاع|خلاف|محكمة عمالية|مكتب العمل|تظلم": "**تسوية النزاعات العمالية:**\n\n1. **الود:** محاولة حل ودي بين الطرفين\n2. **مكتب العمل:** تقديم شكوى خلال 12 شهراً من المخالفة\n3. **المحكمة العمالية:** خلال 12 شهراً من رفض التسوية الودية\n\n**المدة:** تنظر الدعوى خلال أسابيع\n**مجاناً:** لا رسوم على الدعاوى العمالية\n\n**منصة ودي:** تسوية إلكترونية عبر وزارة الموارد البشرية.",
     "نقل كفالة|نقل خدمات|تحويل|كفيل|sponsor": "**نقل الخدمات (إلغاء نظام الكفالة):**\n\nمبادرة تحسين العلاقة التعاقدية تتيح:\n- **التنقل الوظيفي:** الانتقال لصاحب عمل آخر بعد إكمال السنة الأولى أو انتهاء العقد\n- **الخروج والعودة:** بدون موافقة صاحب العمل\n- **تأشيرة الخروج النهائي:** بدون موافقة صاحب العمل\n\n**الشرط:** إشعار صاحب العمل الحالي قبل 90 يوماً.",
-    "أداء|تقييم|performance|kpi|أهداف|okr": "**إدارة الأداء:**\n- أهداف SMART: محددة + قابلة للقياس + قابلة للتحقيق + ذات صلة + محددة زمنياً\n- تقييم دوري: ربع سنوي أو نصف سنوي\n- تغذية راجعة مستمرة\n- خطة تطوير فردية\n\n**مؤشرات HR:** معدل الدوران | وقت التوظيف | رضا الموظفين | معدل الغياب | تكلفة التوظيف",
-    "تدريب|تطوير|training|kirkpatrick|addie|roi التدريب|أطور|تأهيل|دورة|دورات": "**التدريب والتطوير:**\n- نموذج ADDIE: تحليل → تصميم → تطوير → تنفيذ → تقييم\n- Kirkpatrick: رد فعل → تعلم → سلوك → نتائج\n- Phillips ROI: (الفوائد - التكاليف) / التكاليف × 100\n- الميزانية المعيارية: 1-3% من إجمالي الرواتب\n\n**أساليب التطوير:**\n- تدريب رسمي (فصول/ورش)\n- تعلم إلكتروني (e-Learning)\n- التوجيه (Mentoring/Coaching)\n- التدوير الوظيفي (Job Rotation)\n- المشاريع والمهام الخاصة\n- التعلم الذاتي",
-    "استقطاب|توظيف|recruitment|hiring|مقابلة|وظيفة شاغرة|أوظف|تعيين|موظف جديد": "**عملية التوظيف:**\n1. تحديد الاحتياج (Workforce Planning)\n2. الوصف الوظيفي\n3. الإعلان والاستقطاب\n4. فرز السير الذاتية\n5. المقابلات (هاتفية → شخصية → لجنة)\n6. التقييم والاختبارات\n7. العرض الوظيفي\n8. التعيين والتهيئة\n\n**مؤشرات:** Time-to-Hire | Cost-per-Hire | Quality of Hire",
     "خدمة|سنوات الخدمة|أقدمية|tenure": "**احتساب سنوات الخدمة:**\n- تبدأ من تاريخ المباشرة الفعلي\n- تشمل فترة التجربة\n- تشمل الإجازات المدفوعة\n- لا تشمل الإجازات بدون أجر (إلا بالاتفاق)\n\n**تؤثر على:**\n- مكافأة نهاية الخدمة\n- الإجازة السنوية (21 يوم أو 30 يوم)\n- المعاش التقاعدي",
 }
 
-def smart_local_answer(question, kb=None):
-    """Smart answer from local knowledge base - handles Arabic morphology."""
-    if kb is None: kb = LABOR_KB
-    q = question.lower().strip()
-    # Remove common Arabic prefixes for better matching
-    q_normalized = q
-    for prefix in ['ال','و','ب','ك','ل','ف']:
-        q_normalized = q_normalized.replace(f' {prefix}', ' ')
+# HR PROFESSIONAL knowledge base — frameworks, best practices, methodologies
+HR_KB = {
+    "أداء|تقييم|performance|kpi|أهداف|okr": "**إدارة الأداء (Performance Management):**\n- أهداف SMART: محددة + قابلة للقياس + قابلة للتحقيق + ذات صلة + محددة زمنياً\n- تقييم دوري: ربع سنوي أو نصف سنوي\n- تغذية راجعة مستمرة (Continuous Feedback)\n- خطة تطوير فردية (IDP)\n\n**أدوات التقييم:**\n- 360-Degree Feedback\n- MBO (Management by Objectives)\n- BARS (Behaviorally Anchored Rating Scales)\n- Critical Incidents\n\n**مؤشرات HR:** معدل الدوران | وقت التوظيف | رضا الموظفين | معدل الغياب | تكلفة التوظيف",
+    "تدريب|تطوير|training|kirkpatrick|addie|roi التدريب|أطور|تأهيل|دورة|دورات": "**التدريب والتطوير (L&D):**\n\n**نموذج ADDIE:** تحليل → تصميم → تطوير → تنفيذ → تقييم\n**Kirkpatrick 4 Levels:** رد فعل → تعلم → سلوك → نتائج\n**Phillips ROI Level 5:** (الفوائد - التكاليف) / التكاليف × 100\n**الميزانية المعيارية:** 1-3% من إجمالي الرواتب\n\n**أساليب التطوير:**\n- تدريب رسمي (فصول/ورش)\n- تعلم إلكتروني (e-Learning/Microlearning)\n- التوجيه (Mentoring/Coaching)\n- التدوير الوظيفي (Job Rotation)\n- المشاريع والمهام الخاصة\n- التعلم الذاتي\n\n**نموذج 70-20-10:** 70% خبرات عملية + 20% تعلم اجتماعي + 10% تدريب رسمي",
+    "استقطاب|توظيف|recruitment|hiring|مقابلة|وظيفة شاغرة|أوظف|تعيين|موظف جديد": "**عملية التوظيف (Talent Acquisition):**\n1. تحديد الاحتياج (Workforce Planning)\n2. تحليل الوظيفة (Job Analysis)\n3. الوصف الوظيفي (Job Description)\n4. الإعلان والاستقطاب (Sourcing)\n5. فرز السير الذاتية (Screening)\n6. المقابلات المنظمة (Structured Interviews)\n7. التقييم والاختبارات (Assessment Center)\n8. العرض الوظيفي (Offer)\n9. التعيين والتهيئة (Onboarding)\n\n**مؤشرات:** Time-to-Hire | Cost-per-Hire | Quality of Hire | Source Effectiveness\n\n**EVP (Employee Value Proposition):** العلامة التجارية لصاحب العمل كعامل جذب",
+    "تعويضات|هيكل رواتب|compensation|total rewards|بدلات|مزايا": "**إدارة التعويضات (Compensation & Benefits):**\n\n**هيكل الرواتب:**\n- المسح السوقي (Salary Survey) + P25/P50/P75\n- تقييم الوظائف (Job Evaluation): Point Factor, Ranking, Classification\n- بناء الهيكل: Job Grading + نطاق Min-Mid-Max\n- Compa-Ratio = الراتب الفعلي / وسط النطاق\n\n**Total Rewards (المكافآت الشاملة):**\n1. التعويض المباشر (الراتب + المكافآت)\n2. المزايا (تأمين + إجازات)\n3. التوازن الحياتي\n4. التقدير والاعتراف\n5. التطوير المهني",
+    "تجربة الموظف|employee experience|engagement|رضا الموظفين|ولاء|انتماء": "**تجربة الموظف (Employee Experience):**\n\n1. **الاستقطاب:** عملية سلسة وشفافة\n2. **التهيئة:** خطة 30/60/90 يوم + Buddy System\n3. **التطوير:** تدريب مستمر + مسار وظيفي واضح\n4. **الاحتفاظ:** تقدير + مكافآت + مرونة + Work-Life Balance\n5. **الانتقال:** مقابلة خروج + شهادة خبرة + Alumni Network\n\n**قياس الارتباط:**\n- Gallup Q12\n- eNPS (Employee Net Promoter Score)\n- Pulse Surveys\n- Stay Interviews",
+    "تخطيط قوى عاملة|workforce planning|تعاقب وظيفي|succession|مسار وظيفي|career": "**تخطيط القوى العاملة (Workforce Planning):**\n\n- تحليل العرض والطلب الحالي والمستقبلي\n- تحديد الفجوات (Gap Analysis)\n- خطط التوظيف والتطوير\n\n**التعاقب الوظيفي (Succession Planning):**\n- تحديد الوظائف الحرجة\n- تقييم المواهب (9-Box Grid)\n- تطوير البدلاء\n\n**المسار الوظيفي (Career Path):**\n- مسار إداري (Management Track)\n- مسار تخصصي (Technical Track)\n- مسار مختلط (Dual Track)",
+    "تنوع|شمولية|diversity|inclusion|dei|عدالة": "**التنوع والشمول (DEI):**\n\n**Diversity:** تمثيل الاختلافات (جنس، عمر، ثقافة، قدرات)\n**Equity:** العدالة في الفرص والموارد\n**Inclusion:** بيئة يشعر فيها الجميع بالانتماء\n\n**ممارسات:**\n- مراجعة سياسات التوظيف لإزالة التحيز\n- تدريب على التحيز اللاواعي\n- مجموعات موارد الموظفين (ERGs)\n- قياس مؤشرات التنوع",
+    "إدارة التغيير|change management|تحول|kotter|adkar": "**إدارة التغيير (Change Management):**\n\n**نموذج Kotter (8 خطوات):**\n1. خلق إحساس بالإلحاح\n2. بناء تحالف قيادي\n3. صياغة رؤية واستراتيجية\n4. إيصال الرؤية\n5. تمكين العمل\n6. تحقيق مكاسب سريعة\n7. تعزيز المكاسب\n8. ترسيخ التغيير\n\n**نموذج ADKAR:** Awareness → Desire → Knowledge → Ability → Reinforcement\n**نموذج Lewin:** Unfreeze → Change → Refreeze",
+    "تحليلات|analytics|بيانات|people analytics|hr analytics": "**تحليلات الموارد البشرية (People Analytics):**\n\n**4 مستويات:**\n1. **وصفي (Descriptive):** ماذا حدث؟ (تقارير، لوحات)\n2. **تشخيصي (Diagnostic):** لماذا حدث؟ (تحليل الأسباب)\n3. **تنبؤي (Predictive):** ماذا سيحدث؟ (نماذج توقع الاستقالة)\n4. **توجيهي (Prescriptive):** ماذا نفعل؟ (توصيات عملية)\n\n**مؤشرات أساسية:**\n- معدل الدوران (Turnover Rate)\n- وقت التوظيف (Time-to-Fill)\n- تكلفة التوظيف (Cost-per-Hire)\n- معدل الغياب (Absenteeism)\n- العائد على رأس المال البشري (HCROI)",
+}
 
+def _search_local_kb(question, kb):
+    """Search a specific local knowledge base using Arabic-aware keyword matching."""
+    q = question.lower().strip()
+    for prefix in ['ال','و','ب','ك','ل','ف']:
+        q = q.replace(f' {prefix}', ' ')
     best_score = 0
     best_answer = None
     for keywords, answer in kb.items():
@@ -1218,72 +1224,57 @@ def smart_local_answer(question, kb=None):
         score = 0
         for kw in kw_list:
             kw_lower = kw.lower()
-            # Exact keyword in question
             if kw_lower in q: score += 3
-            # Keyword root in question (handles Arabic morphology)
             elif len(kw_lower) > 3 and kw_lower[:4] in q: score += 2
-            # Any question word matches keyword
             else:
                 for word in q.split():
                     if len(word) > 2:
                         if word in kw_lower or kw_lower in word: score += 1
-                        # Root matching (first 3-4 chars)
                         if len(word) > 3 and len(kw_lower) > 3 and word[:3] == kw_lower[:3]: score += 1
         if score > best_score:
             best_score = score
             best_answer = answer
     return best_answer if best_score >= 2 else None
 
-def get_best_kb_answer(question):
-    """Always returns an answer - never fails. Tries API first, then KB, then general."""
-    # 1. Try API via orchestrator with a rich system prompt
-    try:
-        if '_orchestrator' in st.session_state:
-            system_prompt = """أنت مستشار قانوني وخبير موارد بشرية سعودي متخصص. لديك معرفة شاملة بـ:
-- نظام العمل السعودي (245 مادة) واللائحة التنفيذية
-- نظام التأمينات الاجتماعية (GOSI)
-- نظام الضمان الصحي التعاوني (CCHI)
-- قرارات وزير الموارد البشرية
-- أفضل الممارسات العالمية في الموارد البشرية (PHRi, SHRM, CIPD)
-
-القواعد:
-1. أجب بنفس لغة السؤال (عربي أو إنجليزي)
-2. اذكر رقم المادة القانونية عند الإجابة
-3. قدم نصائح عملية مع خطوات واضحة
-4. أظهر الحسابات بالتفصيل عند الحاجة
-5. إذا لم تكن متأكداً، أوصِ بمراجعة محامٍ مرخص"""
-            response, error = st.session_state._orchestrator.call(
-                system_prompt, question, model_type="labor")
-            if response and len(response) > 20:
-                return response
-    except: pass
-
-    # 2. Try local KB
-    answer = smart_local_answer(question)
+def get_labor_fallback_answer(question):
+    """Fallback for LEGAL advisor only. Searches LABOR_KB only. Never returns empty."""
+    # 1. Exact match in labor KB
+    answer = _search_local_kb(question, LABOR_KB)
     if answer:
         return answer
-
-    # 3. Find closest topic even with low score
+    # 2. Fuzzy match in labor KB
     q = question.lower().strip()
     best_score = 0
     best_answer = None
     for keywords, ans in LABOR_KB.items():
         kw_list = [k.strip() for k in keywords.split('|')]
-        score = 0
-        for kw in kw_list:
-            if kw.lower() in q: score += 1
-            for word in q.split():
-                if len(word) > 2 and (word in kw.lower() or kw.lower() in word):
-                    score += 0.5
+        score = sum(1 for kw in kw_list if kw.lower() in q)
+        score += sum(0.5 for kw in kw_list for word in q.split() if len(word)>2 and (word in kw.lower() or kw.lower() in word))
         if score > best_score:
-            best_score = score
-            best_answer = ans
-
+            best_score = score; best_answer = ans
     if best_answer and best_score > 0:
-        return f"**بناءً على أقرب موضوع في قاعدة المعرفة:**\n\n{best_answer}\n\n---\n*إذا كان سؤالك مختلفاً، يرجى إعادة صياغته بكلمات أوضح.*"
+        return f"**بناءً على أقرب موضوع قانوني:**\n\n{best_answer}\n\n---\n*للإجابة الأدق، يرجى إعادة صياغة سؤالك القانوني.*"
+    return f"**شكراً لسؤالك القانوني:** \"{question}\"\n\nللإجابة الدقيقة:\n1. **مراجعة نظام العمل السعودي** عبر موقع وزارة الموارد البشرية\n2. **الاتصال بمكتب العمل** على الرقم الموحد 19911\n3. **منصة ودي** للاستشارات العمالية الإلكترونية\n\n**المواضيع المتاحة:** التقاعد | التأمينات | المكافأة | الفصل | الاستقالة | الإجازات | ساعات العمل | الرواتب | العقود | نطاقات | التأمين الطبي | حقوق المرأة | الشكاوى | نقل الكفالة"
 
-    # 4. General helpful response - NEVER returns empty
-    return f"**شكراً لسؤالك:** \"{question}\"\n\nللإجابة الدقيقة، ننصح بـ:\n\n1. **مراجعة نظام العمل السعودي** عبر موقع وزارة الموارد البشرية\n2. **الاتصال بمكتب العمل** على الرقم الموحد 19911\n3. **منصة ودي** للاستشارات العمالية الإلكترونية\n4. **رفع وثائق** في قاعدة المعرفة RAG لتحسين إجابات النظام\n\n**المواضيع المتاحة:** التقاعد | التأمينات | المكافأة | الفصل | الاستقالة | الإجازات | ساعات العمل | الرواتب | العقود | نطاقات | التأمين الطبي | حقوق المرأة | الشكاوى | نقل الكفالة | التوظيف | التدريب"
+def get_hr_fallback_answer(question):
+    """Fallback for HR advisor only. Searches HR_KB only. Never returns empty."""
+    # 1. Exact match in HR KB
+    answer = _search_local_kb(question, HR_KB)
+    if answer:
+        return answer
+    # 2. Fuzzy match in HR KB
+    q = question.lower().strip()
+    best_score = 0
+    best_answer = None
+    for keywords, ans in HR_KB.items():
+        kw_list = [k.strip() for k in keywords.split('|')]
+        score = sum(1 for kw in kw_list if kw.lower() in q)
+        score += sum(0.5 for kw in kw_list for word in q.split() if len(word)>2 and (word in kw.lower() or kw.lower() in word))
+        if score > best_score:
+            best_score = score; best_answer = ans
+    if best_answer and best_score > 0:
+        return f"**بناءً على أقرب موضوع مهني:**\n\n{best_answer}\n\n---\n*للإجابة الأدق، يرجى إعادة صياغة سؤالك.*"
+    return f"**شكراً لسؤالك:** \"{question}\"\n\nللإجابة الدقيقة:\n1. **مراجع SHRM/CIPD/HRCI** للأطر المهنية\n2. **رفع مستندات** في قاعدة المعرفة RAG لتحسين إجابات النظام\n\n**المواضيع المتاحة:** إدارة الأداء | التدريب والتطوير | الاستقطاب | التعويضات | تجربة الموظف | تخطيط القوى العاملة | إدارة التغيير | تحليلات HR | التنوع والشمول"
     """Universal export: Excel (with charts) + CSV + PDF (with interactive charts)"""
     if dataframes is None: return
     if isinstance(dataframes, pd.DataFrame):
@@ -8013,8 +8004,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                             model_type="labor"
                         )
                         if not response or len(str(response)) < 20:
-                            # Fallback to local KB if AI fails
-                            response = get_best_kb_answer(labor_q)
+                            response = get_labor_fallback_answer(labor_q)
                         st.session_state.labor_chat.append({"role":"user","content":labor_q})
                         st.session_state.labor_chat.append({"role":"assistant","content":response})
                         st.rerun()
@@ -8089,7 +8079,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                             model_type="hr_expert"
                         )
                         if not response or len(str(response)) < 20:
-                            response = get_best_kb_answer(hr_q)
+                            response = get_hr_fallback_answer(hr_q)
                         st.session_state.hr_chat.append({"role":"user","content":hr_q})
                         st.session_state.hr_chat.append({"role":"assistant","content":response})
                         st.rerun()
@@ -8108,6 +8098,14 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 
             # Upload documents
             st.markdown("### 📁 رفع مستندات للقاعدة المعرفية")
+
+            # Advisor type selector for document tagging
+            rag_advisor = st.radio("📂 المستشار المستهدف:", [
+                "⚖️ المستشار القانوني (نظام العمل، أنظمة، لوائح)",
+                "📚 مستشار الموارد البشرية (أطر مهنية، ممارسات)"
+            ], key="rag_advisor_type", horizontal=True)
+            rag_doc_type = "legal" if "القانوني" in rag_advisor else "hr"
+
             rag_files = st.file_uploader("ارفع ملفات (PDF, DOCX, TXT):", type=["pdf","docx","txt"],
                 accept_multiple_files=True, key="rag_upload")
 
@@ -8132,8 +8130,9 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                         doc_text = rag_file.getvalue().decode('utf-8', errors='ignore')
 
                     if doc_text:
-                        n_chunks = save_to_knowledge_base(doc_text, rag_file.name)
-                        st.success(f"✅ {rag_file.name}: {len(doc_text):,} حرف → {n_chunks} جزء مفهرس")
+                        n_chunks = save_to_knowledge_base(doc_text, rag_file.name, rag_doc_type)
+                        advisor_label = "القانوني" if rag_doc_type == "legal" else "الموارد البشرية"
+                        st.success(f"✅ {rag_file.name}: {len(doc_text):,} حرف → {n_chunks} جزء → مستشار {advisor_label}")
                     else:
                         st.warning(f"⚠️ لم يتم استخراج نص من {rag_file.name}")
 
@@ -8146,13 +8145,13 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                     req = urllib.request.Request(web_url, headers={'User-Agent':'Mozilla/5.0'})
                     with urllib.request.urlopen(req, timeout=15) as resp:
                         html = resp.read().decode('utf-8', errors='ignore')
-                    # Simple HTML to text
                     import re
                     text = re.sub(r'<[^>]+>', ' ', html)
                     text = re.sub(r'\s+', ' ', text).strip()
                     if len(text) > 100:
-                        n = save_to_knowledge_base(text, web_url[:80])
-                        st.success(f"✅ تم استيراد {len(text):,} حرف → {n} جزء")
+                        n = save_to_knowledge_base(text, web_url[:80], rag_doc_type)
+                        advisor_label = "القانوني" if rag_doc_type == "legal" else "الموارد البشرية"
+                        st.success(f"✅ تم استيراد {len(text):,} حرف → {n} جزء → مستشار {advisor_label}")
                     else:
                         st.warning("لم يتم استخراج محتوى كافٍ")
                 except Exception as e:
@@ -8163,8 +8162,9 @@ function stopSpeak(){{speechSynthesis.cancel()}}
             manual_source = st.text_input("اسم المصدر:", placeholder="مثال: سياسة الإجازات الداخلية", key="rag_msrc")
             manual_text = st.text_area("النص:", height=150, key="rag_mtxt", placeholder="الصق نص السياسة أو المعلومة هنا...")
             if st.button("➕ إضافة للقاعدة", type="primary", key="rag_madd") and manual_text and manual_source:
-                n = save_to_knowledge_base(manual_text, manual_source, "manual")
-                st.success(f"✅ {manual_source}: {n} جزء مفهرس")
+                n = save_to_knowledge_base(manual_text, manual_source, rag_doc_type)
+                advisor_label = "القانوني" if rag_doc_type == "legal" else "الموارد البشرية"
+                st.success(f"✅ {manual_source}: {n} جزء → مستشار {advisor_label}")
 
             # Knowledge base stats
             st.markdown("---")
