@@ -1108,6 +1108,32 @@ def smart_local_answer(question, kb=None):
             best_answer = answer
     return best_answer if best_score >= 3 else None
 
+def filter_response(text, consultant_type):
+    """Remove wrong content from responses - enforce separation."""
+    if not text: return text
+    lines = text.split('\n')
+    filtered = []
+    for line in lines:
+        if consultant_type == "hr":
+            skip = False
+            for marker in ['المادة ', 'مادة ', 'نظام العمل', 'اللائحة التنفيذية',
+                'المحكمة العمالية', 'مكتب العمل', 'الباب ال', 'Article ']:
+                if marker in line and not any(h in line for h in ['PHRi','SHRM','CIPD','APTD','SPHRi']):
+                    skip = True; break
+            if not skip: filtered.append(line)
+        elif consultant_type == "legal":
+            skip = False
+            for marker in ['PHRi','SHRM','CIPD','APTD','SPHRi','aPHRi','ADDIE',
+                'Kirkpatrick','Phillips ROI','Instructional Design','Ulrich',
+                '9-Box','Balanced Scorecard','70-20-10','HPT','Bloom','Gagné']:
+                if marker in line:
+                    skip = True; break
+            if not skip: filtered.append(line)
+        else:
+            filtered.append(line)
+    result = '\n'.join(filtered).strip()
+    return result if len(result) > 20 else text
+
 def get_best_kb_answer(question, system_prompt=None):
     """Call AI directly using requests library (bypasses Cloudflare)."""
     import requests as req_lib
@@ -1133,6 +1159,9 @@ def get_best_kb_answer(question, system_prompt=None):
         conn.close()
     except: pass
 
+    # Determine consultant type for filtering
+    consultant_type = "legal" if system_prompt and 'المستشار القانوني' in system_prompt else "hr"
+
     # 1. Try Groq with requests library (bypasses Cloudflare)
     groq_key = st.session_state.get('groq_api_key', '')
     if not groq_key:
@@ -1153,7 +1182,7 @@ def get_best_kb_answer(question, system_prompt=None):
                 timeout=30)
             if resp.status_code == 200:
                 text = resp.json().get('choices',[{}])[0].get('message',{}).get('content','')
-                if text and len(text) > 10: return text
+                if text and len(text) > 10: return filter_response(text, consultant_type)
             else:
                 errors.append(f"Groq: {resp.status_code}")
         except Exception as e:
@@ -1175,7 +1204,7 @@ def get_best_kb_answer(question, system_prompt=None):
                 timeout=30)
             if resp.status_code == 200:
                 text = resp.json().get('candidates',[{}])[0].get('content',{}).get('parts',[{}])[0].get('text','')
-                if text and len(text) > 10: return text
+                if text and len(text) > 10: return filter_response(text, consultant_type)
             else:
                 errors.append(f"Gemini: {resp.status_code}")
         except Exception as e:
@@ -1198,7 +1227,7 @@ def get_best_kb_answer(question, system_prompt=None):
                 timeout=30)
             if resp.status_code == 200:
                 text = resp.json().get('choices',[{}])[0].get('message',{}).get('content','')
-                if text and len(text) > 10: return text
+                if text and len(text) > 10: return filter_response(text, consultant_type)
             else:
                 errors.append(f"OpenRouter: {resp.status_code}")
         except Exception as e:
