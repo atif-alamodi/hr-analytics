@@ -1448,7 +1448,7 @@ def build_reasoning_context(question, advisor_type, analysis, retrieved_context=
     return prompt
 
 def validate_generated_answer(answer, analysis, advisor_type):
-    """Validate answer quality and domain compliance for both advisors."""
+    """Validate answer quality, domain compliance, and factual accuracy."""
     if not answer or len(answer) < 30: return False, ["short"]
     issues = []
     if advisor_type == "legal":
@@ -1459,6 +1459,28 @@ def validate_generated_answer(answer, analysis, advisor_type):
         hr_leak = ['PHRi','SHRM','CIPD','APTD','ADDIE','Kirkpatrick','competency framework']
         if any(m in answer for m in hr_leak):
             issues.append("hr_contamination")
+        # Validate article-topic consistency
+        topic = analysis.get('topic','')
+        CORRECT_ARTICLES = {
+            'leave': ['109','110','111','112','113','114','115','116'],
+            'training': ['42','43','44','45','46','47','48'],
+            'termination': ['74','75','76','77','78','79','80','81','82'],
+            'end_of_service': ['84','85','86','87','88'],
+            'resignation': ['75','81','84','85','88'],
+            'contracts': ['49','50','51','52','53','54','55','56','57','58','59','60'],
+            'wages': ['89','90','91','92','93','94','95','96','97'],
+            'working_hours': ['98','99','100','101','102','103','104','105','106','107'],
+            'probation': ['53','54'],
+            'women': ['121','122','123','124','125','126','127','128','129','130','151'],
+            'disciplinary': ['66','67','68','69','70','71','72'],
+            'safety': ['131','132','133','134','135','136','137','138','139','140','141','142','143','144','145'],
+        }
+        if topic in CORRECT_ARTICLES:
+            import re
+            cited = re.findall(r'(?:المادة|مادة|م)\s*(\d+)', answer)
+            wrong = [a for a in cited if a not in CORRECT_ARTICLES[topic] and int(a) > 0]
+            if wrong and len(wrong) > len(cited) // 2:
+                issues.append("wrong_articles")
     else:
         hr_markers = ['PHRi','SHRM','CIPD','APTD','SPHRi','aPHRi','framework','model','نموذج','إطار']
         if not any(m in answer for m in hr_markers):
@@ -1504,6 +1526,9 @@ def generate_advisor_answer(question, advisor_type, system_prompt=None):
                 retry_prompt += "اذكر المواد القانونية بأرقامها فقط. لا تذكر أي إطار منهجي HR."
             elif "legal_contamination" in issues or "no_hr_framework" in issues:
                 retry_prompt += "اذكر المناهج المهنية (PHRi/SHRM/CIPD/APTD) فقط. لا تذكر أي مادة قانونية."
+            elif "wrong_articles" in issues:
+                ref = analysis.get('reference','')
+                retry_prompt += f"⛔ أرقام المواد خاطئة! المواد الصحيحة لهذا الموضوع هي: {ref}. استخدم هذه المواد فقط."
             answer = _call_llm_with_reasoning(question, retry_prompt, req_lib)
             if answer:
                 return filter_response(answer, advisor_type)
@@ -1544,20 +1569,20 @@ def _call_llm_with_reasoning(question, reasoning_prompt, req_lib):
         except: continue
     return None
 def get_best_kb_answer(question, system_prompt=None):
-    """Main entry: Reasoning Pipeline first for rich answers, Local KB as fallback."""
+    """Local KB FIRST (verified facts), then Reasoning Pipeline for new questions."""
     consultant_type = "legal" if system_prompt and 'المستشار القانوني' in system_prompt else "hr"
 
-    # 1. Try Reasoning Pipeline FIRST (structured, rich answers)
-    answer = generate_advisor_answer(question, consultant_type, system_prompt)
-    if answer and len(answer) > 30:
-        return answer
-
-    # 2. Fallback to Local KB (if API fails)
+    # 1. LOCAL KB FIRST - verified correct facts
     if consultant_type == "legal":
         answer = smart_local_answer(question, LABOR_KB)
     else:
         answer = smart_local_answer(question, HR_KB)
     if answer: return answer
+
+    # 2. Reasoning Pipeline for questions not in KB
+    answer = generate_advisor_answer(question, consultant_type, system_prompt)
+    if answer and len(answer) > 30:
+        return answer
 
     # 3. Diagnostic
     k_status = []
