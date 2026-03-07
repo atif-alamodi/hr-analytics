@@ -1164,14 +1164,15 @@ def filter_response(text, consultant_type):
     return result if len(result) > 20 else text
 
 def get_best_kb_answer(question, system_prompt=None):
-    """Call AI directly using requests library (bypasses Cloudflare)."""
+    """Answer questions - LOCAL KB first (guaranteed correct), then API."""
     import requests as req_lib
     errors = []
     if not system_prompt:
-        system_prompt = "أنت مستشار قانوني وخبير موارد بشرية سعودي متخصص. أجب دائماً بالعربية بدقة ووضوح مع ذكر المواد القانونية. لا تعتذر أبداً."
+        system_prompt = "أجب بالعربية بدقة."
 
-    # 0. Check previously learned answers (filtered by consultant type)
     consultant_type = "legal" if system_prompt and 'المستشار القانوني' in system_prompt else "hr"
+
+    # 0. Check previously learned answers (filtered by type)
     try:
         conn = get_conn(); c = conn.cursor()
         c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("rag_learned",))
@@ -1188,10 +1189,15 @@ def get_best_kb_answer(question, system_prompt=None):
         conn.close()
     except: pass
 
-    # Determine consultant type for filtering
-    consultant_type = "legal" if system_prompt and 'المستشار القانوني' in system_prompt else "hr"
+    # 1. LOCAL KB FIRST (guaranteed correct separation)
+    if consultant_type == "legal":
+        answer = smart_local_answer(question, LABOR_KB)
+    else:
+        answer = smart_local_answer(question, HR_KB)
+    if answer:
+        return answer
 
-    # 1. Try Groq with requests library (bypasses Cloudflare)
+    # 2. Try API (with filter to enforce separation)
     groq_key = st.session_state.get('groq_api_key', '')
     if not groq_key:
         try: groq_key = st.secrets.get("groq", {}).get("api_key", "")
@@ -1202,7 +1208,7 @@ def get_best_kb_answer(question, system_prompt=None):
                 json={
                     "model": "llama-3.3-70b-versatile",
                     "messages": [
-                        {"role":"system","content":system_prompt},
+                        {"role":"system","content":system_prompt[:3000]},
                         {"role":"user","content":question}
                     ],
                     "max_tokens": 2000, "temperature": 0.3
@@ -1211,13 +1217,14 @@ def get_best_kb_answer(question, system_prompt=None):
                 timeout=30)
             if resp.status_code == 200:
                 text = resp.json().get('choices',[{}])[0].get('message',{}).get('content','')
-                if text and len(text) > 10: return filter_response(text, consultant_type)
+                if text and len(text) > 10:
+                    return filter_response(text, consultant_type)
             else:
                 errors.append(f"Groq: {resp.status_code}")
         except Exception as e:
             errors.append(f"Groq: {str(e)[:60]}")
 
-    # 2. Try Gemini
+    # 3. Try Gemini
     gemini_key = st.session_state.get('gemini_api_key', '')
     if not gemini_key:
         try: gemini_key = st.secrets.get("gemini", {}).get("api_key", "")
@@ -1227,19 +1234,20 @@ def get_best_kb_answer(question, system_prompt=None):
             resp = req_lib.post(
                 f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_key}",
                 json={
-                    "contents":[{"parts":[{"text":f"{system_prompt}\n\nالسؤال: {question}"}]}],
+                    "contents":[{"parts":[{"text":f"{system_prompt[:2000]}\n\nالسؤال: {question}"}]}],
                     "generationConfig":{"maxOutputTokens":2000,"temperature":0.3}
                 },
                 timeout=30)
             if resp.status_code == 200:
                 text = resp.json().get('candidates',[{}])[0].get('content',{}).get('parts',[{}])[0].get('text','')
-                if text and len(text) > 10: return filter_response(text, consultant_type)
+                if text and len(text) > 10:
+                    return filter_response(text, consultant_type)
             else:
                 errors.append(f"Gemini: {resp.status_code}")
         except Exception as e:
             errors.append(f"Gemini: {str(e)[:60]}")
 
-    # 3. Try OpenRouter
+    # 4. Try OpenRouter
     or_key = st.session_state.get('openrouter_api_key', '')
     if not or_key:
         try: or_key = st.secrets.get("openrouter", {}).get("api_key", "")
@@ -1249,30 +1257,24 @@ def get_best_kb_answer(question, system_prompt=None):
             resp = req_lib.post("https://openrouter.ai/api/v1/chat/completions",
                 json={
                     "model": "meta-llama/llama-3.3-70b-instruct:free",
-                    "messages": [{"role":"user","content":f"{system_prompt}\n\n{question}"}],
+                    "messages": [{"role":"user","content":f"{system_prompt[:1500]}\n\n{question}"}],
                     "max_tokens": 1500
                 },
                 headers={'Authorization':f'Bearer {or_key}','HTTP-Referer':'https://hr-analytics-risal.streamlit.app'},
                 timeout=30)
             if resp.status_code == 200:
                 text = resp.json().get('choices',[{}])[0].get('message',{}).get('content','')
-                if text and len(text) > 10: return filter_response(text, consultant_type)
+                if text and len(text) > 10:
+                    return filter_response(text, consultant_type)
             else:
                 errors.append(f"OpenRouter: {resp.status_code}")
         except Exception as e:
             errors.append(f"OpenRouter: {str(e)[:60]}")
 
-    # 4. Local KB fallback (use correct KB per consultant)
-    if consultant_type == "legal":
-        answer = smart_local_answer(question, LABOR_KB)
-    else:
-        answer = smart_local_answer(question, HR_KB)
-    if answer: return answer
-
     # 5. Diagnostic
     keys_info = f"Groq: {'✅' if groq_key else '❌'} | Gemini: {'✅' if gemini_key else '❌'} | OpenRouter: {'✅' if or_key else '❌'}"
     err_info = " | ".join(errors) if errors else "لا أخطاء"
-    return f"**لم أتمكن من الاتصال بمزودي الذكاء الاصطناعي**\n\n**المفاتيح:** {keys_info}\n**الأخطاء:** {err_info}\n\n**الحل:** تحقق من إعدادات API Keys في قسم إدارة المستخدمين."
+    return f"**لم أتمكن من الاتصال بمزودي الذكاء الاصطناعي**\n\n**المفاتيح:** {keys_info}\n**الأخطاء:** {err_info}"
 
 def auto_learn_from_answer(question, answer, consultant_type="legal"):
     """Save good AI answers to RAG knowledge base for future retrieval."""
