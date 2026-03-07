@@ -27,9 +27,9 @@ class ModelOrchestrator:
     Handles: prompt building, model routing, context assembly, caching, error management."""
 
     MODELS = {
-        'claude': {'url':'https://api.anthropic.com/v1/messages','model':'claude-3-5-sonnet-20241022','max_tokens':4000},
-        'groq': {'url':'https://api.groq.com/openai/v1/chat/completions','model':'llama-3.3-70b-versatile','max_tokens':4000},
-        'openrouter': {'url':'https://openrouter.ai/api/v1/chat/completions','model':'meta-llama/llama-3.3-70b-instruct:free','max_tokens':2000},
+        'claude': {'url':'https://api.anthropic.com/v1/messages','model':'claude-sonnet-4-20250514','max_tokens':4096},
+        'groq': {'url':'https://api.groq.com/openai/v1/chat/completions','model':'llama-3.3-70b-versatile','max_tokens':4096},
+        'openrouter': {'url':'https://openrouter.ai/api/v1/chat/completions','model':'meta-llama/llama-3.3-70b-instruct:free','max_tokens':2048},
         'huggingface': {'url':'https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3/v1/chat/completions','model':'mistralai/Mistral-7B-Instruct-v0.3','max_tokens':1500},
     }
 
@@ -44,7 +44,7 @@ class ModelOrchestrator:
     }
 
     # Context size limits per provider
-    CONTEXT_LIMITS = {'claude': 15000, 'groq': 12000, 'openrouter': 4000, 'huggingface': 3000}
+    CONTEXT_LIMITS = {'claude': 15000, 'groq': 12000, 'openrouter': 6000, 'huggingface': 3000}
 
     def __init__(self):
         self._cache = {}
@@ -133,7 +133,7 @@ class ModelOrchestrator:
         if cache_key in self._cache:
             return self._cache[cache_key], None
 
-        provider = self.select_provider(user_message)
+        provider = self.select_provider(model_type + " " + user_message[:200])
         if not provider:
             return None, "يرجى إدخال API Key (Groq مجاني أو Claude)"
 
@@ -143,9 +143,9 @@ class ModelOrchestrator:
         # Build messages
         messages = []
         if chat_history:
-            # Limit history for speed (last 4 messages only)
-            for msg in chat_history[-4:]:
-                messages.append({"role": msg['role'], "content": msg['content'][:500]})
+            # Keep last 8 messages for better conversation context
+            for msg in chat_history[-8:]:
+                messages.append({"role": msg['role'], "content": msg['content'][:1500]})
         messages.append({"role": "user", "content": user_message})
 
         # Estimate tokens
@@ -197,7 +197,7 @@ class ModelOrchestrator:
                     headers['HTTP-Referer'] = 'https://hr-analytics-risal.streamlit.app'
                     headers['X-Title'] = 'HR Analytics Platform'
                 try:
-                    timeout = 30 if provider == 'openrouter' else 60
+                    timeout = 25 if provider == 'openrouter' else 45
                     req = urllib.request.Request(config['url'], data=payload.encode('utf-8'), headers=headers, method='POST')
                     with urllib.request.urlopen(req, timeout=timeout) as resp:
                         result = json.loads(resp.read().decode())
@@ -208,21 +208,29 @@ class ModelOrchestrator:
             return None, "fallback"
 
         else:  # claude
-            for use_web in [True, False]:
+            # Try without web search first (faster), then with web search as fallback
+            for use_web in [False, True]:
                 payload_dict = {
                     "model": config['model'], "max_tokens": config['max_tokens'],
                     "system": system_prompt, "messages": messages,
+                    "temperature": 0.3,
                 }
                 if use_web:
                     payload_dict["tools"] = [{"type":"web_search_20250305","name":"web_search"}]
                 payload = json.dumps(payload_dict)
                 headers = {'Content-Type':'application/json','x-api-key':api_key,'anthropic-version':'2023-06-01'}
                 try:
+                    timeout = 60 if not use_web else 75
                     req = urllib.request.Request(config['url'], data=payload.encode('utf-8'), headers=headers, method='POST')
-                    with urllib.request.urlopen(req, timeout=90) as resp:
+                    with urllib.request.urlopen(req, timeout=timeout) as resp:
                         result = json.loads(resp.read().decode())
                         text = "\n".join([b.get('text','') for b in result.get('content',[]) if b.get('type')=='text'])
-                        return text, None
+                        if text and len(text) > 10:
+                            return text, None
+                        # If empty response without web search, try with web search
+                        if not use_web:
+                            continue
+                        return None, "fallback"
                 except urllib.request.HTTPError as he:
                     try: err_body = he.read().decode('utf-8',errors='ignore')[:300]
                     except: err_body = ""
@@ -230,12 +238,12 @@ class ModelOrchestrator:
                     if 'credit' in err_body.lower() or 'balance' in err_body.lower():
                         st.session_state['_claude_no_credit'] = True
                         return None, "fallback"
-                    # Web search not supported - retry without
-                    if use_web and he.code == 400:
+                    # Web search not supported or other 400 error - retry without/with
+                    if he.code == 400:
                         continue
                     return None, "fallback"
                 except:
-                    if use_web: continue
+                    if not use_web: continue
                     return None, "fallback"
             return None, "fallback"
 
@@ -1071,12 +1079,24 @@ def smart_local_answer(question, kb=None):
 
 def get_best_kb_answer(question):
     """Always returns an answer - never fails. Tries API first, then KB, then general."""
-    # 1. Try API via orchestrator
+    # 1. Try API via orchestrator with a rich system prompt
     try:
         if '_orchestrator' in st.session_state:
+            system_prompt = """أنت مستشار قانوني وخبير موارد بشرية سعودي متخصص. لديك معرفة شاملة بـ:
+- نظام العمل السعودي (245 مادة) واللائحة التنفيذية
+- نظام التأمينات الاجتماعية (GOSI)
+- نظام الضمان الصحي التعاوني (CCHI)
+- قرارات وزير الموارد البشرية
+- أفضل الممارسات العالمية في الموارد البشرية (PHRi, SHRM, CIPD)
+
+القواعد:
+1. أجب بنفس لغة السؤال (عربي أو إنجليزي)
+2. اذكر رقم المادة القانونية عند الإجابة
+3. قدم نصائح عملية مع خطوات واضحة
+4. أظهر الحسابات بالتفصيل عند الحاجة
+5. إذا لم تكن متأكداً، أوصِ بمراجعة محامٍ مرخص"""
             response, error = st.session_state._orchestrator.call(
-                "أنت مستشار قانوني وخبير موارد بشرية سعودي. أجب بالعربية بدقة مع ذكر المواد القانونية.",
-                question, model_type="labor")
+                system_prompt, question, model_type="labor")
             if response and len(response) > 20:
                 return response
     except: pass
@@ -7661,11 +7681,13 @@ function stopSpeak(){{speechSynthesis.cancel()}}
             try:
                 if '_orchestrator' not in st.session_state:
                     st.session_state._orchestrator = _init_orchestrator()
+                if '_knowledge_engine' not in st.session_state:
                     st.session_state._knowledge_engine = _init_knowledge()
+                if '_learning_system' not in st.session_state:
                     st.session_state._learning_system = _init_learning()
                 return st.session_state._orchestrator.call(system_prompt, user_message, chat_history, model_type)
             except Exception as e:
-                return None, f"⚠️ يرجى المحاولة مرة أخرى"
+                return None, f"⚠️ خطأ في الاتصال بالذكاء الاصطناعي. يرجى المحاولة مرة أخرى."
 
         def call_claude_api(system_prompt, user_message, chat_history=None, model_type="general"):
             return call_ai_api(system_prompt, user_message, chat_history, model_type)
@@ -7793,7 +7815,6 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                 submitted = st.form_submit_button("⚖️ استشارة", type="primary", use_container_width=True)
 
             if submitted and labor_q:
-                st.session_state.labor_chat = []
                 # Check instant answers first
                 answer = None
                 for k, v in INSTANT_ANSWERS.items():
@@ -7804,13 +7825,22 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                         if k.rstrip('؟?') in labor_q or labor_q.rstrip('؟?') in k:
                             answer = v; break
                 if answer:
-                    st.session_state.labor_chat = [{"role":"user","content":labor_q},{"role":"assistant","content":answer}]
+                    st.session_state.labor_chat.append({"role":"user","content":labor_q})
+                    st.session_state.labor_chat.append({"role":"assistant","content":answer})
                     st.rerun()
                 else:
-                    # Always gets an answer - never fails
-                    with st.spinner("جاري تحليل القضية..."):
-                        response = get_best_kb_answer(labor_q)
-                        st.session_state.labor_chat = [{"role":"user","content":labor_q},{"role":"assistant","content":response}]
+                    # Use AI model with the full Labor Law system prompt
+                    with st.spinner("⚖️ جاري تحليل القضية بالذكاء الاصطناعي..."):
+                        response, error = call_ai_api(
+                            LABOR_LAW_SYSTEM_PROMPT, labor_q,
+                            chat_history=st.session_state.labor_chat,
+                            model_type="labor"
+                        )
+                        if not response or len(str(response)) < 20:
+                            # Fallback to local KB if AI fails
+                            response = get_best_kb_answer(labor_q)
+                        st.session_state.labor_chat.append({"role":"user","content":labor_q})
+                        st.session_state.labor_chat.append({"role":"assistant","content":response})
                         st.rerun()
 
             # Clear chat
@@ -7863,7 +7893,6 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                 submitted = st.form_submit_button("📚 استشارة", type="primary", use_container_width=True)
 
             if submitted and hr_q:
-                st.session_state.hr_chat = []
                 answer = None
                 for k, v in HR_INSTANT.items():
                     if hr_q.strip() == k or hr_q.strip().rstrip('؟?') == k.rstrip('؟?'):
@@ -7873,12 +7902,20 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                         if k.rstrip('؟?') in hr_q or hr_q.rstrip('؟?') in k:
                             answer = v; break
                 if answer:
-                    st.session_state.hr_chat = [{"role":"user","content":hr_q},{"role":"assistant","content":answer}]
+                    st.session_state.hr_chat.append({"role":"user","content":hr_q})
+                    st.session_state.hr_chat.append({"role":"assistant","content":answer})
                     st.rerun()
                 else:
-                    with st.spinner("جاري البحث في المراجع..."):
-                        response = get_best_kb_answer(hr_q)
-                        st.session_state.hr_chat = [{"role":"user","content":hr_q},{"role":"assistant","content":response}]
+                    with st.spinner("📚 جاري البحث بالذكاء الاصطناعي..."):
+                        response, error = call_ai_api(
+                            HR_EXPERT_SYSTEM_PROMPT, hr_q,
+                            chat_history=st.session_state.hr_chat,
+                            model_type="hr_expert"
+                        )
+                        if not response or len(str(response)) < 20:
+                            response = get_best_kb_answer(hr_q)
+                        st.session_state.hr_chat.append({"role":"user","content":hr_q})
+                        st.session_state.hr_chat.append({"role":"assistant","content":response})
                         st.rerun()
 
             if st.session_state.hr_chat and st.button("🗑️ مسح المحادثة", key="hr_clear"):
