@@ -6387,6 +6387,7 @@ def main():
             cv_input_method = st.radio("طريقة الإدخال:", ["📁 رفع ملف","✍️ لصق النص"], horizontal=True, key="cv_input")
 
             cv_text = ""
+            cv_file = None
             if cv_input_method == "📁 رفع ملف":
                 cv_file = st.file_uploader("ارفع السيرة الذاتية:", type=["pdf","docx","txt","doc","rtf"], key="cv_file")
                 if cv_file:
@@ -6427,9 +6428,7 @@ def main():
                             if not cv_text or len(cv_text.strip()) < 30:
                                 try:
                                     raw = file_bytes.decode('utf-8', errors='ignore')
-                                    import re as _re
-                                    # Extract readable text from PDF raw
-                                    text_parts = _re.findall(r'\(([^\)]{2,})\)', raw)
+                                    text_parts = re.findall(r'\(([^\)]{2,})\)', raw)
                                     if text_parts:
                                         cv_text = ' '.join(text_parts)
                                 except:
@@ -6648,6 +6647,7 @@ def main():
                         except: pass
 
                         has_jd = bool(jd_text and jd_text.strip())
+                        prompt = None
 
                         # Build structured pre-analysis for AI
                         pre_analysis = f"""[تحليل أولي آلي]
@@ -6762,7 +6762,10 @@ def main():
 
 ## 11. توصيات لتحسين السيرة الذاتية (5 نصائح محددة)"""
 
-                        response, error = call_ai_api(prompt, prompt, model_type="hr")
+                        if prompt:
+                            response, error = call_ai_api(prompt, prompt, model_type="hr")
+                        else:
+                            response, error = None, "تعذر بناء الطلب. حاول مرة أخرى."
                         if response:
                             st.session_state['_cv_result'] = response
                             st.session_state['_cv_name'] = cv_file.name if cv_file else "مرشح"
