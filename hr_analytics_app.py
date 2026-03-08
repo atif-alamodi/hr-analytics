@@ -94,7 +94,7 @@ class ModelOrchestrator:
             if k: return p
         return None
 
-    def build_context(self, system_prompt, user_message, model_type='general', provider='claude', analysis=None):
+    def build_context(self, system_prompt, user_message, model_type='general', provider='claude', analysis=None, reasoning=None):
         """Assemble full context: system prompt + reasoning + RAG + learned + legal docs.
         CRITICAL: Never truncate the system prompt - it contains the expert knowledge.
         Each consultant only gets context from its own dedicated knowledge domain.
@@ -117,7 +117,8 @@ class ModelOrchestrator:
 
         if analysis and remaining > 300:
             try:
-                reasoning = ReasoningLayer()
+                if reasoning is None:
+                    reasoning = ReasoningLayer()
                 reasoning_ctx = reasoning.build_reasoning_context(
                     user_message, model_type, analysis, rag_ctx
                 )
@@ -216,7 +217,7 @@ class ModelOrchestrator:
             except: pass
 
         # Step 2: Build enhanced context with reasoning (size depends on provider)
-        enhanced_prompt = self.build_context(system_prompt, user_message, model_type, provider, analysis)
+        enhanced_prompt = self.build_context(system_prompt, user_message, model_type, provider, analysis, reasoning)
 
         # Build messages
         messages = []
@@ -1042,51 +1043,22 @@ class ReasoningLayer:
     Provides: question analysis, asking-party identification, reasoning rules,
     context building, citation verification, confidence scoring, answer validation."""
 
-    # ---- Articles embedded in the system prompt (always grounded) ----
+    # ---- Arabic numeral mapping (reused by extract_article_numbers and validation) ----
+    ARABIC_NUM_MAP = {'٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9'}
+
+    # ---- Articles whose full text is embedded in the system prompt (always grounded) ----
+    # ONLY articles explicitly quoted in LABOR_LAW_SYSTEM_PROMPT go here.
+    # This is NOT all 245 articles -- that's KNOWN_LABOR_ARTICLES.
+    # The grounding check relies on this being a SMALL set so that articles
+    # the LLM cites from memory (not from retrieved context) get blocked.
     SYSTEM_PROMPT_ARTICLES = {
-        # ===== نظام العمل السعودي (245 مادة) =====
-        # الباب 1: تعريفات
-        '1','2','3','4','5','6','7',
-        # الباب 2: التوظيف
-        '8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24',
-        # الباب 3: استخدام غير السعوديين
-        '25','26','27','28','29','30','31','32','33','34','35','36','37','38','39','40','41',
-        # الباب 4: التدريب والتأهيل
-        '42','43','44','45','46','47','48',
-        # الباب 5: علاقات العمل (العقود)
-        '49','50','51','52','53','54','55','56','57','58','59','60',
-        # الباب 6: شروط العمل وظروفه
-        '61','62','63','64','65','66','67','68','69','70','71','72','73',
-        # الباب 7: انتهاء عقد العمل
-        '74','75','76','77','78','79','80','81','82',
-        # الباب 8: مكافأة نهاية الخدمة
-        '83','84','85','86','87','88',
-        # الباب 9: الأجور
-        '89','90','91','92','93','94','95','96','97',
-        # الباب 10: ساعات العمل وفترات الراحة
-        '98','99','100','101','102','103','104','105','106','107',
-        # الباب 11: الإجازات
-        '108','109','110','111','112','113','114','115','116',
-        # الباب 12: تشغيل الأحداث
-        '117','118','119','120',
-        # الباب 13: تشغيل المرأة
-        '121','122','123','124','125','126','127','128','129','130',
-        # الباب 14: الوقاية من المخاطر المهنية
-        '131','132','133','134','135','136','137','138','139','140','141','142','143','144','145',
-        # الباب 15: إصابات العمل والتعويض
-        '146','147','148','149','150','151','152','153','154','155',
-        # الباب 16: العمل البحري
-        '156','157','158','159','160','161','162','163','164','165','166','167','168',
-        '169','170','171','172','173','174','175','176','177','178',
-        # الباب 17: المناجم والمحاجر
-        '179','180','181','182','183','184','185','186','187','188','189','190',
-        '191','192','193','194','195','196','197','198','199',
-        # الباب 18: تسوية الخلافات العمالية
-        '200','201','202','203','204','205','206','207','208','209','210',
-        '211','212','213','214','215','216','217','218','219','220',
-        '221','222','223','224','225','226','227','228','229','230','231',
-        # الباب 19: العقوبات
-        '232','233','234','235','236','237','238','239','240','241','242','243','244','245',
+        '50', '51', '53', '55',           # العقود
+        '74', '75', '77',                  # إنهاء العقد
+        '80', '81',                        # فسخ/ترك بدون إشعار
+        '84', '85', '88',                  # مكافأة نهاية الخدمة
+        '98', '99', '107',                 # ساعات العمل والإضافي
+        '109', '113',                      # الإجازات
+        '151',                             # إجازة الوضع
     }
 
     # ---- Known/Approved Legal References ----
@@ -1218,6 +1190,12 @@ class ReasoningLayer:
             }
         },
     }
+
+    # Pre-computed regulation name list (avoids rebuilding on every validation call)
+    KNOWN_REGULATION_NAMES = [
+        v.get('name_ar', '') for v in KNOWN_REGULATIONS.values()
+        if isinstance(v, dict) and v.get('name_ar')
+    ]
 
     # ---- Known/Approved HR Frameworks ----
     KNOWN_HR_FRAMEWORKS = {
@@ -1501,9 +1479,8 @@ class ReasoningLayer:
         for pat in patterns:
             articles.update(re.findall(pat, text))
         # Arabic numerals
-        arabic_num_map = {'٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9'}
         for match in re.findall(r'(?:المادة|مادة)\s*([٠-٩]+)', text):
-            articles.add(''.join(arabic_num_map.get(c, c) for c in match))
+            articles.add(''.join(ReasoningLayer.ARABIC_NUM_MAP.get(c, c) for c in match))
         return articles
 
     def _detect_asking_party(self, q_lower):
@@ -2024,24 +2001,8 @@ class ReasoningLayer:
         # === CITATION VERIFICATION (Anti-Hallucination) ===
 
         if advisor_type == 'labor':
-            # Multiple regex patterns to catch ALL article citation formats
-            patterns = [
-                r'(?:المادة|مادة)\s*[(\[]?\s*(\d+)\s*[)\]]?',  # المادة 77, المادة (77), المادة [77]
-                r'(?:المادة|مادة)\s*رقم\s*(\d+)',               # مادة رقم 84
-                r'(?:المادة|مادة)(\d+)',                         # المادة77 (no space)
-                r'[Aa]rticle\s*(\d+)',                            # Article 77
-                r'[Aa]rt\.\s*(\d+)',                              # Art. 77
-            ]
-            all_cited = set()
-            for pat in patterns:
-                all_cited.update(re.findall(pat, answer))
-
-            # Also catch Arabic numeral citations (١٠٩ etc.)
-            arabic_num_map = {'٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9'}
-            arabic_article_pattern = r'(?:المادة|مادة)\s*([٠-٩]+)'
-            for match in re.findall(arabic_article_pattern, answer):
-                western = ''.join(arabic_num_map.get(c, c) for c in match)
-                all_cited.add(western)
+            # Extract all cited article numbers using the shared utility
+            all_cited = self.extract_article_numbers(answer)
 
             hallucinated_articles = []
             for art in all_cited:
@@ -2077,9 +2038,8 @@ class ReasoningLayer:
                     # Check if it matches a known source
                     is_known = any(ks in m for ks in self.KNOWN_LEGAL_SOURCES)
                     if not is_known:
-                        # Also check against KNOWN_REGULATIONS names
-                        reg_names = [r.get('name_ar','') for r in self.KNOWN_REGULATIONS.values() if isinstance(r, dict)]
-                        is_known = any(rn in m for rn in reg_names if rn)
+                        # Also check against pre-computed KNOWN_REGULATIONS names
+                        is_known = any(rn in m for rn in self.KNOWN_REGULATION_NAMES)
                     if not is_known:
                         warnings.append(f"المرجع '{m[:50]}' قد لا يكون مصدراً قانونياً معتمداً")
 
