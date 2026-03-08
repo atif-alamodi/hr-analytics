@@ -10956,9 +10956,58 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                     st.plotly_chart(fig, use_container_width=True)
                     st.markdown("### 🎯 التوصيات المهنية")
                     top2 = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:2]
+                    low2 = sorted(scores.items(), key=lambda x: x[1])[:2]
                     for t, pct in top2:
                         info = BIG5_TRAITS[t]
                         ibox(f"**{info['name']} ({pct}%):** الوظائف المناسبة: {info['jobs_high']}", "success")
+
+                    # === ENHANCED: 5 sections ===
+                    st.markdown("---")
+                    # Personality Summary
+                    top_names = [BIG5_TRAITS[t]["name"] for t,_ in top2]
+                    low_names = [BIG5_TRAITS[t]["name"] for t,_ in low2]
+                    summary_lines = [
+                        f"**{emp_name}** يتميز بمستوى مرتفع في {top_names[0]} و{top_names[1]}، مما يشير إلى شخصية {'اجتماعية ومنفتحة' if 'E' in [t for t,_ in top2] else 'تحليلية ومنظمة'}.",
+                        f"يميل إلى {BIG5_TRAITS[top2[0][0]]['high']}، مع قدرة على {BIG5_TRAITS[top2[1][0]]['high']}.",
+                        f"المجالات التي تحتاج تطوير تشمل {low_names[0]} ({low2[0][1]}%) و{low_names[1]} ({low2[1][1]}%).",
+                        f"في بيئة العمل، يُفضل المهام التي تتطلب {BIG5_TRAITS[top2[0][0]]['jobs_high'].split('،')[0]}.",
+                        f"يُنصح بتوجيهه نحو أدوار تستثمر نقاط قوته مع تطوير {'المرونة والتكيف' if low2[0][0] in ['O','E'] else 'التنظيم والانضباط'}."
+                    ]
+                    st.markdown("### 📝 ملخص الشخصية")
+                    for line in summary_lines:
+                        st.markdown(f"- {line}")
+
+                    st.markdown("### 💪 نقاط القوة")
+                    for t, pct in top2:
+                        info = BIG5_TRAITS[t]
+                        st.success(f"✅ **{info['name']} ({pct}%):** {info['high']}")
+
+                    st.markdown("### ⚠️ نقاط الضعف")
+                    for t, pct in low2:
+                        info = BIG5_TRAITS[t]
+                        st.warning(f"⚠️ **{info['name']} ({pct}%):** {info['low']}")
+
+                    st.markdown("### 💼 توصيات مهنية")
+                    career_tips = {
+                        "O": "ابحث عن بيئات عمل تشجع الابتكار والتجريب. انضم لمشاريع جديدة وفرق تطوير المنتجات.",
+                        "C": "تولى مهام تتطلب الدقة والتنظيم. أنت مناسب لإدارة المشاريع وضمان الجودة.",
+                        "E": "استثمر قدرتك على التواصل في أدوار قيادية أو مبيعات أو تدريب.",
+                        "A": "أنت مناسب للموارد البشرية وحل النزاعات وبناء الفرق.",
+                        "N": "استثمر حساسيتك في الأدوار الإبداعية والاستشارية. تجنب البيئات عالية الضغط."
+                    }
+                    for t, pct in top2:
+                        st.info(f"💼 {career_tips.get(t, '')}")
+
+                    st.markdown("### 🌱 توصيات شخصية")
+                    personal_tips = {
+                        "O": "جرب هوايات إبداعية جديدة. اقرأ في مجالات متنوعة خارج تخصصك.",
+                        "C": "ضع أهدافاً يومية واحتفل بإنجازها. نظم بيئتك الشخصية لتعزيز إنتاجيتك.",
+                        "E": "وسع شبكة علاقاتك. شارك في فعاليات اجتماعية ومهنية بانتظام.",
+                        "A": "مارس التعاطف الذاتي. ساعد الآخرين لكن لا تنسَ حدودك الشخصية.",
+                        "N": "مارس تقنيات الاسترخاء والتأمل. ابنِ روتيناً يومياً يعزز استقرارك النفسي."
+                    }
+                    for t, pct in sorted(scores.items(), key=lambda x: x[1], reverse=True)[:3]:
+                        st.info(f"🌱 {personal_tips.get(t, '')}")
 
             elif test_name == "Thomas PPA":
                 questions = THOMAS_QUESTIONS
@@ -10992,6 +11041,43 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                     fig.update_layout(title=f"Thomas PPA - {emp_name}", font=dict(family="Noto Sans Arabic"), height=400, showlegend=False)
                     st.plotly_chart(fig, use_container_width=True)
 
+                    # === ENHANCED: Full analysis ===
+                    st.markdown("---")
+                    sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+                    top_s, sec_s = sorted_scores[0], sorted_scores[1]
+                    low_s = sorted_scores[-1]
+                    dom_i, sec_i, low_i = THOMAS_SCALES[top_s[0]], THOMAS_SCALES[sec_s[0]], THOMAS_SCALES[low_s[0]]
+
+                    st.markdown("### 📝 ملخص الشخصية")
+                    summary = [
+                        f"**{emp_name}** يتميز بنمط {dom_i['name']} ({dom_i['en']}) كنمط سائد بنسبة {top_s[1]}%.",
+                        f"يجمع بين {dom_i['desc'].split('،')[0]} و{sec_i['desc'].split('،')[0]} مما يجعله {dom_i['high'].split('،')[0]}.",
+                        f"في بيئة العمل يميل إلى {dom_i['role'].split('،')[0]}، ويفضل {dom_i['communicate'].split('،')[0] if 'communicate' in dom_i else 'بيئة منظمة'}.",
+                        f"المجال الأضعف هو {low_i['name']} ({low_s[1]}%)، مما يعني أنه قد يحتاج دعماً في {low_i['high'].split('،')[0]}.",
+                        f"يُنصح بتوجيهه نحو أدوار {dom_i['role']} مع تطوير مهارات {low_i['name']}."
+                    ]
+                    for line in summary: st.markdown(f"- {line}")
+
+                    st.markdown("### 💪 نقاط القوة")
+                    st.success(f"✅ **{dom_i['name']}:** {dom_i['strengths']}")
+                    st.success(f"✅ **{sec_i['name']}:** {sec_i['strengths']}")
+
+                    st.markdown("### ⚠️ نقاط الضعف")
+                    st.warning(f"⚠️ **{low_i['name']} ({low_s[1]}%):** {low_i['challenges']}")
+
+                    st.markdown("### 💼 توصيات مهنية")
+                    st.info(f"💼 **الأدوار المناسبة:** {dom_i['role']}")
+                    st.info(f"💼 **الوظائف المقترحة:** {dom_i['careers']}")
+                    st.info(f"💼 **أسلوب الإدارة المثالي:** {dom_i['manage']}")
+
+                    st.markdown("### 🌱 توصيات شخصية")
+                    thomas_personal = {"D":"طور مهارات الاستماع والصبر. مارس التفويض وثق بقدرات فريقك.",
+                        "I":"درب نفسك على التنظيم والمتابعة. ضع قوائم مهام يومية والتزم بها.",
+                        "S":"تعلم تقبل التغيير تدريجياً. مارس المبادرة واخرج من منطقة الراحة.",
+                        "C":"تقبل أن الكمال ليس دائماً ممكناً. طور مهاراتك الاجتماعية والعاطفية."}
+                    for s, pct in sorted_scores[:2]:
+                        st.info(f"🌱 **{THOMAS_SCALES[s]['name']}:** {thomas_personal.get(s,'')}")
+
             elif test_name == "Hogan HPI":
                 questions = HOGAN_QUESTIONS
                 st.info("قيّم كل عبارة: 1 (لا تنطبق) - 5 (تنطبق تماماً)")
@@ -11023,6 +11109,57 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                     fig.update_layout(polar=dict(radialaxis=dict(range=[0,100])), title=f"Hogan HPI - {emp_name}", font=dict(family="Noto Sans Arabic"), height=500, showlegend=False)
                     st.plotly_chart(fig, use_container_width=True)
 
+                    # === ENHANCED: Full analysis ===
+                    st.markdown("---")
+                    h_sorted = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+                    h_top2, h_low2 = h_sorted[:2], h_sorted[-2:]
+
+                    st.markdown("### 📝 ملخص الشخصية")
+                    ht1, ht2 = HOGAN_SCALES[h_top2[0][0]], HOGAN_SCALES[h_top2[1][0]]
+                    hl1, hl2 = HOGAN_SCALES[h_low2[0][0]], HOGAN_SCALES[h_low2[1][0]]
+                    h_summary = [
+                        f"**{emp_name}** يتميز بمستوى مرتفع في {ht1['name']} ({h_top2[0][1]}%) و{ht2['name']} ({h_top2[1][1]}%).",
+                        f"هذا يعني أنه {ht1['high'].split('،')[0]} مع قدرة على {ht2['high'].split('،')[0]}.",
+                        f"الأثر المهني: {ht1['impact']}",
+                        f"المجالات التي تحتاج تطوير: {hl1['name']} ({h_low2[0][1]}%) و{hl2['name']} ({h_low2[1][1]}%).",
+                        f"يُنصح بالتركيز على تطوير {hl1['desc'].split('،')[0]} لتحقيق توازن أفضل في الأداء المهني."
+                    ]
+                    for line in h_summary: st.markdown(f"- {line}")
+
+                    st.markdown("### 💪 نقاط القوة")
+                    for s, pct in h_top2:
+                        info = HOGAN_SCALES[s]
+                        st.success(f"✅ **{info['name']} ({pct}%):** {info['high']}")
+
+                    st.markdown("### ⚠️ نقاط الضعف")
+                    for s, pct in h_low2:
+                        info = HOGAN_SCALES[s]
+                        st.warning(f"⚠️ **{info['name']} ({pct}%):** {info['low']}")
+
+                    st.markdown("### 💼 توصيات مهنية")
+                    for s, pct in h_top2:
+                        info = HOGAN_SCALES[s]
+                        st.info(f"💼 **{info['name']}:** {info['impact']}")
+                    hogan_careers = {"ADJ":"إدارة الأزمات، القيادة تحت الضغط",
+                        "AMB":"الإدارة التنفيذية، ريادة الأعمال، إدارة المشاريع",
+                        "SOC":"المبيعات، العلاقات العامة، التدريب، الموارد البشرية",
+                        "INT":"الدبلوماسية، التفاوض، خدمة العملاء VIP",
+                        "PRU":"التحليل المالي، المراجعة، إدارة المخاطر",
+                        "INQ":"البحث والتطوير، الابتكار، التحليل الاستراتيجي",
+                        "LRN":"التعليم والتدريب، الاستشارات، إدارة المعرفة"}
+                    st.info(f"💼 **وظائف مقترحة:** {hogan_careers.get(h_top2[0][0], 'متعدد المجالات')}")
+
+                    st.markdown("### 🌱 توصيات شخصية")
+                    hogan_personal = {"ADJ":"مارس تقنيات إدارة التوتر. ابنِ روتيناً صحياً يعزز استقرارك النفسي.",
+                        "AMB":"ضع أهدافاً طويلة المدى وقسمها لخطوات. احتفل بالإنجازات الصغيرة.",
+                        "SOC":"وسع شبكة علاقاتك المهنية. شارك في فعاليات ومؤتمرات بانتظام.",
+                        "INT":"طور مهارات الذكاء العاطفي. تدرب على قراءة لغة الجسد.",
+                        "PRU":"وازن بين الحذر والمخاطرة المحسوبة. لا تدع الخوف يمنعك من الفرص.",
+                        "INQ":"خصص وقتاً للقراءة والتعلم الذاتي. جرب مجالات معرفية جديدة.",
+                        "LRN":"شارك معرفتك مع الآخرين. ابدأ مدونة أو قناة تعليمية."}
+                    for s, pct in h_top2:
+                        st.info(f"🌱 **{HOGAN_SCALES[s]['name']}:** {hogan_personal.get(s,'')}")
+
             elif test_name == "MBTI":
                 questions = MBTI_QUESTIONS
                 st.info("قيّم كل عبارة: 1 (لا تنطبق) - 5 (تنطبق تماماً)")
@@ -11051,6 +11188,67 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                     mc1, mc2 = st.columns(2)
                     with mc1: ibox(f"**نقاط القوة:** {type_info['strengths']}", "success")
                     with mc2: ibox(f"**المسارات المهنية:** {type_info['careers']}")
+
+                    # === ENHANCED: Full analysis ===
+                    st.markdown("---")
+                    # Weaknesses map
+                    mbti_weaknesses = {
+                        "I":"قد يواجه صعوبة في المبادرة الاجتماعية والعمل الجماعي المكثف",
+                        "E":"قد يفتقر للتركيز في العمل الفردي ويتشتت بالتفاعلات",
+                        "S":"قد يقاوم التغيير ويفتقر للرؤية الاستراتيجية طويلة المدى",
+                        "N":"قد يتجاهل التفاصيل العملية ويبالغ في التنظير",
+                        "T":"قد يفتقر للحساسية العاطفية والتعاطف مع الآخرين",
+                        "F":"قد يتأثر بالعواطف في اتخاذ القرارات ويتجنب المواجهة",
+                        "J":"قد يكون جامداً ويقاوم التغييرات غير المخططة",
+                        "P":"قد يماطل في إنجاز المهام ويفتقر للتنظيم"
+                    }
+                    mbti_personal_tips = {
+                        "I":"خصص وقتاً لشحن طاقتك بالانعزال، لكن تحدَّ نفسك بمشاركة اجتماعية أسبوعية.",
+                        "E":"تعلم فن الاستماع النشط. خصص وقتاً هادئاً للتأمل والتفكير.",
+                        "S":"جرب التفكير في الصورة الكبيرة أحياناً. اقرأ عن المستقبليات.",
+                        "N":"درب نفسك على الانتباه للتفاصيل. ضع قوائم مهام عملية.",
+                        "T":"مارس التعبير عن مشاعرك. اسأل الآخرين عن شعورهم.",
+                        "F":"تعلم فصل القرارات المهنية عن العواطف الشخصية.",
+                        "J":"تقبل أن الخطط تتغير. جرب المرونة في روتينك اليومي.",
+                        "P":"استخدم تقنيات إدارة الوقت. ضع مواعيد نهائية ذاتية."
+                    }
+
+                    st.markdown("### 📝 ملخص الشخصية")
+                    dims_text = {"E":"منفتح اجتماعياً","I":"متأمل داخلياً","S":"واقعي عملي","N":"حدسي مبتكر",
+                        "T":"منطقي تحليلي","F":"عاطفي متعاطف","J":"منظم مخطط","P":"مرن تلقائي"}
+                    m_summary = [
+                        f"**{emp_name}** من نمط **{mbti_type}** ({type_info['name']})، وهو {type_info['desc']}.",
+                        f"يتميز بكونه {dims_text.get(mbti_type[0],'')} و{dims_text.get(mbti_type[1],'')}.",
+                        f"في اتخاذ القرارات يميل لأن يكون {dims_text.get(mbti_type[2],'')}، وفي أسلوب حياته {dims_text.get(mbti_type[3],'')}.",
+                        f"نقاط قوته الرئيسية: {type_info['strengths']}.",
+                        f"المسارات المهنية المناسبة تشمل {type_info['careers']}."
+                    ]
+                    for line in m_summary: st.markdown(f"- {line}")
+
+                    st.markdown("### 💪 نقاط القوة")
+                    st.success(f"✅ {type_info['strengths']}")
+
+                    st.markdown("### ⚠️ نقاط الضعف")
+                    for letter in mbti_type:
+                        if letter in mbti_weaknesses:
+                            st.warning(f"⚠️ **{dims_text.get(letter,letter)}:** {mbti_weaknesses[letter]}")
+
+                    st.markdown("### 💼 توصيات مهنية")
+                    st.info(f"💼 **المسارات المهنية المثالية:** {type_info['careers']}")
+                    mbti_career_advice = {"I":"ابحث عن أدوار تتيح العمل المستقل مع تفاعل محدود.",
+                        "E":"اختر أدواراً تفاعلية مثل المبيعات أو التدريب أو القيادة.",
+                        "T":"تميز في الأدوار التحليلية والاستشارية.",
+                        "F":"ابرع في أدوار الرعاية والتطوير البشري.",
+                        "J":"تفوق في إدارة المشاريع والتخطيط الاستراتيجي.",
+                        "P":"اختر بيئات مرنة تسمح بالإبداع والتجريب."}
+                    for letter in [mbti_type[0], mbti_type[2]]:
+                        if letter in mbti_career_advice:
+                            st.info(f"💼 {mbti_career_advice[letter]}")
+
+                    st.markdown("### 🌱 توصيات شخصية")
+                    for letter in mbti_type:
+                        if letter in mbti_personal_tips:
+                            st.info(f"🌱 **{dims_text.get(letter,letter)}:** {mbti_personal_tips[letter]}")
 
             elif test_name == "DISC":
                 questions = DISC_QUESTIONS
@@ -11092,6 +11290,34 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                         ibox(f"**الوظائف المناسبة:** {dom_info['careers']}", "success")
                         ibox(f"**كيف تديره:** {dom_info['manage']}")
                         ibox(f"**كيف تتواصل معه:** {dom_info['communicate']}")
+
+                    # === ENHANCED: Summary + Personal tips ===
+                    st.markdown("---")
+                    st.markdown("### 📝 ملخص الشخصية")
+                    d_summary = [
+                        f"**{emp_name}** يتميز بنمط {dom_info['name']} ({dom_info['en']}) كنمط سائد بنسبة {scores[dominant]}%.",
+                        f"النمط الثانوي هو {sec_info['name']} ({scores[secondary]}%)، مما يشكل نمطاً مركباً {dominant}{secondary}.",
+                        f"يتصف بأنه {dom_info['desc']}، مع ميل ثانوي نحو {sec_info['desc'].split('،')[0]}.",
+                        f"نقاط قوته الرئيسية: {dom_info['strengths']}.",
+                        f"يحتاج لتطوير: {dom_info['challenges']}."
+                    ]
+                    for line in d_summary: st.markdown(f"- {line}")
+
+                    st.markdown("### 💼 توصيات مهنية")
+                    st.info(f"💼 **الوظائف المثالية:** {dom_info['careers']}")
+                    disc_career_extra = {"D":"ضع أهدافاً تنافسية واضحة. أنت تتميز في بيئات سريعة النتائج.",
+                        "I":"استثمر قدرتك على التأثير في أدوار تتطلب إقناع وتحفيز الآخرين.",
+                        "S":"ابحث عن بيئات مستقرة مع فريق داعم. أنت العمود الفقري لأي فريق.",
+                        "C":"تميز في الأدوار التي تتطلب دقة وتحليل. الجودة هي ميزتك التنافسية."}
+                    st.info(f"💼 {disc_career_extra.get(dominant,'')}")
+
+                    st.markdown("### 🌱 توصيات شخصية")
+                    disc_personal = {"D":"تدرب على الصبر والاستماع. الفوز ليس كل شيء - العلاقات مهمة أيضاً.",
+                        "I":"نظم وقتك بشكل أفضل. الحماس رائع لكن المتابعة هي المفتاح.",
+                        "S":"تقبل التغيير كفرصة وليس تهديداً. جرب شيئاً جديداً كل أسبوع.",
+                        "C":"تقبل أن 80% أحياناً كافٍ. الكمال عدو الإنجاز."}
+                    st.info(f"🌱 **{dom_info['name']}:** {disc_personal.get(dominant,'')}")
+                    st.info(f"🌱 **{sec_info['name']}:** {disc_personal.get(secondary,'')}")
                     # Chart
                     disc_df = pd.DataFrame({"النمط": [DISC_STYLES[s]["name"] for s in scores], "النسبة": list(scores.values())})
                     fig = px.bar(disc_df, x="النمط", y="النسبة", text_auto=True,
