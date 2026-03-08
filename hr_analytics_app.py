@@ -1202,24 +1202,28 @@ class ReasoningLayer:
             'keywords': ['أداء','تقييم','performance','kpi','okr','أهداف','360'],
             'frameworks': ['SMART','MBO','BARS','360-Degree','BSC'],
             'category': 'إدارة الأداء',
+            'hr_facts': "9-Box Grid (SPHRi/PHRi): مصفوفة الأداء×الإمكانات. SMART Goals (PHRi): Specific+Measurable+Achievable+Relevant+Time-bound. BSC (SPHRi): Financial+Customer+Internal+Learning perspectives. MBO (SHRM): Management By Objectives. 360-degree (CIPD L7): تقييم من الرئيس+الزملاء+المرؤوسين+النفس.",
             'priority': 'high'
         },
         'training': {
             'keywords': ['تدريب','تطوير','training','kirkpatrick','addie','roi التدريب','l&d','تأهيل','دورة'],
             'frameworks': ['ADDIE','Kirkpatrick','Phillips ROI','70-20-10','SAM'],
             'category': 'التدريب والتطوير',
+            'hr_facts': "ADDIE (APTD): Analysis→Design→Development→Implementation→Evaluation. Kirkpatrick (APTD/PHRi): Level1 Reaction→Level2 Learning→Level3 Behavior→Level4 Results. Phillips ROI (SPHRi): Level5=(Benefits-Costs)/Costs×100. 70-20-10 (CIPD): 70% خبرة + 20% اجتماعي + 10% رسمي. Bloom's Taxonomy (APTD): Knowledge→Comprehension→Application→Analysis→Synthesis→Evaluation.",
             'priority': 'high'
         },
         'recruitment': {
             'keywords': ['استقطاب','توظيف','recruitment','hiring','مقابلة','شاغرة','تعيين','onboarding'],
             'frameworks': ['EVP','ATS','Structured Interview','Assessment Center'],
             'category': 'الاستقطاب والتوظيف',
+            'hr_facts': "Competency-Based Selection (PHRi): اختيار على أساس الكفاءات. Structured Interview (SHRM): أسئلة موحدة ومعايير تقييم ثابتة. EVP (CIPD L5): Employee Value Proposition. KPIs: Time-to-Hire, Cost-per-Hire, Quality of Hire, Source Effectiveness.",
             'priority': 'high'
         },
         'compensation': {
             'keywords': ['تعويضات','هيكل رواتب','compensation','total rewards','بدلات','مزايا','job evaluation'],
             'frameworks': ['Point Factor','Compa-Ratio','Total Rewards','Salary Survey'],
             'category': 'التعويضات والمزايا',
+            'hr_facts': "Total Rewards (SHRM/SPHRi): Compensation+Benefits+Work-Life+Recognition+Development. Job Evaluation (PHRi): Point Factor, Ranking, Classification. Compa-Ratio (PHRi): الراتب الفعلي/وسط النطاق. Salary Survey: P25, P50, P75 benchmarks.",
             'priority': 'high'
         },
         'employee_experience': {
@@ -1400,6 +1404,10 @@ class ReasoningLayer:
                     analysis['matched_articles'].extend(topic_info['articles'])
                 elif advisor_type == 'hr_expert' and 'frameworks' in topic_info:
                     analysis['matched_frameworks'].extend(topic_info['frameworks'])
+                # Capture hr_facts from the highest-scoring matched topic
+                if advisor_type == 'hr_expert' and 'hr_facts' in topic_info:
+                    if not analysis.get('hr_facts'):
+                        analysis['hr_facts'] = topic_info['hr_facts']
 
         matched_topics.sort(key=lambda x: x['score'], reverse=True)
         analysis['topics'] = matched_topics[:3]
@@ -1645,6 +1653,7 @@ class ReasoningLayer:
             'neutral': 'مستفسر عام'
         }
         party_label = party_labels.get(party, 'مستفسر عام')
+        party_text = party_label
 
         # Reasoning header
         topics_str = ", ".join([t['category'] for t in analysis.get('topics', [])]) or "عام"
@@ -1657,13 +1666,90 @@ class ReasoningLayer:
         }
         intent_ar = intent_map.get(analysis.get('intent', 'informational'), 'استفسار')
 
-        parts.append(f"\n**تحليل السؤال:** النوع: {intent_ar} | المواضيع: {topics_str} | صفة السائل: {party_label}")
+        header = f"\n**تحليل السؤال:** النوع: {intent_ar} | المواضيع: {topics_str} | صفة السائل: {party_label}"
 
         # Reasoning rules (includes party-aware rules)
         rules = self.apply_reasoning_rules(analysis, advisor_type)
         if rules:
             rules_text = "\n".join([f"- {r}" for r in rules])
-            parts.append(f"\n**قواعد الإجابة المطلوبة:**\n{rules_text}")
+            header += f"\n**قواعد الإجابة المطلوبة:**\n{rules_text}"
+
+        # Domain-specific index and templates
+        if advisor_type == 'labor':
+            # Comprehensive article index to prevent hallucination
+            header += "\n📋 **فهرس نظام العمل السعودي الكامل (245 مادة):**\n"
+            header += "**الباب 1 (م1-7):** تعريفات: عامل، صاحب عمل، أجر، عقد عمل\n"
+            header += "**الباب 2 (م8-24):** التوظيف: مكاتب التوظيف، تسجيل العمال\n"
+            header += "**الباب 3 (م25-41):** غير السعوديين: رخصة العمل (م33)، م26 نسبة 75%، م28 حظر العمل بدون رخصة\n"
+            header += "**الباب 4 (م42-48):** التدريب: م42 تأهيل السعوديين، م43 نسبة 12%، م45 عقد التأهيل، م46 إلزام المتدرب، م48 النفقات\n"
+            header += "**الباب 5 (م49-60):** العقود: م50 عقد مكتوب، م51 محتويات العقد، م53 التجربة 90 يوم، م55 تحول العقد بعد 3 تجديدات أو 4 سنوات\n"
+            header += "**الباب 6 (م61-73):** شروط العمل: م61 واجبات العامل، م62 واجبات صاحب العمل، م64 شهادة الخبرة، م66-72 الجزاءات التأديبية\n"
+            header += "**الباب 7 (م74-82):** إنهاء العقد: م74 حالات الانتهاء، م75 الإشعار 60/30 يوم، م77 تعويض الفسخ غير المشروع، م80 الفسخ المشروع (اعتداء/غياب)، م81 ترك بدون إشعار\n"
+            header += "**الباب 8 (م83-88):** المكافأة: م84 نصف شهر/سنة أول 5 + شهر/سنة بعدها، م85 نسب الاستقالة، م88 التسوية خلال أسبوع\n"
+            header += "**الباب 9 (م89-97):** الأجور: م89 بالريال، م90 الالتزام بالدفع، م92 حد الخصم نصف الأجر، م94 حماية الأجر\n"
+            header += "**الباب 10 (م98-107):** ساعات العمل: م98 ثمان ساعات/48 أسبوعياً، م99 رمضان 6/36، م101 راحة نصف ساعة، م104 عمل الجمعة، م107 إضافي 150%\n"
+            header += "**الباب 11 (م108-116):** الإجازات: م109 سنوية 21/30 يوم، م110 التأجيل، م112 وفاة5/زواج5/مولود3، م113 مرضية 30كامل+60ثلاثة أرباع+30بدون، م115 حج 10-15 يوم\n"
+            header += "**الباب 12 (م117-120):** الأحداث: سن العمل 15 سنة، 6 ساعات، حظر العمل الخطر\n"
+            header += "**الباب 13 (م121-130):** المرأة: م121 المساواة، م122 حظر العمل الليلي (استثناءات)\n"
+            header += "**الباب 14 (م131-145):** السلامة: م131 توفير وسائل السلامة، م135 تدريب السلامة، م140 الفحص الطبي\n"
+            header += "**الباب 15 (م146-155):** الإصابات: م146 تعريف إصابة العمل، م149 العلاج على صاحب العمل، م151 إجازة الوضع 10 أسابيع، م152 ساعة الرضاعة\n"
+            header += "**الباب 16 (م156-178):** العمل البحري: م164 عقد العمل البحري، م177 غرق السفينة\n"
+            header += "**الباب 17 (م179-199):** المناجم والمحاجر\n"
+            header += "**الباب 18 (م200-231):** تسوية الخلافات: الهيئات الابتدائية والعليا، منصة ودي 21 يوم، التقادم 12 شهر\n"
+            header += "**التأمينات (GOSI):** سعودي 10.5%+12.5% | غير سعودي 2% | ساند 0.75%+0.75% | تقاعد سن60+120شهر\n"
+            header += "**الضمان الصحي (CCHI):** التأمين إلزامي على صاحب العمل لجميع العاملين ومعاليهم\n"
+            header += "**نطاقات:** بلاتيني>أخضر عالي>أخضر منخفض>أصفر>أحمر حسب نسبة السعودة\n"
+
+            # Smart reasoning instructions
+            header += "\n**أسلوب الإجابة (إلزامي):**\n"
+            header += "- حلّل السؤال بعمق ولا تكتفِ بسرد المواد. اشرح لماذا وكيف تنطبق.\n"
+            header += "- قدم استشارة عملية كمحامٍ متخصص يتحدث مع موكّله.\n"
+            header += "- اذكر السيناريوهات المحتملة والنتائج المختلفة.\n"
+            header += "- إذا كانت الحالة تحتمل أكثر من تفسير، اذكر جميع الاحتمالات.\n"
+            header += "- قدم أمثلة حسابية واقعية عند الحاجة.\n"
+            header += "- اذكر المدد الزمنية والمواعيد النهائية.\n"
+            header += "- وجّه السائل للجهة المختصة (مكتب العمل/ودي/المحكمة العمالية) عند الحاجة.\n\n"
+
+            # Legal response templates
+            templates = {
+                "legal_case_analysis": f"حلّل الحالة القانونية بعمق:\n🔍 **المسألة القانونية:** حدد الواقعة الجوهرية وتكييفها القانوني\n📋 **المواد المنطبقة:** اسرد كل مادة ذات علاقة مع شرح مختصر لكل واحدة\n⚖️ **التحليل والتطبيق:** طبّق كل مادة على وقائع الحالة بالتحديد. اشرح لماذا تنطبق وكيف.\n👤 **موقف {party_text} القانوني:** ما حقوقه تحديداً؟ ما التزاماته؟ ما يمكنه فعله؟\n🔄 **السيناريوهات المحتملة:** ماذا لو...؟ قدم 2-3 سيناريوهات مختلفة\n💡 **التوصية العملية:** خطوات مرقّمة يتخذها {party_text} فوراً\n⏰ **المدد والمواعيد:** المهل القانونية والمواعيد النهائية\n🏛️ **الجهة المختصة:** أين يتوجه ومتى\n⚠️ **تحذيرات ومخاطر:** ما يجب تجنبه",
+                "legal_calculation": f"احسب المستحقات بدقة:\n📋 **الأساس القانوني:** المواد التي تحكم الحساب مع نصوصها\n🔢 **المعادلة:** اكتب المعادلة بوضوح مع شرح كل متغير\n📊 **الحساب التفصيلي:** خطوة بخطوة مع أرقام واضحة\n💰 **النتيجة لـ{party_text}:** المبلغ/النسبة النهائية\n🔄 **سيناريوهات مختلفة:** ماذا لو تغيرت المدة أو الراتب؟\n⚠️ **استثناءات:** حالات يختلف فيها الحساب",
+                "legal_comparison": f"قارن بعمق:\n📋 **الحالة الأولى:** الوصف + المواد المنطبقة + النتائج القانونية\n📋 **الحالة الثانية:** الوصف + المواد المنطبقة + النتائج القانونية\n⚖️ **جدول المقارنة:** الفروقات الجوهرية في الحقوق والالتزامات\n💡 **الأثر العملي:** كيف يؤثر كل خيار على {party_text}",
+                "legal_procedure": f"اشرح الإجراءات خطوة بخطوة لـ{party_text}:\n📋 **الأساس النظامي:** المواد ذات العلاقة\n📝 **الخطوات بالتفصيل:** رقّم كل خطوة مع شرح ما يجب فعله بالضبط\n⏰ **المدد الزمنية:** حدد المهل لكل خطوة\n🏛️ **الجهات المختصة:** حدد الجهة المسؤولة لكل إجراء\n📄 **المستندات المطلوبة:** قائمة بكل الأوراق اللازمة\n💡 **نصائح عملية:** ما ينجح وما يجب تجنبه",
+                "rights_obligations": f"اشرح الحقوق والالتزامات بشمولية:\n👤 **حقوق {party_text}:** اسردها مع المواد ورقّمها\n📋 **التزامات {party_text}:** ما يجب عليه فعله\n🏢 **حقوق الطرف الآخر:** لتوضيح الصورة الكاملة\n📋 **التزامات الطرف الآخر:** تجاه {party_text}\n⚠️ **المخالفات والعقوبات:** ما يترتب على الإخلال من كل طرف\n💡 **نصيحة:** كيف يحمي {party_text} حقوقه",
+                "legal_diagnosis": f"شخّص المشكلة القانونية بذكاء:\n🔍 **تحليل المشكلة:** حدد الإشكالية القانونية الأساسية والفرعية\n📋 **المخالفة المحتملة:** هل هناك مخالفة نظامية؟ من أي طرف؟ ما هي؟\n⚖️ **الخيارات القانونية:** ما الحلول المتاحة لـ{party_text}؟ رتّبها من الأفضل للأضعف\n📝 **خطة العمل:** إجراءات عملية مع تسلسل زمني\n🏛️ **الجهات:** أين يتوجه {party_text}\n⚠️ **المخاطر:** ما يجب الحذر منه",
+                "legal_explanation": f"اشرح الحكم القانوني بشمولية:\n🔍 **تحديد المسألة:** ما الموضوع القانوني بالتحديد\n📋 **الإطار النظامي:** الباب والمواد ذات العلاقة مع شرح كل مادة\n⚖️ **الشرح التفصيلي:** اشرح القاعدة القانونية وفلسفتها\n🔄 **التطبيق العملي:** كيف تُطبّق في الواقع مع أمثلة\n💡 **الأثر على {party_text}:** كيف يؤثر هذا الحكم عليه تحديداً\n⚠️ **استثناءات وحالات خاصة:** متى لا ينطبق الحكم",
+            }
+
+            # Select template based on intent
+            intent = analysis.get('intent', 'informational')
+            template_key = {
+                'case_analysis': 'legal_case_analysis',
+                'calculation': 'legal_calculation',
+                'comparison': 'legal_comparison',
+                'procedural': 'legal_procedure',
+                'informational': 'legal_explanation',
+            }.get(intent, 'legal_explanation')
+
+            # Use diagnosis template for vague queries
+            if analysis.get('is_vague'):
+                template_key = 'legal_diagnosis'
+
+            header += f"\n**هيكل الإجابة المطلوب:**\n{templates[template_key]}\n"
+
+        else:  # HR
+            header += f"\n⚠️ إذا لم تتأكد من إطار منهجي محدد، قل 'بحسب أفضل الممارسات المهنية' ولا تخترع مرجعاً.\n"
+            hr_facts = analysis.get('hr_facts', '')
+            if not hr_facts:
+                t = analysis.get('topic', '')
+                if t in self.HR_TOPICS and 'hr_facts' in self.HR_TOPICS[t]:
+                    hr_facts = self.HR_TOPICS[t]['hr_facts']
+            if hr_facts:
+                header += f"\n📚 **الأطر الموثّقة (استخدم هذه فقط):**\n{hr_facts}\n\n"
+            else:
+                header += f"\n📚 **المناهج المعتمدة للاستشهاد بها فقط:** PHRi (HRCI) | aPHRi (HRCI) | SPHRi (HRCI) | SHRM-SCP | CIPD L5 | CIPD L7 | APTD (ATD)\nلا تخترع أي إطار أو نموذج غير معروف.\n\n"
+
+        parts.append(header)
 
         # Article references for legal
         if advisor_type == 'labor' and analysis.get('matched_articles'):
