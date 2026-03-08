@@ -6380,33 +6380,10 @@ def main():
 
         # ===== CV ANALYSIS =====
         elif page == "📄 تحليل السير الذاتية":
-            hdr("📄 تحليل السير الذاتية بالذكاء الاصطناعي","تقييم المرشحين مقابل الوصف الوظيفي واحتياجات الشركة")
+            hdr("📄 تحليل السير الذاتية بالذكاء الاصطناعي","تحليل شامل للمرشح وفق أفضل الممارسات العالمية")
 
-            st.markdown("### 📋 الوصف الوظيفي")
-            jd_method = st.radio("مصدر الوصف:", ["كتابة يدوية","رفع ملف"], horizontal=True, key="jd_src")
-            if jd_method == "كتابة يدوية":
-                jd_text = st.text_area("الوصف الوظيفي:", height=150, key="jd_txt",
-                    placeholder="المسمى: محلل موارد بشرية\nالمتطلبات: خبرة 3 سنوات، شهادة PHRi، إجادة Excel وPower BI...")
-            else:
-                jd_file = st.file_uploader("ارفع الوصف الوظيفي:", type=["pdf","docx","txt"], key="jd_file")
-                jd_text = ""
-                if jd_file:
-                    if jd_file.name.endswith('.txt'):
-                        jd_text = jd_file.read().decode('utf-8',errors='ignore')
-                    elif jd_file.name.endswith('.docx'):
-                        try:
-                            from docx import Document
-                            doc = Document(io.BytesIO(jd_file.read()))
-                            jd_text = "\n".join([p.text for p in doc.paragraphs])
-                        except: st.error("تعذر قراءة الملف")
-                    elif jd_file.name.endswith('.pdf'):
-                        try:
-                            import pdfplumber
-                            with pdfplumber.open(io.BytesIO(jd_file.read())) as pdf:
-                                jd_text = "\n".join([p.extract_text() or '' for p in pdf.pages])
-                        except: st.error("تعذر قراءة PDF")
-
-            st.markdown("### 📄 السيرة الذاتية")
+            # === CV Upload (REQUIRED) ===
+            st.markdown("### 📄 السيرة الذاتية (مطلوب)")
             cv_file = st.file_uploader("ارفع السيرة الذاتية:", type=["pdf","docx","txt"], key="cv_file")
             cv_text = ""
             if cv_file:
@@ -6424,78 +6401,147 @@ def main():
                         with pdfplumber.open(io.BytesIO(cv_file.read())) as pdf:
                             cv_text = "\n".join([p.extract_text() or '' for p in pdf.pages])
                     except: pass
-                if cv_text: st.success(f"✅ تم قراءة {len(cv_text)} حرف")
+                if cv_text: st.success(f"✅ تم قراءة {len(cv_text)} حرف من السيرة الذاتية")
+                else: st.error("❌ تعذر قراءة الملف. جرب صيغة أخرى.")
 
-            # Company context
+            # === JD Upload (OPTIONAL) ===
+            with st.expander("📋 الوصف الوظيفي (اختياري - يزيد دقة الموائمة)", expanded=False):
+                jd_method = st.radio("مصدر الوصف:", ["كتابة يدوية","رفع ملف"], horizontal=True, key="jd_src")
+                jd_text = ""
+                if jd_method == "كتابة يدوية":
+                    jd_text = st.text_area("الوصف الوظيفي:", height=150, key="jd_txt",
+                        placeholder="المسمى: محلل موارد بشرية\nالمتطلبات: خبرة 3 سنوات، شهادة PHRi...")
+                else:
+                    jd_file = st.file_uploader("ارفع الوصف الوظيفي:", type=["pdf","docx","txt"], key="jd_file")
+                    if jd_file:
+                        if jd_file.name.endswith('.txt'):
+                            jd_text = jd_file.read().decode('utf-8',errors='ignore')
+                        elif jd_file.name.endswith('.docx'):
+                            try:
+                                from docx import Document
+                                doc = Document(io.BytesIO(jd_file.read()))
+                                jd_text = "\n".join([p.text for p in doc.paragraphs])
+                            except: pass
+                        elif jd_file.name.endswith('.pdf'):
+                            try:
+                                import pdfplumber
+                                with pdfplumber.open(io.BytesIO(jd_file.read())) as pdf:
+                                    jd_text = "\n".join([p.extract_text() or '' for p in pdf.pages])
+                            except: pass
+                        if jd_text: st.success(f"✅ تم قراءة الوصف الوظيفي ({len(jd_text)} حرف)")
+
+            # Company context (OPTIONAL)
             company_goals = st.text_area("🏢 أهداف واحتياجات الشركة (اختياري):", height=80, key="cv_goals",
                 placeholder="شركة تقنية معلومات، تحتاج تعزيز فريق HR بالتحليلات والأتمتة...")
 
-            if st.button("🤖 تحليل السيرة الذاتية", type="primary", use_container_width=True, key="cv_btn") and cv_text:
-                with st.spinner("جاري التحليل الذكي بالذكاء الاصطناعي..."):
-                    # Company info from Resal config
-                    company_info = ""
-                    try:
-                        ci = st.session_state.get('company_info', {})
-                        if ci:
-                            company_info = f"الشركة: {ci.get('name','رسال الود لتقنية المعلومات')}\nالنشاط: {ci.get('activity','تقنية المعلومات والمدفوعات الرقمية')}\nالمقر: {ci.get('location','جدة')}\nعدد الموظفين: {ci.get('employees','')}"
-                    except: pass
+            # === Analysis Button ===
+            if st.button("🤖 تحليل السيرة الذاتية", type="primary", use_container_width=True, key="cv_btn"):
+                if not cv_text:
+                    st.error("❌ يرجى رفع السيرة الذاتية أولاً")
+                else:
+                    with st.spinner("جاري التحليل الذكي بالذكاء الاصطناعي..."):
+                        # Company info from config
+                        company_info = ""
+                        try:
+                            ci = st.session_state.get('company_info', {})
+                            if ci:
+                                company_info = f"الشركة: {ci.get('name','رسال الود لتقنية المعلومات')}\nالنشاط: {ci.get('activity','تقنية المعلومات والمدفوعات الرقمية')}\nالمقر: {ci.get('location','جدة')}"
+                        except: pass
 
-                    prompt = f"""أنت خبير توظيف وتحليل سير ذاتية بخبرة 15 سنة. حلل السيرة الذاتية التالية بدقة وقدم تقريراً احترافياً بالعربية.
+                        has_jd = bool(jd_text and jd_text.strip())
+
+                        if has_jd:
+                            # === WITH JD: Matching analysis ===
+                            prompt = f"""أنت خبير توظيف وتحليل سير ذاتية بخبرة 15 سنة. حلل السيرة الذاتية مقابل الوصف الوظيفي.
 
 **السيرة الذاتية:**
 {cv_text[:4000]}
 
-**الوصف الوظيفي المطلوب:**
-{jd_text[:2000] if jd_text else 'غير محدد - قيّم بشكل عام'}
+**الوصف الوظيفي:**
+{jd_text[:2000]}
 
 **بيانات الشركة:**
-{company_info if company_info else company_goals if company_goals else 'شركة تقنية معلومات في جدة'}
+{company_info if company_info else company_goals if company_goals else 'غير محدد'}
 
-**أهداف الشركة الإضافية:**
-{company_goals[:500] if company_goals else 'غير محدد'}
+قدم التحليل بالعربية:
 
-قدم التحليل بالتنسيق التالي بالضبط:
+## 1. ملخص المرشح (3 أسطر)
 
-## 1. ملخص المرشح
-(3 أسطر تلخص الخبرة والتخصص والمستوى)
-
-## 2. نقاط الخبرة المتوافقة مع متطلبات الشركة
-(قائمة بكل نقطة خبرة في السيرة الذاتية تتوافق مع متطلبات الوظيفة أو الشركة، مع نسبة التوافق لكل نقطة)
-- الخبرة: ... | التوافق: .../10
+## 2. نقاط الخبرة المتوافقة مع الوصف الوظيفي
 - الخبرة: ... | التوافق: .../10
 
-## 3. نقاط الخبرة غير المتوافقة أو الناقصة
-(ما ينقص المرشح من متطلبات الوظيفة)
-- المتطلب الناقص: ...
-- المتطلب الناقص: ...
+## 3. المتطلبات الناقصة عند المرشح
+- المتطلب: ...
 
-## 4. تقييم المهارات
-(كل مهارة موجودة في السيرة مع درجة من 10)
-- المهارة: ... | الدرجة: .../10
+## 4. تقييم المهارات (كل مهارة من 10)
 - المهارة: ... | الدرجة: .../10
 
-## 5. نقاط القوة (أقوى 5 نقاط)
-1. ...
-2. ...
+## 5. نقاط القوة (أقوى 5)
 
 ## 6. نقاط الضعف والفجوات
-1. ...
-2. ...
 
 ## 7. التقييم الرقمي
 - مطابقة الوصف الوظيفي: XX من 100
-- التوافق مع ثقافة الشركة: XX من 100
 - جودة الخبرات: XX من 100
 - المهارات التقنية: XX من 100
 - المهارات القيادية: XX من 100
 - الدرجة النهائية: XX من 100
 
-## 8. التوصية النهائية
-(مناسب جداً / مناسب / يحتاج تطوير / غير مناسب)
-مع تبرير التوصية في 3 أسطر.
+## 8. التوصية (مناسب جداً / مناسب / يحتاج تطوير / غير مناسب)
 
-## 9. أسئلة مقترحة للمقابلة
-(5 أسئلة مخصصة بناءً على تحليل السيرة للتحقق من نقاط محددة)"""
+## 9. أسئلة مقترحة للمقابلة (5 أسئلة)"""
+
+                        else:
+                            # === WITHOUT JD: General best-practice analysis ===
+                            prompt = f"""أنت خبير توظيف دولي بخبرة 15 سنة. حلل السيرة الذاتية التالية وفق أفضل الممارسات العالمية في تقييم المرشحين.
+
+**السيرة الذاتية:**
+{cv_text[:4000]}
+
+**معلومات إضافية:**
+{company_info if company_info else ''} {company_goals if company_goals else ''}
+
+لا يوجد وصف وظيفي محدد. حلل السيرة بشكل شامل ومستقل.
+
+قدم التحليل بالعربية:
+
+## 1. ملخص المرشح (3 أسطر عن الخبرة والتخصص والمستوى)
+
+## 2. المسار المهني وتطوره
+(تحليل المسار الوظيفي: هل هو تصاعدي؟ متنوع؟ متخصص؟)
+
+## 3. تقييم المهارات (كل مهارة موجودة في السيرة من 10)
+- المهارة: ... | الدرجة: .../10
+
+## 4. نقاط القوة (أقوى 5 نقاط مع شرح)
+
+## 5. نقاط الضعف والفجوات (3-5 نقاط)
+
+## 6. الوظائف المناسبة (أفضل 5 مسميات وظيفية تناسب المرشح مع السبب)
+1. المسمى: ... | السبب: ...
+
+## 7. القطاعات المناسبة (أفضل 3 قطاعات)
+
+## 8. التقييم الرقمي
+- جودة الخبرات: XX من 100
+- المهارات التقنية: XX من 100
+- المهارات القيادية: XX من 100
+- جودة التعليم والشهادات: XX من 100
+- القيمة السوقية للمرشح: XX من 100
+- الدرجة النهائية: XX من 100
+
+## 9. توصيات للمرشح (5 نصائح لتطوير سيرته الذاتية ومساره المهني)
+
+## 10. نطاق الراتب المتوقع في السوق السعودي (بالريال)"""
+
+                        response, error = call_ai_api(prompt, prompt, model_type="hr")
+                        if response:
+                            st.session_state['_cv_result'] = response
+                            st.session_state['_cv_name'] = cv_file.name if cv_file else "مرشح"
+                            st.session_state['_cv_has_jd'] = has_jd
+                        elif error:
+                            st.error(f"❌ {error}")
+                            st.info("💡 تأكد من إعداد مفتاح API في ⚙️ الإعدادات (Gemini مجاني أو Groq أو Claude)")
 
                     response, error = call_ai_api(prompt, prompt, model_type="hr")
                     if response:
