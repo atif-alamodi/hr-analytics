@@ -183,6 +183,7 @@ class ModelOrchestrator:
         # Step 1: Analyze question with reasoning layer (for labor/hr_expert only)
         analysis = None
         reasoning = None
+        grounded_articles = None  # Will hold article numbers from retrieved context
         if model_type in ('labor', 'hr_expert'):
             try:
                 reasoning = ReasoningLayer()
@@ -193,6 +194,22 @@ class ModelOrchestrator:
                     retrieval_results = st.session_state._knowledge_engine.search_structured(
                         user_message, top_k=5, model_type=model_type)
                     reasoning.compute_confidence(analysis, retrieval_results, model_type)
+
+                # Step 1c: Build grounded article set for labor advisor
+                # Only articles found in retrieved context + system prompt may be cited
+                if model_type == 'labor':
+                    grounded_articles = set(reasoning.SYSTEM_PROMPT_ARTICLES)
+                    # Extract articles from RAG retrieval results
+                    if retrieval_results:
+                        for r in retrieval_results:
+                            if isinstance(r, dict) and r.get('text'):
+                                grounded_articles.update(
+                                    reasoning.extract_article_numbers(r['text']))
+                    # Extract articles from legal documents context
+                    legal_ctx = st.session_state.get('legal_docs_context', '')
+                    if legal_ctx:
+                        grounded_articles.update(
+                            reasoning.extract_article_numbers(legal_ctx))
             except: pass
 
         # Step 2: Build enhanced context with reasoning (size depends on provider)
@@ -225,14 +242,39 @@ class ModelOrchestrator:
                 validation_passed = True  # Default for non-advisor calls
                 if analysis and reasoning:
                     try:
-                        is_valid, issues, warnings = reasoning.validate_generated_answer(result, analysis, model_type)
+                        is_valid, issues, warnings = reasoning.validate_generated_answer(
+                            result, analysis, model_type, grounded_articles=grounded_articles)
                         validation_passed = is_valid
                         answer_warnings = warnings
                         if not is_valid and prov == providers_to_try[0] and len(providers_to_try) > 1:
                             # Try next provider if validation fails on primary (hallucinated articles, etc.)
                             continue
-                        # If invalid on last provider, append issues as disclaimer
-                        if not is_valid:
+                        # If invalid due to ungrounded articles, return safe fallback instead
+                        has_ungrounded = any("غير مدعومة بالمراجع" in i for i in issues)
+                        if not is_valid and has_ungrounded:
+                            grounded_list = ""
+                            if grounded_articles:
+                                sorted_arts = sorted(
+                                    [a for a in grounded_articles if a in reasoning.KNOWN_LABOR_ARTICLES],
+                                    key=lambda x: int(x) if x.isdigit() else 0)
+                                if sorted_arts:
+                                    grounded_list = "، ".join([f"المادة {a}" for a in sorted_arts[:10]])
+                            fallback = (
+                                f"**لم يتمكن النظام من تقديم إجابة مؤكدة لسؤالك:** \"{user_message}\"\n\n"
+                                f"تم رصد استشهاد بمواد قانونية لم يتم استرجاعها من قاعدة المعرفة القانونية، "
+                                f"لذا تم حجب الإجابة لمنع معلومات غير مؤكدة.\n\n"
+                            )
+                            if grounded_list:
+                                fallback += f"**المواد المتاحة في السياق المسترجع:** {grounded_list}\n\n"
+                            fallback += (
+                                "**للحصول على إجابة دقيقة، يُرجى:**\n"
+                                "1. **تحديد سؤالك بشكل أدق** مع ذكر تفاصيل الحالة\n"
+                                "2. **مراجعة نظام العمل السعودي** مباشرة عبر موقع وزارة الموارد البشرية\n"
+                                "3. **الاتصال بمكتب العمل** على الرقم 19911\n"
+                                "4. **استخدام منصة ودي** لتقديم شكوى أو استفسار رسمي"
+                            )
+                            result = fallback
+                        elif not is_valid:
                             disclaimer = "\n\n---\n**تنبيه:** " + " | ".join(issues)
                             result += disclaimer
                     except: pass
@@ -988,6 +1030,12 @@ class ReasoningLayer:
     Provides: question analysis, asking-party identification, reasoning rules,
     context building, citation verification, confidence scoring, answer validation."""
 
+    # ---- Articles embedded in the system prompt (always grounded) ----
+    SYSTEM_PROMPT_ARTICLES = {
+        '50', '53', '55', '74', '77', '80', '81', '84', '85', '88',
+        '98', '99', '107', '109', '113', '151',
+    }
+
     # ---- Known/Approved Legal References ----
     # Only these article numbers may be cited. Any article not in this set is flagged.
     KNOWN_LABOR_ARTICLES = {
@@ -1241,6 +1289,29 @@ class ReasoningLayer:
                    'team member','i supervise'],
         },
     }
+
+    @staticmethod
+    def extract_article_numbers(text):
+        """Extract all legal article numbers mentioned in a text.
+        Handles Arabic and Western numeral formats, various citation styles."""
+        import re
+        if not text:
+            return set()
+        articles = set()
+        patterns = [
+            r'(?:المادة|مادة)\s*[(\[]?\s*(\d+)\s*[)\]]?',
+            r'(?:المادة|مادة)\s*رقم\s*(\d+)',
+            r'(?:المادة|مادة)(\d+)',
+            r'[Aa]rticle\s*(\d+)',
+            r'[Aa]rt\.\s*(\d+)',
+        ]
+        for pat in patterns:
+            articles.update(re.findall(pat, text))
+        # Arabic numerals
+        arabic_num_map = {'٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9'}
+        for match in re.findall(r'(?:المادة|مادة)\s*([٠-٩]+)', text):
+            articles.add(''.join(arabic_num_map.get(c, c) for c in match))
+        return articles
 
     def _detect_asking_party(self, q_lower):
         """Auto-detect the asking party from question language cues.
@@ -1662,9 +1733,10 @@ class ReasoningLayer:
         analysis['confidence'] = conf
         return conf['overall']
 
-    def validate_generated_answer(self, answer, analysis, advisor_type):
+    def validate_generated_answer(self, answer, analysis, advisor_type, grounded_articles=None):
         """Validate the generated answer for quality, completeness, and citation accuracy.
         Performs exhaustive citation verification against known sources to kill hallucinations.
+        grounded_articles: set of article number strings actually present in retrieved context.
         Returns (is_valid, issues, warnings) tuple."""
         if not answer or len(answer.strip()) < 30:
             return False, ["الإجابة قصيرة جداً"], []
@@ -1704,6 +1776,21 @@ class ReasoningLayer:
             if hallucinated_articles:
                 for art in hallucinated_articles:
                     issues.append(f"المادة {art} المذكورة في الإجابة غير موجودة في نظام العمل السعودي (245 مادة فقط)")
+
+            # === STRICT ARTICLE GROUNDING CHECK ===
+            # Articles must be present in retrieved RAG context, legal docs, or system prompt.
+            # If the model cites an article from memory alone (not in any retrieved source), reject it.
+            if grounded_articles is not None and all_cited:
+                ungrounded = set()
+                for art in all_cited:
+                    if art not in grounded_articles and art not in hallucinated_articles:
+                        ungrounded.add(art)
+                if ungrounded:
+                    ungrounded_list = ', '.join(sorted(ungrounded, key=lambda x: int(x) if x.isdigit() else 0))
+                    issues.append(
+                        f"مواد غير مدعومة بالمراجع المسترجعة: المادة {ungrounded_list} — "
+                        f"لم يتم العثور على هذه المواد في قاعدة المعرفة المسترجعة"
+                    )
 
             # Detect fabricated regulation names
             fabricated_source_patterns = [
@@ -1824,8 +1911,9 @@ class ReasoningLayer:
         # === FINAL VALIDITY DECISION ===
         # Critical issues that invalidate the answer (trigger retry or block RAG save):
         has_hallucinated_article = any("غير موجودة" in i for i in issues)
+        has_ungrounded_article = any("غير مدعومة بالمراجع" in i for i in issues)
         has_structural_issue = any("قصيرة" in i or "حسابية" in i or "لغة" in i for i in issues)
-        is_valid = not has_hallucinated_article and not has_structural_issue
+        is_valid = not has_hallucinated_article and not has_ungrounded_article and not has_structural_issue
         return is_valid, issues, warnings
 
 
