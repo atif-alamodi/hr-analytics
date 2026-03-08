@@ -179,7 +179,7 @@ class ModelOrchestrator:
 
         provider = self.select_provider(model_type + " " + user_message[:200])
         if not provider:
-            return None, "يرجى إدخال API Key (Groq مجاني أو Claude)"
+            return None, "Please enter an API Key (Groq is free, or use Claude)" if any('\u0041' <= c <= '\u007A' for c in user_message[:20]) else "يرجى إدخال API Key (Groq مجاني أو Claude)"
 
         # Step 1: Analyze question with reasoning layer (for labor/hr_expert only)
         analysis = None
@@ -244,6 +244,7 @@ class ModelOrchestrator:
                 # Step 3: Validate answer with reasoning layer (citation verification + quality)
                 answer_warnings = []
                 validation_passed = True  # Default for non-advisor calls
+                _q_en = analysis.get('language') == 'en' if analysis else False
                 if analysis and reasoning:
                     try:
                         is_valid, issues, warnings = reasoning.validate_generated_answer(
@@ -254,7 +255,7 @@ class ModelOrchestrator:
                             # Try next provider if validation fails on primary (hallucinated articles, etc.)
                             continue
                         # If invalid due to ungrounded articles, return safe fallback instead
-                        has_ungrounded = any("غير مدعومة بالمراجع" in i for i in issues)
+                        has_ungrounded = any("غير مدعومة بالمراجع" in i or "Ungrounded articles" in i for i in issues)
                         if not is_valid and has_ungrounded:
                             grounded_list = ""
                             if grounded_articles:
@@ -262,31 +263,50 @@ class ModelOrchestrator:
                                     [a for a in grounded_articles if a in reasoning.KNOWN_LABOR_ARTICLES],
                                     key=lambda x: int(x) if x.isdigit() else 0)
                                 if sorted_arts:
-                                    grounded_list = "، ".join([f"المادة {a}" for a in sorted_arts[:10]])
-                            fallback = (
-                                f"**لم يتمكن النظام من تقديم إجابة مؤكدة لسؤالك:** \"{user_message}\"\n\n"
-                                f"تم رصد استشهاد بمواد قانونية لم يتم استرجاعها من قاعدة المعرفة القانونية، "
-                                f"لذا تم حجب الإجابة لمنع معلومات غير مؤكدة.\n\n"
-                            )
-                            if grounded_list:
-                                fallback += f"**المواد المتاحة في السياق المسترجع:** {grounded_list}\n\n"
-                            fallback += (
-                                "**للحصول على إجابة دقيقة، يُرجى:**\n"
-                                "1. **تحديد سؤالك بشكل أدق** مع ذكر تفاصيل الحالة\n"
-                                "2. **مراجعة نظام العمل السعودي** مباشرة عبر موقع وزارة الموارد البشرية\n"
-                                "3. **الاتصال بمكتب العمل** على الرقم 19911\n"
-                                "4. **استخدام منصة ودي** لتقديم شكوى أو استفسار رسمي"
-                            )
+                                    _art_prefix = "Article" if _q_en else "المادة"
+                                    grounded_list = ", ".join([f"{_art_prefix} {a}" for a in sorted_arts[:10]])
+                            if _q_en:
+                                fallback = (
+                                    f"**The system could not provide a verified answer to your question:** \"{user_message}\"\n\n"
+                                    f"Legal articles were cited that were not retrieved from the legal knowledge base, "
+                                    f"so the answer was blocked to prevent unverified information.\n\n"
+                                )
+                                if grounded_list:
+                                    fallback += f"**Articles available in retrieved context:** {grounded_list}\n\n"
+                                fallback += (
+                                    "**For an accurate answer, please:**\n"
+                                    "1. **Be more specific** with details about your case\n"
+                                    "2. **Review the Saudi Labor Law** directly via the HRSD website\n"
+                                    "3. **Contact the Labor Office** at 19911\n"
+                                    "4. **Use the Wudi platform** to submit an official inquiry"
+                                )
+                            else:
+                                fallback = (
+                                    f"**لم يتمكن النظام من تقديم إجابة مؤكدة لسؤالك:** \"{user_message}\"\n\n"
+                                    f"تم رصد استشهاد بمواد قانونية لم يتم استرجاعها من قاعدة المعرفة القانونية، "
+                                    f"لذا تم حجب الإجابة لمنع معلومات غير مؤكدة.\n\n"
+                                )
+                                if grounded_list:
+                                    fallback += f"**المواد المتاحة في السياق المسترجع:** {grounded_list}\n\n"
+                                fallback += (
+                                    "**للحصول على إجابة دقيقة، يُرجى:**\n"
+                                    "1. **تحديد سؤالك بشكل أدق** مع ذكر تفاصيل الحالة\n"
+                                    "2. **مراجعة نظام العمل السعودي** مباشرة عبر موقع وزارة الموارد البشرية\n"
+                                    "3. **الاتصال بمكتب العمل** على الرقم 19911\n"
+                                    "4. **استخدام منصة ودي** لتقديم شكوى أو استفسار رسمي"
+                                )
                             result = fallback
                         elif not is_valid:
-                            disclaimer = "\n\n---\n**تنبيه:** " + " | ".join(issues)
+                            _disc_label = "Notice" if _q_en else "تنبيه"
+                            disclaimer = f"\n\n---\n**{_disc_label}:** " + " | ".join(issues)
                             result += disclaimer
                     except: pass
 
                 # Append warnings as notes (non-blocking)
                 if answer_warnings:
                     notes = "\n".join([f"- {w}" for w in answer_warnings])
-                    result += f"\n\n---\n**ملاحظات التحقق:**\n{notes}"
+                    _notes_label = "Verification Notes" if _q_en else "ملاحظات التحقق"
+                    result += f"\n\n---\n**{_notes_label}:**\n{notes}"
 
                 self._call_count += 1
                 self._cache[cache_key] = result
@@ -1809,83 +1829,149 @@ class ReasoningLayer:
         and confidence-aware guidance. Prepended to retrieved context before sending to model."""
         parts = []
 
-        # Asking-party identification
+        # Detect question language for bilingual context
+        q_lang = analysis.get('language', 'ar')
+        is_en = (q_lang == 'en')
+
+        # Asking-party identification (bilingual)
         party = analysis.get('asking_party', 'neutral')
-        party_labels = {
+        party_labels_ar = {
             'employee': 'موظف/عامل',
             'employer': 'صاحب عمل',
             'hr_officer': 'مسؤول موارد بشرية',
             'manager': 'مدير',
             'neutral': 'مستفسر عام'
         }
-        party_label = party_labels.get(party, 'مستفسر عام')
+        party_labels_en = {
+            'employee': 'Employee/Worker',
+            'employer': 'Employer',
+            'hr_officer': 'HR Officer',
+            'manager': 'Manager',
+            'neutral': 'General Inquirer'
+        }
+        party_labels = party_labels_en if is_en else party_labels_ar
+        party_label = party_labels.get(party, party_labels['neutral'])
         party_text = party_label
 
         # Reasoning header
-        topics_str = ", ".join([t['category'] for t in analysis.get('topics', [])]) or "عام"
-        intent_map = {
+        topics_str = ", ".join([t['category'] for t in analysis.get('topics', [])]) or ("General" if is_en else "عام")
+        intent_map_ar = {
             'informational': 'استفسار معلوماتي',
             'calculation': 'طلب حساب',
             'comparison': 'طلب مقارنة',
             'procedural': 'طلب إجراءات',
             'case_analysis': 'تحليل حالة'
         }
-        intent_ar = intent_map.get(analysis.get('intent', 'informational'), 'استفسار')
+        intent_map_en = {
+            'informational': 'Informational Query',
+            'calculation': 'Calculation Request',
+            'comparison': 'Comparison Request',
+            'procedural': 'Procedural Request',
+            'case_analysis': 'Case Analysis'
+        }
+        intent_map = intent_map_en if is_en else intent_map_ar
+        intent_label = intent_map.get(analysis.get('intent', 'informational'), intent_map.get('informational'))
 
-        header = f"\n**تحليل السؤال:** النوع: {intent_ar} | المواضيع: {topics_str} | صفة السائل: {party_label}"
+        if is_en:
+            header = f"\n**Question Analysis:** Type: {intent_label} | Topics: {topics_str} | Asking Party: {party_label}"
+        else:
+            header = f"\n**تحليل السؤال:** النوع: {intent_label} | المواضيع: {topics_str} | صفة السائل: {party_label}"
 
         # Reasoning rules (includes party-aware rules)
         rules = self.apply_reasoning_rules(analysis, advisor_type)
         if rules:
             rules_text = "\n".join([f"- {r}" for r in rules])
-            header += f"\n**قواعد الإجابة المطلوبة:**\n{rules_text}"
+            header += f"\n**{'Required Response Rules' if is_en else 'قواعد الإجابة المطلوبة'}:**\n{rules_text}"
 
         # Domain-specific index and templates
         if advisor_type == 'labor':
             # Comprehensive article index to prevent hallucination
-            header += "\n📋 **فهرس نظام العمل السعودي الكامل (245 مادة):**\n"
-            header += "**الباب 1 (م1-7):** تعريفات: عامل، صاحب عمل، أجر، عقد عمل\n"
-            header += "**الباب 2 (م8-24):** التوظيف: مكاتب التوظيف، تسجيل العمال\n"
-            header += "**الباب 3 (م25-41):** غير السعوديين: رخصة العمل (م33)، م26 نسبة 75%، م28 حظر العمل بدون رخصة\n"
-            header += "**الباب 4 (م42-48):** التدريب: م42 تأهيل السعوديين، م43 نسبة 12%، م45 عقد التأهيل، م46 إلزام المتدرب، م48 النفقات\n"
-            header += "**الباب 5 (م49-60):** العقود: م50 عقد مكتوب، م51 محتويات العقد، م53 التجربة 180 يوم كحد أقصى (معدلة - لا تمديد)، م55 تحول العقد بعد 3 تجديدات أو 4 سنوات\n"
-            header += "**الباب 6 (م61-73):** شروط العمل: م61 واجبات العامل، م62 واجبات صاحب العمل، م64 شهادة الخبرة، م66-72 الجزاءات التأديبية\n"
-            header += "**الباب 7 (م74-82):** إنهاء العقد: م74 حالات الانتهاء، م75 الإشعار 60/30 يوم، م77 تعويض الفسخ غير المشروع، م80 الفسخ المشروع (اعتداء/غياب)، م81 ترك بدون إشعار\n"
-            header += "**الباب 8 (م83-88):** المكافأة: م84 نصف شهر/سنة أول 5 + شهر/سنة بعدها، م85 نسب الاستقالة، م88 التسوية خلال أسبوع\n"
-            header += "**الباب 9 (م89-97):** الأجور: م89 بالريال، م90 الالتزام بالدفع، م92 حد الخصم نصف الأجر، م94 حماية الأجر\n"
-            header += "**الباب 10 (م98-107):** ساعات العمل: م98 ثمان ساعات/48 أسبوعياً، م99 رمضان 6/36، م101 راحة نصف ساعة، م104 عمل الجمعة، م107 إضافي 150%\n"
-            header += "**الباب 11 (م108-116):** الإجازات: م109 سنوية 21/30 يوم، م110 التأجيل، م112 وفاة5/زواج5/مولود3(جديد)/وفاة أخ3(جديد)، م113 مرضية 30كامل+60ثلاثة أرباع+30بدون، م115 حج 10-15 يوم\n"
-            header += "**الباب 12 (م117-120):** الأحداث: سن العمل 15 سنة، 6 ساعات، حظر العمل الخطر\n"
-            header += "**الباب 13 (م121-130):** المرأة: م121 المساواة، م122 حظر العمل الليلي (استثناءات)\n"
-            header += "**الباب 14 (م131-145):** السلامة: م131 توفير وسائل السلامة، م135 تدريب السلامة، م140 الفحص الطبي\n"
-            header += "**الباب 15 (م146-155):** الإصابات: م146 تعريف إصابة العمل، م149 العلاج على صاحب العمل، م151 إجازة الوضع 12 أسبوع (معدلة)، م152 ساعة الرضاعة\n"
-            header += "**الباب 16 (م156-178):** العمل البحري: م164 عقد العمل البحري، م177 غرق السفينة\n"
-            header += "**الباب 17 (م179-199):** المناجم والمحاجر\n"
-            header += "**الباب 18 (م200-231):** تسوية الخلافات: الهيئات الابتدائية والعليا، منصة ودي 21 يوم، التقادم 12 شهر\n"
-            header += "**التأمينات (GOSI):** سعودي 10.5%+12.5% | غير سعودي 2% | ساند 0.75%+0.75% | تقاعد سن60+120شهر\n"
-            header += "**الضمان الصحي (CCHI):** التأمين إلزامي على صاحب العمل لجميع العاملين ومعاليهم\n"
-            header += "**نطاقات:** بلاتيني>أخضر عالي>أخضر منخفض>أصفر>أحمر حسب نسبة السعودة\n"
+            if is_en:
+                header += "\n📋 **Complete Saudi Labor Law Index (245 Articles):**\n"
+                header += "**Chapter 1 (Art.1-7):** Definitions: worker, employer, wage, employment contract\n"
+                header += "**Chapter 2 (Art.8-24):** Employment: employment offices, worker registration\n"
+                header += "**Chapter 3 (Art.25-41):** Non-Saudis: work permit (Art.33), Art.26 75% ratio, Art.28 prohibition without permit\n"
+                header += "**Chapter 4 (Art.42-48):** Training: Art.42 Saudi qualification, Art.43 12% ratio, Art.45 training contract, Art.46 trainee obligations\n"
+                header += "**Chapter 5 (Art.49-60):** Contracts: Art.50 written contract, Art.51 contract contents, Art.53 probation 180 days max (amended - no extension), Art.55 conversion after 3 renewals or 4 years\n"
+                header += "**Chapter 6 (Art.61-73):** Working conditions: Art.61 worker duties, Art.62 employer duties, Art.64 experience certificate, Art.66-72 disciplinary actions\n"
+                header += "**Chapter 7 (Art.74-82):** Contract termination: Art.74 termination cases, Art.75 notice 60/30 days, Art.77 unfair dismissal compensation, Art.80 lawful termination (assault/absence), Art.81 leaving without notice\n"
+                header += "**Chapter 8 (Art.83-88):** End-of-service: Art.84 half-month/year first 5 + full-month/year after, Art.85 resignation ratios, Art.88 settlement within one week\n"
+                header += "**Chapter 9 (Art.89-97):** Wages: Art.89 in SAR, Art.90 payment obligation, Art.92 deduction limit half salary, Art.94 wage protection\n"
+                header += "**Chapter 10 (Art.98-107):** Working hours: Art.98 8hrs/48 weekly, Art.99 Ramadan 6/36, Art.101 30min break, Art.104 Friday work, Art.107 overtime 150%\n"
+                header += "**Chapter 11 (Art.108-116):** Leaves: Art.109 annual 21/30 days, Art.112 death5/marriage5/newborn3(new)/sibling death3(new), Art.113 sick 30full+60three-quarter+30unpaid, Art.115 Hajj 10-15 days\n"
+                header += "**Chapter 12 (Art.117-120):** Juveniles: working age 15, 6 hours, hazardous work prohibition\n"
+                header += "**Chapter 13 (Art.121-130):** Women: Art.121 equality, Art.122 night work prohibition (exceptions)\n"
+                header += "**Chapter 14 (Art.131-145):** Safety: Art.131 safety provisions, Art.135 safety training, Art.140 medical examination\n"
+                header += "**Chapter 15 (Art.146-155):** Work injuries: Art.146 work injury definition, Art.149 treatment by employer, Art.151 maternity leave 12 weeks (amended), Art.152 nursing hour\n"
+                header += "**Chapter 16 (Art.156-178):** Maritime work | **Chapter 17 (Art.179-199):** Mines and quarries\n"
+                header += "**Chapter 18 (Art.200-231):** Dispute settlement: primary and appellate committees, Wudi platform 21 days, statute of limitations 12 months\n"
+                header += "**GOSI:** Saudi 10.5%+12.5% | Non-Saudi 2% | SANED 0.75%+0.75% | Retirement age 60+120 months\n"
+                header += "**CCHI:** Health insurance mandatory for employer for all employees and dependents\n"
+                header += "**Nitaqat:** Platinum>High Green>Low Green>Yellow>Red based on Saudization ratio\n"
 
-            # Smart reasoning instructions
-            header += "\n**أسلوب الإجابة (إلزامي):**\n"
-            header += "- حلّل السؤال بعمق ولا تكتفِ بسرد المواد. اشرح لماذا وكيف تنطبق.\n"
-            header += "- قدم استشارة عملية كمحامٍ متخصص يتحدث مع موكّله.\n"
-            header += "- اذكر السيناريوهات المحتملة والنتائج المختلفة.\n"
-            header += "- إذا كانت الحالة تحتمل أكثر من تفسير، اذكر جميع الاحتمالات.\n"
-            header += "- قدم أمثلة حسابية واقعية عند الحاجة.\n"
-            header += "- اذكر المدد الزمنية والمواعيد النهائية.\n"
-            header += "- وجّه السائل للجهة المختصة (مكتب العمل/ودي/المحكمة العمالية) عند الحاجة.\n\n"
+                header += "\n**Response Style (Mandatory):**\n"
+                header += "- Analyze the question deeply — do not just list articles. Explain why and how they apply.\n"
+                header += "- Provide practical legal consultation as a specialized lawyer speaking with a client.\n"
+                header += "- Mention possible scenarios and different outcomes.\n"
+                header += "- If the case has multiple interpretations, present all possibilities.\n"
+                header += "- Provide realistic calculation examples when needed.\n"
+                header += "- Mention timeframes and deadlines.\n"
+                header += "- Direct the inquirer to the competent authority (Labor Office/Wudi/Labor Court) when needed.\n\n"
+            else:
+                header += "\n📋 **فهرس نظام العمل السعودي الكامل (245 مادة):**\n"
+                header += "**الباب 1 (م1-7):** تعريفات: عامل، صاحب عمل، أجر، عقد عمل\n"
+                header += "**الباب 2 (م8-24):** التوظيف: مكاتب التوظيف، تسجيل العمال\n"
+                header += "**الباب 3 (م25-41):** غير السعوديين: رخصة العمل (م33)، م26 نسبة 75%، م28 حظر العمل بدون رخصة\n"
+                header += "**الباب 4 (م42-48):** التدريب: م42 تأهيل السعوديين، م43 نسبة 12%، م45 عقد التأهيل، م46 إلزام المتدرب، م48 النفقات\n"
+                header += "**الباب 5 (م49-60):** العقود: م50 عقد مكتوب، م51 محتويات العقد، م53 التجربة 180 يوم كحد أقصى (معدلة - لا تمديد)، م55 تحول العقد بعد 3 تجديدات أو 4 سنوات\n"
+                header += "**الباب 6 (م61-73):** شروط العمل: م61 واجبات العامل، م62 واجبات صاحب العمل، م64 شهادة الخبرة، م66-72 الجزاءات التأديبية\n"
+                header += "**الباب 7 (م74-82):** إنهاء العقد: م74 حالات الانتهاء، م75 الإشعار 60/30 يوم، م77 تعويض الفسخ غير المشروع، م80 الفسخ المشروع (اعتداء/غياب)، م81 ترك بدون إشعار\n"
+                header += "**الباب 8 (م83-88):** المكافأة: م84 نصف شهر/سنة أول 5 + شهر/سنة بعدها، م85 نسب الاستقالة، م88 التسوية خلال أسبوع\n"
+                header += "**الباب 9 (م89-97):** الأجور: م89 بالريال، م90 الالتزام بالدفع، م92 حد الخصم نصف الأجر، م94 حماية الأجر\n"
+                header += "**الباب 10 (م98-107):** ساعات العمل: م98 ثمان ساعات/48 أسبوعياً، م99 رمضان 6/36، م101 راحة نصف ساعة، م104 عمل الجمعة، م107 إضافي 150%\n"
+                header += "**الباب 11 (م108-116):** الإجازات: م109 سنوية 21/30 يوم، م110 التأجيل، م112 وفاة5/زواج5/مولود3(جديد)/وفاة أخ3(جديد)، م113 مرضية 30كامل+60ثلاثة أرباع+30بدون، م115 حج 10-15 يوم\n"
+                header += "**الباب 12 (م117-120):** الأحداث: سن العمل 15 سنة، 6 ساعات، حظر العمل الخطر\n"
+                header += "**الباب 13 (م121-130):** المرأة: م121 المساواة، م122 حظر العمل الليلي (استثناءات)\n"
+                header += "**الباب 14 (م131-145):** السلامة: م131 توفير وسائل السلامة، م135 تدريب السلامة، م140 الفحص الطبي\n"
+                header += "**الباب 15 (م146-155):** الإصابات: م146 تعريف إصابة العمل، م149 العلاج على صاحب العمل، م151 إجازة الوضع 12 أسبوع (معدلة)، م152 ساعة الرضاعة\n"
+                header += "**الباب 16 (م156-178):** العمل البحري: م164 عقد العمل البحري، م177 غرق السفينة\n"
+                header += "**الباب 17 (م179-199):** المناجم والمحاجر\n"
+                header += "**الباب 18 (م200-231):** تسوية الخلافات: الهيئات الابتدائية والعليا، منصة ودي 21 يوم، التقادم 12 شهر\n"
+                header += "**التأمينات (GOSI):** سعودي 10.5%+12.5% | غير سعودي 2% | ساند 0.75%+0.75% | تقاعد سن60+120شهر\n"
+                header += "**الضمان الصحي (CCHI):** التأمين إلزامي على صاحب العمل لجميع العاملين ومعاليهم\n"
+                header += "**نطاقات:** بلاتيني>أخضر عالي>أخضر منخفض>أصفر>أحمر حسب نسبة السعودة\n"
 
-            # Legal response templates
-            templates = {
-                "legal_case_analysis": f"حلّل الحالة القانونية بعمق:\n🔍 **المسألة القانونية:** حدد الواقعة الجوهرية وتكييفها القانوني\n📋 **المواد المنطبقة:** اسرد كل مادة ذات علاقة مع شرح مختصر لكل واحدة\n⚖️ **التحليل والتطبيق:** طبّق كل مادة على وقائع الحالة بالتحديد. اشرح لماذا تنطبق وكيف.\n👤 **موقف {party_text} القانوني:** ما حقوقه تحديداً؟ ما التزاماته؟ ما يمكنه فعله؟\n🔄 **السيناريوهات المحتملة:** ماذا لو...؟ قدم 2-3 سيناريوهات مختلفة\n💡 **التوصية العملية:** خطوات مرقّمة يتخذها {party_text} فوراً\n⏰ **المدد والمواعيد:** المهل القانونية والمواعيد النهائية\n🏛️ **الجهة المختصة:** أين يتوجه ومتى\n⚠️ **تحذيرات ومخاطر:** ما يجب تجنبه",
-                "legal_calculation": f"احسب المستحقات بدقة:\n📋 **الأساس القانوني:** المواد التي تحكم الحساب مع نصوصها\n🔢 **المعادلة:** اكتب المعادلة بوضوح مع شرح كل متغير\n📊 **الحساب التفصيلي:** خطوة بخطوة مع أرقام واضحة\n💰 **النتيجة لـ{party_text}:** المبلغ/النسبة النهائية\n🔄 **سيناريوهات مختلفة:** ماذا لو تغيرت المدة أو الراتب؟\n⚠️ **استثناءات:** حالات يختلف فيها الحساب",
-                "legal_comparison": f"قارن بعمق:\n📋 **الحالة الأولى:** الوصف + المواد المنطبقة + النتائج القانونية\n📋 **الحالة الثانية:** الوصف + المواد المنطبقة + النتائج القانونية\n⚖️ **جدول المقارنة:** الفروقات الجوهرية في الحقوق والالتزامات\n💡 **الأثر العملي:** كيف يؤثر كل خيار على {party_text}",
-                "legal_procedure": f"اشرح الإجراءات خطوة بخطوة لـ{party_text}:\n📋 **الأساس النظامي:** المواد ذات العلاقة\n📝 **الخطوات بالتفصيل:** رقّم كل خطوة مع شرح ما يجب فعله بالضبط\n⏰ **المدد الزمنية:** حدد المهل لكل خطوة\n🏛️ **الجهات المختصة:** حدد الجهة المسؤولة لكل إجراء\n📄 **المستندات المطلوبة:** قائمة بكل الأوراق اللازمة\n💡 **نصائح عملية:** ما ينجح وما يجب تجنبه",
-                "rights_obligations": f"اشرح الحقوق والالتزامات بشمولية:\n👤 **حقوق {party_text}:** اسردها مع المواد ورقّمها\n📋 **التزامات {party_text}:** ما يجب عليه فعله\n🏢 **حقوق الطرف الآخر:** لتوضيح الصورة الكاملة\n📋 **التزامات الطرف الآخر:** تجاه {party_text}\n⚠️ **المخالفات والعقوبات:** ما يترتب على الإخلال من كل طرف\n💡 **نصيحة:** كيف يحمي {party_text} حقوقه",
-                "legal_diagnosis": f"شخّص المشكلة القانونية بذكاء:\n🔍 **تحليل المشكلة:** حدد الإشكالية القانونية الأساسية والفرعية\n📋 **المخالفة المحتملة:** هل هناك مخالفة نظامية؟ من أي طرف؟ ما هي؟\n⚖️ **الخيارات القانونية:** ما الحلول المتاحة لـ{party_text}؟ رتّبها من الأفضل للأضعف\n📝 **خطة العمل:** إجراءات عملية مع تسلسل زمني\n🏛️ **الجهات:** أين يتوجه {party_text}\n⚠️ **المخاطر:** ما يجب الحذر منه",
-                "legal_explanation": f"اشرح الحكم القانوني بشمولية:\n🔍 **تحديد المسألة:** ما الموضوع القانوني بالتحديد\n📋 **الإطار النظامي:** الباب والمواد ذات العلاقة مع شرح كل مادة\n⚖️ **الشرح التفصيلي:** اشرح القاعدة القانونية وفلسفتها\n🔄 **التطبيق العملي:** كيف تُطبّق في الواقع مع أمثلة\n💡 **الأثر على {party_text}:** كيف يؤثر هذا الحكم عليه تحديداً\n⚠️ **استثناءات وحالات خاصة:** متى لا ينطبق الحكم",
-            }
+                # Smart reasoning instructions
+                header += "\n**أسلوب الإجابة (إلزامي):**\n"
+                header += "- حلّل السؤال بعمق ولا تكتفِ بسرد المواد. اشرح لماذا وكيف تنطبق.\n"
+                header += "- قدم استشارة عملية كمحامٍ متخصص يتحدث مع موكّله.\n"
+                header += "- اذكر السيناريوهات المحتملة والنتائج المختلفة.\n"
+                header += "- إذا كانت الحالة تحتمل أكثر من تفسير، اذكر جميع الاحتمالات.\n"
+                header += "- قدم أمثلة حسابية واقعية عند الحاجة.\n"
+                header += "- اذكر المدد الزمنية والمواعيد النهائية.\n"
+                header += "- وجّه السائل للجهة المختصة (مكتب العمل/ودي/المحكمة العمالية) عند الحاجة.\n\n"
+
+            # Legal response templates (bilingual)
+            if is_en:
+                templates = {
+                    "legal_case_analysis": f"Analyze the legal case in depth:\n🔍 **Legal Issue:** Identify the core facts and legal characterization\n📋 **Applicable Articles:** List each relevant article with a brief explanation\n⚖️ **Analysis & Application:** Apply each article to the specific facts. Explain why and how it applies.\n👤 **{party_text}'s Legal Position:** What are their specific rights? Obligations? Options?\n🔄 **Possible Scenarios:** What if...? Present 2-3 different scenarios\n💡 **Practical Recommendation:** Numbered steps for {party_text} to take immediately\n⏰ **Timeframes & Deadlines:** Legal time limits and deadlines\n🏛️ **Competent Authority:** Where to go and when\n⚠️ **Warnings & Risks:** What to avoid",
+                    "legal_calculation": f"Calculate entitlements precisely:\n📋 **Legal Basis:** Articles governing the calculation with their text\n🔢 **Formula:** Write the formula clearly explaining each variable\n📊 **Detailed Calculation:** Step by step with clear numbers\n💰 **Result for {party_text}:** Final amount/percentage\n🔄 **Different Scenarios:** What if the period or salary changes?\n⚠️ **Exceptions:** Cases where the calculation differs",
+                    "legal_comparison": f"Compare in depth:\n📋 **Case One:** Description + applicable articles + legal outcomes\n📋 **Case Two:** Description + applicable articles + legal outcomes\n⚖️ **Comparison Table:** Key differences in rights and obligations\n💡 **Practical Impact:** How each option affects {party_text}",
+                    "legal_procedure": f"Explain the procedures step by step for {party_text}:\n📋 **Legal Basis:** Relevant articles\n📝 **Detailed Steps:** Number each step explaining exactly what to do\n⏰ **Timeframes:** Specify deadlines for each step\n🏛️ **Competent Authorities:** Identify the responsible body for each action\n📄 **Required Documents:** List all necessary paperwork\n💡 **Practical Tips:** What works and what to avoid",
+                    "rights_obligations": f"Explain rights and obligations comprehensively:\n👤 **{party_text}'s Rights:** List with article numbers\n📋 **{party_text}'s Obligations:** What must be done\n🏢 **Other Party's Rights:** For the full picture\n📋 **Other Party's Obligations:** Toward {party_text}\n⚠️ **Violations & Penalties:** Consequences of breach by each party\n💡 **Advice:** How {party_text} protects their rights",
+                    "legal_diagnosis": f"Diagnose the legal problem intelligently:\n🔍 **Problem Analysis:** Identify the primary and secondary legal issues\n📋 **Potential Violation:** Is there a regulatory violation? By which party? What is it?\n⚖️ **Legal Options:** What solutions are available for {party_text}? Rank from best to weakest\n📝 **Action Plan:** Practical steps with timeline\n🏛️ **Authorities:** Where {party_text} should go\n⚠️ **Risks:** What to be cautious about",
+                    "legal_explanation": f"Explain the legal provision comprehensively:\n🔍 **Issue Identification:** What is the specific legal topic\n📋 **Regulatory Framework:** The chapter and relevant articles with explanation of each\n⚖️ **Detailed Explanation:** Explain the legal rule and its rationale\n🔄 **Practical Application:** How it applies in practice with examples\n💡 **Impact on {party_text}:** How this provision specifically affects them\n⚠️ **Exceptions & Special Cases:** When the provision does not apply",
+                }
+            else:
+                templates = {
+                    "legal_case_analysis": f"حلّل الحالة القانونية بعمق:\n🔍 **المسألة القانونية:** حدد الواقعة الجوهرية وتكييفها القانوني\n📋 **المواد المنطبقة:** اسرد كل مادة ذات علاقة مع شرح مختصر لكل واحدة\n⚖️ **التحليل والتطبيق:** طبّق كل مادة على وقائع الحالة بالتحديد. اشرح لماذا تنطبق وكيف.\n👤 **موقف {party_text} القانوني:** ما حقوقه تحديداً؟ ما التزاماته؟ ما يمكنه فعله؟\n🔄 **السيناريوهات المحتملة:** ماذا لو...؟ قدم 2-3 سيناريوهات مختلفة\n💡 **التوصية العملية:** خطوات مرقّمة يتخذها {party_text} فوراً\n⏰ **المدد والمواعيد:** المهل القانونية والمواعيد النهائية\n🏛️ **الجهة المختصة:** أين يتوجه ومتى\n⚠️ **تحذيرات ومخاطر:** ما يجب تجنبه",
+                    "legal_calculation": f"احسب المستحقات بدقة:\n📋 **الأساس القانوني:** المواد التي تحكم الحساب مع نصوصها\n🔢 **المعادلة:** اكتب المعادلة بوضوح مع شرح كل متغير\n📊 **الحساب التفصيلي:** خطوة بخطوة مع أرقام واضحة\n💰 **النتيجة لـ{party_text}:** المبلغ/النسبة النهائية\n🔄 **سيناريوهات مختلفة:** ماذا لو تغيرت المدة أو الراتب؟\n⚠️ **استثناءات:** حالات يختلف فيها الحساب",
+                    "legal_comparison": f"قارن بعمق:\n📋 **الحالة الأولى:** الوصف + المواد المنطبقة + النتائج القانونية\n📋 **الحالة الثانية:** الوصف + المواد المنطبقة + النتائج القانونية\n⚖️ **جدول المقارنة:** الفروقات الجوهرية في الحقوق والالتزامات\n💡 **الأثر العملي:** كيف يؤثر كل خيار على {party_text}",
+                    "legal_procedure": f"اشرح الإجراءات خطوة بخطوة لـ{party_text}:\n📋 **الأساس النظامي:** المواد ذات العلاقة\n📝 **الخطوات بالتفصيل:** رقّم كل خطوة مع شرح ما يجب فعله بالضبط\n⏰ **المدد الزمنية:** حدد المهل لكل خطوة\n🏛️ **الجهات المختصة:** حدد الجهة المسؤولة لكل إجراء\n📄 **المستندات المطلوبة:** قائمة بكل الأوراق اللازمة\n💡 **نصائح عملية:** ما ينجح وما يجب تجنبه",
+                    "rights_obligations": f"اشرح الحقوق والالتزامات بشمولية:\n👤 **حقوق {party_text}:** اسردها مع المواد ورقّمها\n📋 **التزامات {party_text}:** ما يجب عليه فعله\n🏢 **حقوق الطرف الآخر:** لتوضيح الصورة الكاملة\n📋 **التزامات الطرف الآخر:** تجاه {party_text}\n⚠️ **المخالفات والعقوبات:** ما يترتب على الإخلال من كل طرف\n💡 **نصيحة:** كيف يحمي {party_text} حقوقه",
+                    "legal_diagnosis": f"شخّص المشكلة القانونية بذكاء:\n🔍 **تحليل المشكلة:** حدد الإشكالية القانونية الأساسية والفرعية\n📋 **المخالفة المحتملة:** هل هناك مخالفة نظامية؟ من أي طرف؟ ما هي؟\n⚖️ **الخيارات القانونية:** ما الحلول المتاحة لـ{party_text}؟ رتّبها من الأفضل للأضعف\n📝 **خطة العمل:** إجراءات عملية مع تسلسل زمني\n🏛️ **الجهات:** أين يتوجه {party_text}\n⚠️ **المخاطر:** ما يجب الحذر منه",
+                    "legal_explanation": f"اشرح الحكم القانوني بشمولية:\n🔍 **تحديد المسألة:** ما الموضوع القانوني بالتحديد\n📋 **الإطار النظامي:** الباب والمواد ذات العلاقة مع شرح كل مادة\n⚖️ **الشرح التفصيلي:** اشرح القاعدة القانونية وفلسفتها\n🔄 **التطبيق العملي:** كيف تُطبّق في الواقع مع أمثلة\n💡 **الأثر على {party_text}:** كيف يؤثر هذا الحكم عليه تحديداً\n⚠️ **استثناءات وحالات خاصة:** متى لا ينطبق الحكم",
+                }
 
             # Select template based on intent
             intent = analysis.get('intent', 'informational')
@@ -1901,54 +1987,70 @@ class ReasoningLayer:
             if analysis.get('is_vague'):
                 template_key = 'legal_diagnosis'
 
-            header += f"\n**هيكل الإجابة المطلوب:**\n{templates[template_key]}\n"
+            header += f"\n**{'Required Response Structure' if is_en else 'هيكل الإجابة المطلوب'}:**\n{templates[template_key]}\n"
 
         else:  # HR
-            header += f"\n⚠️ إذا لم تتأكد من إطار منهجي محدد، قل 'بحسب أفضل الممارسات المهنية' ولا تخترع مرجعاً.\n"
+            if is_en:
+                header += f"\n⚠️ If unsure about a specific framework, say 'based on professional best practices' — do not fabricate a reference.\n"
+            else:
+                header += f"\n⚠️ إذا لم تتأكد من إطار منهجي محدد، قل 'بحسب أفضل الممارسات المهنية' ولا تخترع مرجعاً.\n"
             hr_facts = analysis.get('hr_facts', '')
             if not hr_facts:
                 t = analysis.get('topic', '')
                 if t in self.HR_TOPICS and 'hr_facts' in self.HR_TOPICS[t]:
                     hr_facts = self.HR_TOPICS[t]['hr_facts']
             if hr_facts:
-                header += f"\n📚 **الأطر الموثّقة (استخدم هذه فقط):**\n{hr_facts}\n\n"
+                _facts_label = "Verified Frameworks (use only these)" if is_en else "الأطر الموثّقة (استخدم هذه فقط)"
+                header += f"\n📚 **{_facts_label}:**\n{hr_facts}\n\n"
             else:
-                header += f"\n📚 **المناهج المعتمدة للاستشهاد بها فقط:** PHRi (HRCI) | aPHRi (HRCI) | SPHRi (HRCI) | SHRM-SCP | CIPD L5 | CIPD L7 | APTD (ATD)\nلا تخترع أي إطار أو نموذج غير معروف.\n\n"
+                _cert_label = "Approved certifications for citation only" if is_en else "المناهج المعتمدة للاستشهاد بها فقط"
+                _no_fabricate = "Do not fabricate any unknown framework or model." if is_en else "لا تخترع أي إطار أو نموذج غير معروف."
+                header += f"\n📚 **{_cert_label}:** PHRi (HRCI) | aPHRi (HRCI) | SPHRi (HRCI) | SHRM-SCP | CIPD L5 | CIPD L7 | APTD (ATD)\n{_no_fabricate}\n\n"
 
         parts.append(header)
 
         # Article references for legal
         if advisor_type == 'labor' and analysis.get('matched_articles'):
-            arts = ", ".join([f"المادة {a}" for a in analysis['matched_articles']])
-            parts.append(f"\n**المواد القانونية ذات الصلة:** {arts}")
+            arts = ", ".join([f"Article {a}" if is_en else f"المادة {a}" for a in analysis['matched_articles']])
+            _art_label = "Relevant Legal Articles" if is_en else "المواد القانونية ذات الصلة"
+            parts.append(f"\n**{_art_label}:** {arts}")
 
         # Framework references for HR
         if advisor_type == 'hr_expert' and analysis.get('matched_frameworks'):
             fws = ", ".join(analysis['matched_frameworks'])
-            parts.append(f"\n**الأطر المهنية ذات الصلة:** {fws}")
+            _fw_label = "Relevant Professional Frameworks" if is_en else "الأطر المهنية ذات الصلة"
+            parts.append(f"\n**{_fw_label}:** {fws}")
 
         # Entity context
         entities = analysis.get('entities', {})
         if entities:
             entity_parts = []
-            if 'years' in entities: entity_parts.append(f"سنوات الخدمة: {entities['years']}")
-            if 'salary' in entities: entity_parts.append(f"الراتب: {entities['salary']}")
-            if 'days' in entities: entity_parts.append(f"أيام: {entities['days']}")
-            if 'months' in entities: entity_parts.append(f"أشهر: {entities['months']}")
+            if 'years' in entities: entity_parts.append(f"{'Years of service' if is_en else 'سنوات الخدمة'}: {entities['years']}")
+            if 'salary' in entities: entity_parts.append(f"{'Salary' if is_en else 'الراتب'}: {entities['salary']}")
+            if 'days' in entities: entity_parts.append(f"{'Days' if is_en else 'أيام'}: {entities['days']}")
+            if 'months' in entities: entity_parts.append(f"{'Months' if is_en else 'أشهر'}: {entities['months']}")
             if entity_parts:
-                parts.append(f"\n**البيانات المستخرجة:** {' | '.join(entity_parts)}")
+                _data_label = "Extracted Data" if is_en else "البيانات المستخرجة"
+                parts.append(f"\n**{_data_label}:** {' | '.join(entity_parts)}")
 
         # Confidence guidance
         confidence = analysis.get('confidence', {})
         overall = confidence.get('overall', 0.0)
         if overall < 0.3 and retrieved_context:
-            parts.append("\n**تنبيه:** جودة المراجع المسترجعة منخفضة. أجب بحذر وصرّح بعدم اليقين عند الحاجة.")
+            if is_en:
+                parts.append("\n**Notice:** Retrieved reference quality is low. Answer cautiously and declare uncertainty when needed.")
+            else:
+                parts.append("\n**تنبيه:** جودة المراجع المسترجعة منخفضة. أجب بحذر وصرّح بعدم اليقين عند الحاجة.")
         elif overall < 0.3:
-            parts.append("\n**تنبيه:** لم يتم العثور على مراجع مؤكدة. أجب بحذر، لا تخترع مراجع، وأوصِ بالتحقق من مصدر رسمي.")
+            if is_en:
+                parts.append("\n**Notice:** No confirmed references found. Answer cautiously, do not fabricate references, and recommend verifying from an official source.")
+            else:
+                parts.append("\n**تنبيه:** لم يتم العثور على مراجع مؤكدة. أجب بحذر، لا تخترع مراجع، وأوصِ بالتحقق من مصدر رسمي.")
 
         # Retrieved context
         if retrieved_context:
-            parts.append(f"\n**مراجع من قاعدة المعرفة:**\n{retrieved_context}")
+            _ref_label = "Knowledge Base References" if is_en else "مراجع من قاعدة المعرفة"
+            parts.append(f"\n**{_ref_label}:**\n{retrieved_context}")
 
         return "\n".join(parts)
 
@@ -1991,11 +2093,12 @@ class ReasoningLayer:
         grounded_articles: set of article number strings actually present in retrieved context.
         Returns (is_valid, issues, warnings) tuple."""
         if not answer or len(answer.strip()) < 30:
-            return False, ["الإجابة قصيرة جداً"], []
+            return False, ["Answer too short" if analysis.get('language') == 'en' else "الإجابة قصيرة جداً"], []
 
         issues = []    # Critical: may trigger retry or block RAG save
         warnings = []  # Non-critical: attached as notes
         intent = analysis.get('intent', 'informational')
+        _en = (analysis.get('language') == 'en')  # Use question language for messages
         import re
 
         # === CITATION VERIFICATION (Anti-Hallucination) ===
@@ -2011,7 +2114,10 @@ class ReasoningLayer:
 
             if hallucinated_articles:
                 for art in hallucinated_articles:
-                    issues.append(f"المادة {art} المذكورة في الإجابة غير موجودة في نظام العمل السعودي (245 مادة فقط)")
+                    if _en:
+                        issues.append(f"Article {art} cited in the answer does not exist in Saudi Labor Law (only 245 articles)")
+                    else:
+                        issues.append(f"المادة {art} المذكورة في الإجابة غير موجودة في نظام العمل السعودي (245 مادة فقط)")
 
             # === STRICT ARTICLE GROUNDING CHECK ===
             # Articles must be present in retrieved RAG context, legal docs, or system prompt.
@@ -2023,10 +2129,16 @@ class ReasoningLayer:
                         ungrounded.add(art)
                 if ungrounded:
                     ungrounded_list = ', '.join(sorted(ungrounded, key=lambda x: int(x) if x.isdigit() else 0))
-                    issues.append(
-                        f"مواد غير مدعومة بالمراجع المسترجعة: المادة {ungrounded_list} — "
-                        f"لم يتم العثور على هذه المواد في قاعدة المعرفة المسترجعة"
-                    )
+                    if _en:
+                        issues.append(
+                            f"Ungrounded articles: Article {ungrounded_list} — "
+                            f"these articles were not found in the retrieved knowledge base"
+                        )
+                    else:
+                        issues.append(
+                            f"مواد غير مدعومة بالمراجع المسترجعة: المادة {ungrounded_list} — "
+                            f"لم يتم العثور على هذه المواد في قاعدة المعرفة المسترجعة"
+                        )
 
             # Detect fabricated regulation names
             fabricated_source_patterns = [
@@ -2041,12 +2153,15 @@ class ReasoningLayer:
                         # Also check against pre-computed KNOWN_REGULATIONS names
                         is_known = any(rn in m for rn in self.KNOWN_REGULATION_NAMES)
                     if not is_known:
-                        warnings.append(f"المرجع '{m[:50]}' قد لا يكون مصدراً قانونياً معتمداً")
+                        if _en:
+                            warnings.append(f"Reference '{m[:50]}' may not be an approved legal source")
+                        else:
+                            warnings.append(f"المرجع '{m[:50]}' قد لا يكون مصدراً قانونياً معتمداً")
 
             # Check expected articles are mentioned
             expected_articles = analysis.get('matched_articles', [])
-            if expected_articles and not any(f'المادة {a}' in answer or f'مادة {a}' in answer for a in expected_articles):
-                warnings.append("لم يتم ذكر المواد القانونية المتوقعة")
+            if expected_articles and not any(f'المادة {a}' in answer or f'مادة {a}' in answer or f'Article {a}' in answer for a in expected_articles):
+                warnings.append("Expected legal articles were not mentioned" if _en else "لم يتم ذكر المواد القانونية المتوقعة")
 
         elif advisor_type == 'hr_expert':
             # Verify cited frameworks are known/approved
@@ -2070,27 +2185,34 @@ class ReasoningLayer:
                             common = {'the','and','for','with','from','this','that','based','level','model',
                                       'human','resources','management','system','employee','performance'}
                             if fw_name.lower() not in common:
-                                warnings.append(f"الإطار '{fw_name}' المذكور قد لا يكون إطاراً مهنياً معتمداً - يرجى التحقق")
+                                if _en:
+                                    warnings.append(f"Framework '{fw_name}' may not be an approved professional framework — please verify")
+                                else:
+                                    warnings.append(f"الإطار '{fw_name}' المذكور قد لا يكون إطاراً مهنياً معتمداً - يرجى التحقق")
 
             # Check expected frameworks
             expected_fw = analysis.get('matched_frameworks', [])
             if expected_fw and not any(fw.lower() in answer_lower for fw in expected_fw[:2]):
-                warnings.append("لم يتم ذكر الأطر المهنية المتوقعة")
+                warnings.append("Expected professional frameworks were not mentioned" if _en else "لم يتم ذكر الأطر المهنية المتوقعة")
 
         # === STRUCTURAL VALIDATION ===
 
         # Check calculation presence
         if intent == 'calculation':
             has_numbers = bool(re.search(r'\d+[,.]?\d*', answer))
-            has_calc_words = any(w in answer for w in ['=','x','×','÷','+','-','حساب','النتيجة','المجموع','الإجمالي'])
+            has_calc_words = any(w in answer for w in ['=','x','×','÷','+','-','حساب','النتيجة','المجموع','الإجمالي','total','result','calculation','sum'])
             if not has_numbers or not has_calc_words:
-                issues.append("طُلب حساب لكن الإجابة لا تحتوي على خطوات حسابية واضحة")
+                issues.append("Calculation was requested but the answer lacks clear calculation steps" if _en else "طُلب حساب لكن الإجابة لا تحتوي على خطوات حسابية واضحة")
 
         # Check language match
         if analysis.get('language') == 'ar' and len(answer) > 50:
             arabic_chars = sum(1 for c in answer if '\u0600' <= c <= '\u06FF')
             if arabic_chars / len(answer) < 0.2:
-                issues.append("لغة الإجابة لا تتوافق مع لغة السؤال")
+                issues.append("Answer language does not match the question language" if _en else "لغة الإجابة لا تتوافق مع لغة السؤال")
+        elif analysis.get('language') == 'en' and len(answer) > 50:
+            latin_chars = sum(1 for c in answer if 'a' <= c.lower() <= 'z')
+            if latin_chars / len(answer) < 0.15:
+                issues.append("Answer language does not match the question language")
 
         # === FACTUAL CONSISTENCY CHECK ===
         # Catch common LLM factual errors about Saudi Labor Law
@@ -2137,21 +2259,25 @@ class ReasoningLayer:
             }
             indicators = party_indicators.get(party, [])
             if indicators and not any(ind in answer for ind in indicators):
-                warnings.append(f"الإجابة قد لا تخاطب صفة السائل ({party}) بشكل كافٍ")
+                if _en:
+                    warnings.append(f"The answer may not adequately address the inquirer's role ({party})")
+                else:
+                    warnings.append(f"الإجابة قد لا تخاطب صفة السائل ({party}) بشكل كافٍ")
 
         # === CONFIDENCE CHECK ===
         confidence = analysis.get('confidence', {})
         if confidence.get('overall', 0) < 0.2:
             disclaimer_words = ['غير متأكد','لا يمكن التأكد','يُنصح بمراجعة','ينصح بالتحقق',
-                                'يرجى مراجعة','لست متأكد','لم يتم التأكد','يُفضل التحقق']
+                                'يرجى مراجعة','لست متأكد','لم يتم التأكد','يُفضل التحقق',
+                                'not certain','cannot confirm','recommend verifying','please verify','uncertain']
             if not any(w in answer for w in disclaimer_words):
-                warnings.append("درجة الثقة منخفضة لكن الإجابة لم تُصرّح بعدم اليقين")
+                warnings.append("Low confidence but the answer did not declare uncertainty" if _en else "درجة الثقة منخفضة لكن الإجابة لم تُصرّح بعدم اليقين")
 
         # === FINAL VALIDITY DECISION ===
         # Critical issues that invalidate the answer (trigger retry or block RAG save):
-        has_hallucinated_article = any("غير موجودة" in i for i in issues)
-        has_ungrounded_article = any("غير مدعومة بالمراجع" in i for i in issues)
-        has_structural_issue = any("قصيرة" in i or "حسابية" in i or "لغة" in i for i in issues)
+        has_hallucinated_article = any("غير موجودة" in i or "does not exist" in i for i in issues)
+        has_ungrounded_article = any("غير مدعومة بالمراجع" in i or "Ungrounded articles" in i for i in issues)
+        has_structural_issue = any("قصيرة" in i or "حسابية" in i or "لغة" in i or "too short" in i.lower() or "calculation" in i.lower() or "language" in i.lower() for i in issues)
         is_valid = not has_hallucinated_article and not has_ungrounded_article and not has_structural_issue
         return is_valid, issues, warnings
 
@@ -2171,7 +2297,25 @@ def _init_knowledge():
 def _init_learning():
     return LearningSystem()
 
-st.set_page_config(page_title="تحليلات HR | رسال الود", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="HR Analytics | تحليلات HR", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
+
+# ===== BILINGUAL i18n SYSTEM =====
+if 'app_language' not in st.session_state:
+    st.session_state.app_language = 'ar'  # Default: Arabic
+
+def _lang():
+    """Return current UI language code ('ar' or 'en')."""
+    return st.session_state.get('app_language', 'ar')
+
+def _t(ar_text, en_text=None):
+    """Translate: return Arabic or English text based on current language."""
+    if en_text is None:
+        return ar_text
+    return ar_text if _lang() == 'ar' else en_text
+
+def _is_rtl():
+    """Check if current UI language is RTL."""
+    return _lang() == 'ar'
 
 # ===== DATABASE LAYER (Cloud + Local) =====
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hr_personality.db")
@@ -2599,28 +2743,32 @@ def generate_employee_pdf(result):
 init_db()
 
 # ===== STYLES =====
-st.markdown("""
+_border_side = "right" if _is_rtl() else "left"
+_text_align = "right" if _is_rtl() else "left"
+_dir_attr = "rtl" if _is_rtl() else "ltr"
+st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;500;600;700;800&display=swap');
-*{font-family:'Noto Sans Arabic',sans-serif}
-.main .block-container{padding-top:.8rem;max-width:1400px}
-[data-testid="stSidebar"]{background:linear-gradient(180deg,#0F4C5C 0%,#1A1A2E 100%)}
-[data-testid="stSidebar"] *{color:white !important}
-[data-testid="stMetric"]{background:white;border-radius:12px;padding:14px 18px;box-shadow:0 1px 3px rgba(0,0,0,.06);border:1px solid #E2E8F0}
-[data-testid="stMetric"] label{font-size:12px !important;color:#64748B !important}
-[data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:20px !important;font-weight:700 !important}
-h1{color:#0F4C5C !important;font-weight:800 !important}
-.hdr{background:linear-gradient(135deg,#0F4C5C,#1A1A2E);padding:20px 28px;border-radius:14px;margin-bottom:20px;color:white}
-.hdr h1{color:white !important;margin:0;font-size:24px}
-.hdr p{color:rgba(255,255,255,.7);margin:4px 0 0;font-size:13px}
-.ibox{background:#EFF6FF;border-radius:10px;padding:12px 16px;border-right:4px solid #3B82F6;margin-bottom:8px;font-size:13px;line-height:1.7}
-.ibox.warn{background:#FFF7ED;border-right-color:#F97316}
-.ibox.ok{background:#F0FDF4;border-right-color:#22C55E}
-.ibox.bad{background:#FEF2F2;border-right-color:#EF4444}
-.kpi{background:linear-gradient(135deg,#0F4C5C,#1B4D5C);color:white;border-radius:12px;padding:16px;text-align:center;margin-bottom:10px}
-.kpi h3{font-size:24px;margin:6px 0 2px;font-weight:800}
-.kpi p{font-size:11px;opacity:.7;margin:0}
-#MainMenu,footer{visibility:hidden}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+*{{font-family:{("'Noto Sans Arabic'" if _is_rtl() else "'Inter'")},'Noto Sans Arabic',sans-serif;direction:{_dir_attr}}}
+.main .block-container{{padding-top:.8rem;max-width:1400px}}
+[data-testid="stSidebar"]{{background:linear-gradient(180deg,#0F4C5C 0%,#1A1A2E 100%)}}
+[data-testid="stSidebar"] *{{color:white !important}}
+[data-testid="stMetric"]{{background:white;border-radius:12px;padding:14px 18px;box-shadow:0 1px 3px rgba(0,0,0,.06);border:1px solid #E2E8F0}}
+[data-testid="stMetric"] label{{font-size:12px !important;color:#64748B !important}}
+[data-testid="stMetric"] [data-testid="stMetricValue"]{{font-size:20px !important;font-weight:700 !important}}
+h1{{color:#0F4C5C !important;font-weight:800 !important}}
+.hdr{{background:linear-gradient(135deg,#0F4C5C,#1A1A2E);padding:20px 28px;border-radius:14px;margin-bottom:20px;color:white}}
+.hdr h1{{color:white !important;margin:0;font-size:24px}}
+.hdr p{{color:rgba(255,255,255,.7);margin:4px 0 0;font-size:13px}}
+.ibox{{background:#EFF6FF;border-radius:10px;padding:12px 16px;border-{_border_side}:4px solid #3B82F6;margin-bottom:8px;font-size:13px;line-height:1.7}}
+.ibox.warn{{background:#FFF7ED;border-{_border_side}-color:#F97316}}
+.ibox.ok{{background:#F0FDF4;border-{_border_side}-color:#22C55E}}
+.ibox.bad{{background:#FEF2F2;border-{_border_side}-color:#EF4444}}
+.kpi{{background:linear-gradient(135deg,#0F4C5C,#1B4D5C);color:white;border-radius:12px;padding:16px;text-align:center;margin-bottom:10px}}
+.kpi h3{{font-size:24px;margin:6px 0 2px;font-weight:800}}
+.kpi p{{font-size:11px;opacity:.7;margin:0}}
+#MainMenu,footer{{visibility:hidden}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -3263,9 +3411,26 @@ ROLE_DESCRIPTIONS = {
     "عارض": "عرض التقارير فقط بدون تعديل",
 }
 
-ALL_SECTIONS = ["📊 التحليلات العامة","🎁 Total Rewards","👥 Headcount","⚖️ حاسبة المستحقات",
+ALL_SECTIONS_AR = ["📊 التحليلات العامة","🎁 Total Rewards","👥 Headcount","⚖️ حاسبة المستحقات",
     "📚 التدريب والتطوير","🎯 التوظيف","🚀 Onboarding","📜 العقود","🤖 المستشار الذكي",
     "🏗️ التطوير المؤسسي OD","📈 التحليلات المتقدمة","🔍 التحليل العام","📝 الاستبيانات","🧠 اختبارات الشخصية","📤 التقارير والتصدير"]
+
+ALL_SECTIONS_EN = ["📊 General Analytics","🎁 Total Rewards","👥 Headcount","⚖️ Entitlements Calculator",
+    "📚 Training & Development","🎯 Recruitment","🚀 Onboarding","📜 Contracts","🤖 AI Consultant",
+    "🏗️ Organization Development","📈 Advanced Analytics","🔍 General Analysis","📝 Surveys","🧠 Personality Tests","📤 Reports & Export"]
+
+# Bilingual section mapping: EN label → AR label (for internal page routing)
+_SECTION_EN_TO_AR = dict(zip(ALL_SECTIONS_EN, ALL_SECTIONS_AR))
+_SECTION_AR_TO_EN = dict(zip(ALL_SECTIONS_AR, ALL_SECTIONS_EN))
+
+def _get_sections():
+    return ALL_SECTIONS_AR if _lang() == 'ar' else ALL_SECTIONS_EN
+
+def _section_key(label):
+    """Get the internal (Arabic) section key regardless of display language."""
+    return _SECTION_EN_TO_AR.get(label, label)
+
+ALL_SECTIONS = ALL_SECTIONS_AR  # Keep backward compatibility for check_section_access
 
 # Email sending function
 def send_test_email(to_email, emp_name, tests, deadline, assigned_by, app_url=""):
@@ -3511,20 +3676,30 @@ def _restore_login():
     return False
 
 def login_page():
-    st.markdown("<div style='text-align:center;padding:40px 0;'><div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:80px;height:80px;border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:32px;font-weight:800;color:white;'>HR</div><h1 style='color:#1A1A2E;'>منصة تحليلات الموارد البشرية</h1><p style='color:#64748B;'>رسال الود لتقنية المعلومات</p></div>", unsafe_allow_html=True)
+    # Language toggle on login page
+    _login_lang_col1, _login_lang_col2 = st.columns([6,1])
+    with _login_lang_col2:
+        _login_lang = st.selectbox("🌐", ["العربية", "English"], index=0 if _lang()=='ar' else 1, key="login_lang_sel", label_visibility="collapsed")
+        if (_login_lang == "English" and _lang() == 'ar') or (_login_lang == "العربية" and _lang() == 'en'):
+            st.session_state.app_language = 'en' if _login_lang == "English" else 'ar'
+            st.rerun()
+
+    _title = _t("منصة تحليلات الموارد البشرية", "HR Analytics Platform")
+    _subtitle = _t("رسال الود لتقنية المعلومات", "Risal Al-Wud Information Technology")
+    st.markdown(f"<div style='text-align:center;padding:40px 0;'><div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:80px;height:80px;border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:32px;font-weight:800;color:white;'>HR</div><h1 style='color:#1A1A2E;'>{_title}</h1><p style='color:#64748B;'>{_subtitle}</p></div>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        login_tab, forgot_tab = st.tabs(["🔐 تسجيل الدخول", "🔑 استرجاع كلمة السر"])
+        login_tab, forgot_tab = st.tabs([_t("🔐 تسجيل الدخول", "🔐 Login"), _t("🔑 استرجاع كلمة السر", "🔑 Reset Password")])
 
         with login_tab:
             with st.form("login_form", clear_on_submit=False):
-                username = st.text_input("اسم المستخدم:", key="login_user")
-                password = st.text_input("كلمة المرور:", type="password", key="login_pass")
+                username = st.text_input(_t("اسم المستخدم:", "Username:"), key="login_user")
+                password = st.text_input(_t("كلمة المرور:", "Password:"), type="password", key="login_pass")
                 lc1, lc2 = st.columns(2)
                 with lc1:
-                    login_btn = st.form_submit_button("🔓 دخول", type="primary", use_container_width=True)
+                    login_btn = st.form_submit_button(_t("🔓 دخول", "🔓 Login"), type="primary", use_container_width=True)
                 with lc2:
-                    guest_btn = st.form_submit_button("👤 دخول بدون حساب", use_container_width=True)
+                    guest_btn = st.form_submit_button(_t("👤 دخول بدون حساب", "👤 Guest Login"), use_container_width=True)
 
                 if login_btn:
                     init_users()
@@ -3540,7 +3715,7 @@ def login_page():
                         _save_login_token(username)
                         st.rerun()
                     else:
-                        st.error("❌ اسم المستخدم أو كلمة المرور غير صحيحة")
+                        st.error(_t("❌ اسم المستخدم أو كلمة المرور غير صحيحة", "❌ Invalid username or password"))
 
                 if guest_btn:
                     st.session_state.logged_in = True
@@ -3553,10 +3728,10 @@ def login_page():
                     st.rerun()
 
         with forgot_tab:
-            st.markdown("#### 🔑 استرجاع كلمة المرور عبر البريد الإلكتروني")
+            st.markdown(_t("#### 🔑 استرجاع كلمة المرور عبر البريد الإلكتروني", "#### 🔑 Reset Password via Email"))
             with st.form("forgot_form", clear_on_submit=False):
-                reset_email = st.text_input("أدخل بريدك الإلكتروني المسجل:", key="reset_email", placeholder="you@company.com")
-                reset_btn = st.form_submit_button("📧 إرسال رابط الاسترجاع", type="primary", use_container_width=True)
+                reset_email = st.text_input(_t("أدخل بريدك الإلكتروني المسجل:", "Enter your registered email:"), key="reset_email", placeholder="you@company.com")
+                reset_btn = st.form_submit_button(_t("📧 إرسال رابط الاسترجاع", "📧 Send Reset Link"), type="primary", use_container_width=True)
 
                 if reset_btn and reset_email:
                     init_users()
@@ -4166,54 +4341,66 @@ def main():
 
     # Sidebar
     with st.sidebar:
-        st.markdown(f"<div style='text-align:center;padding:20px 0;'><div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:56px;height:56px;border-radius:12px;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:22px;font-weight:800;color:white;'>HR</div><h2 style='margin:0;font-size:16px;'>تحليلات الموارد البشرية</h2><p style='opacity:.6;font-size:11px;'>رسال الود لتقنية المعلومات v5</p><div style='background:rgba(255,255,255,.1);border-radius:6px;padding:6px 10px;margin-top:8px;font-size:11px'>👤 {st.session_state.user_name} <span style='opacity:.6'>| {st.session_state.user_role}</span></div></div>", unsafe_allow_html=True)
+        # Language toggle
+        _sb_lang = st.selectbox("🌐", ["العربية", "English"], index=0 if _lang()=='ar' else 1, key="sidebar_lang_sel", label_visibility="collapsed")
+        if (_sb_lang == "English" and _lang() == 'ar') or (_sb_lang == "العربية" and _lang() == 'en'):
+            st.session_state.app_language = 'en' if _sb_lang == "English" else 'ar'
+            st.rerun()
+
+        _sb_title = _t("تحليلات الموارد البشرية", "HR Analytics")
+        _sb_sub = _t("رسال الود لتقنية المعلومات v5", "Risal Al-Wud IT v5")
+        st.markdown(f"<div style='text-align:center;padding:20px 0;'><div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:56px;height:56px;border-radius:12px;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:22px;font-weight:800;color:white;'>HR</div><h2 style='margin:0;font-size:16px;'>{_sb_title}</h2><p style='opacity:.6;font-size:11px;'>{_sb_sub}</p><div style='background:rgba(255,255,255,.1);border-radius:6px;padding:6px 10px;margin-top:8px;font-size:11px'>👤 {st.session_state.user_name} <span style='opacity:.6'>| {st.session_state.user_role}</span></div></div>", unsafe_allow_html=True)
         st.markdown("---")
 
-        # Filter sections by access
-        available_sections = [s for s in ALL_SECTIONS if check_section_access(s)]
+        # Filter sections by access (use AR keys for access check, display in current language)
+        _all_display = _get_sections()
+        available_sections = [s for s in _all_display if check_section_access(_section_key(s))]
         if st.session_state.user_role == "مدير":
-            available_sections.append("👥 إدارة المستخدمين")
+            available_sections.append(_t("👥 إدارة المستخدمين", "👥 User Management"))
 
 
         section = st.radio("📂", available_sections, label_visibility="collapsed")
         st.markdown("---")
 
-        if section == "📊 التحليلات العامة":
-            page = st.radio("📌", ["🏠 نظرة عامة","📊 الأقسام","🤖 المحلل الذكي","📋 البيانات"], label_visibility="collapsed")
-        elif section == "🎁 Total Rewards":
-            page = st.radio("📌", ["🎁 لوحة Total Rewards","💰 لوحة الرواتب","📈 تحليل شهري/ربعي","🏷️ تحليل حسب الفئات","📊 سلم الرواتب","💰 هيكل الرواتب","🏥 المزايا والتأمينات","📊 تحليل التنافسية","📥 تصدير TR"], label_visibility="collapsed")
-        elif section == "👥 Headcount":
-            page = st.radio("📌", ["👥 Headcount Report","📊 تحليل الأداء","📋 بيانات الموظفين","📥 تصدير Headcount"], label_visibility="collapsed")
-        elif section == "⚖️ حاسبة المستحقات":
-            page = "⚖️ حاسبة المستحقات"
-        elif section == "🎯 التوظيف":
-            page = st.radio("📌", ["📋 تخطيط التوظيف","🤖 Benchmark ذكاء اصطناعي","🌍 مقارنة الأسواق","📊 متابعة التوظيف","📄 تحليل السير الذاتية","🎤 تحليل المقابلات","📋 ATS تتبع المتقدمين","📥 تصدير التوظيف"], label_visibility="collapsed")
-        elif section == "🚀 Onboarding":
-            page = st.radio("📌", ["🚀 إنشاء Onboarding","📋 خطة 30/60/90","👥 متابعة الموظفين الجدد","📊 تحليلات Onboarding","🎬 عرض تقديمي AI","🏢 معلومات الشركة","📥 تصدير Onboarding"], label_visibility="collapsed")
-        elif section == "📜 العقود":
-            page = st.radio("📌", ["📜 إنشاء عقد","🔍 تحليل العقود","📋 العقود المحفوظة","📥 تصدير العقود"], label_visibility="collapsed")
-        elif section == "🤖 المستشار الذكي":
-            page = st.radio("📌", ["⚖️ مستشار القضايا العمالية","📚 مستشار الموارد البشرية","🧠 قاعدة المعرفة RAG","📊 التعلم والتحسين","📋 إدارة المراجع"], label_visibility="collapsed")
-        elif section == "🏗️ التطوير المؤسسي OD":
-            page = st.radio("📌", ["🔍 تشخيص المنظمة","📊 تحليل OD","🎯 استراتيجية OD","📋 خطة التنفيذ","📥 تصدير OD"], label_visibility="collapsed")
-        elif section == "📈 التحليلات المتقدمة":
-            page = st.radio("📌", ["📊 مؤشرات HR المتقدمة","🔔 التنبيهات الذكية","🔮 سيناريوهات What-If","🤖 التحليل التنبؤي","💬 تحليل المشاعر","📋 سجل التدقيق"], label_visibility="collapsed")
-        elif section == "🔍 التحليل العام":
-            page = st.radio("📌", ["📊 تحليل تلقائي","🤖 أسئلة ذكية"], label_visibility="collapsed")
-        elif section == "📝 الاستبيانات":
-            page = st.radio("📌", ["📋 قوالب جاهزة","🔨 بناء استبيان","📊 تحليل النتائج","📥 تصدير الاستبيانات"], label_visibility="collapsed")
-        elif section == "🧠 اختبارات الشخصية":
-            page = st.radio("📌", ["📋 تعيين الاختبارات","🧠 Big Five (OCEAN)","📊 Thomas PPA","🔬 Hogan HPI","💡 MBTI","💎 DISC","📈 تقارير الشخصية","📥 تصدير الاختبارات"], label_visibility="collapsed")
-        elif section == "📤 التقارير والتصدير":
-            page = st.radio("📌", ["📊 تقرير Dashboard","📝 تقرير Word","📊 تقرير شامل"], label_visibility="collapsed")
-        elif section == "👥 إدارة المستخدمين":
-            page = "👥 إدارة المستخدمين"
+        # Use internal AR key for routing, display labels in current language
+        _sec = _section_key(section)
+
+        if _sec == "📊 التحليلات العامة":
+            page = st.radio("📌", [_t("🏠 نظرة عامة","🏠 Overview"),_t("📊 الأقسام","📊 Departments"),_t("🤖 المحلل الذكي","🤖 Smart Analyzer"),_t("📋 البيانات","📋 Data")], label_visibility="collapsed")
+        elif _sec == "🎁 Total Rewards":
+            page = st.radio("📌", [_t("🎁 لوحة Total Rewards","🎁 Total Rewards Dashboard"),_t("💰 لوحة الرواتب","💰 Salary Dashboard"),_t("📈 تحليل شهري/ربعي","📈 Monthly/Quarterly Analysis"),_t("🏷️ تحليل حسب الفئات","🏷️ Category Analysis"),_t("📊 سلم الرواتب","📊 Salary Scale"),_t("💰 هيكل الرواتب","💰 Salary Structure"),_t("🏥 المزايا والتأمينات","🏥 Benefits & Insurance"),_t("📊 تحليل التنافسية","📊 Competitiveness Analysis"),_t("📥 تصدير TR","📥 Export TR")], label_visibility="collapsed")
+        elif _sec == "👥 Headcount":
+            page = st.radio("📌", [_t("👥 Headcount Report","👥 Headcount Report"),_t("📊 تحليل الأداء","📊 Performance Analysis"),_t("📋 بيانات الموظفين","📋 Employee Data"),_t("📥 تصدير Headcount","📥 Export Headcount")], label_visibility="collapsed")
+        elif _sec == "⚖️ حاسبة المستحقات":
+            page = _t("⚖️ حاسبة المستحقات","⚖️ Entitlements Calculator")
+        elif _sec == "🎯 التوظيف":
+            page = st.radio("📌", [_t("📋 تخطيط التوظيف","📋 Recruitment Planning"),_t("🤖 Benchmark ذكاء اصطناعي","🤖 AI Benchmark"),_t("🌍 مقارنة الأسواق","🌍 Market Comparison"),_t("📊 متابعة التوظيف","📊 Recruitment Tracking"),_t("📄 تحليل السير الذاتية","📄 Resume Analysis"),_t("🎤 تحليل المقابلات","🎤 Interview Analysis"),_t("📋 ATS تتبع المتقدمين","📋 ATS Applicant Tracking"),_t("📥 تصدير التوظيف","📥 Export Recruitment")], label_visibility="collapsed")
+        elif _sec == "🚀 Onboarding":
+            page = st.radio("📌", [_t("🚀 إنشاء Onboarding","🚀 Create Onboarding"),_t("📋 خطة 30/60/90","📋 30/60/90 Plan"),_t("👥 متابعة الموظفين الجدد","👥 New Employee Tracking"),_t("📊 تحليلات Onboarding","📊 Onboarding Analytics"),_t("🎬 عرض تقديمي AI","🎬 AI Presentation"),_t("🏢 معلومات الشركة","🏢 Company Info"),_t("📥 تصدير Onboarding","📥 Export Onboarding")], label_visibility="collapsed")
+        elif _sec == "📜 العقود":
+            page = st.radio("📌", [_t("📜 إنشاء عقد","📜 Create Contract"),_t("🔍 تحليل العقود","🔍 Contract Analysis"),_t("📋 العقود المحفوظة","📋 Saved Contracts"),_t("📥 تصدير العقود","📥 Export Contracts")], label_visibility="collapsed")
+        elif _sec == "🤖 المستشار الذكي":
+            page = st.radio("📌", [_t("⚖️ مستشار القضايا العمالية","⚖️ Labor Law Consultant"),_t("📚 مستشار الموارد البشرية","📚 HR Expert Consultant"),_t("🧠 قاعدة المعرفة RAG","🧠 RAG Knowledge Base"),_t("📊 التعلم والتحسين","📊 Learning & Improvement"),_t("📋 إدارة المراجع","📋 Reference Management")], label_visibility="collapsed")
+        elif _sec == "🏗️ التطوير المؤسسي OD":
+            page = st.radio("📌", [_t("🔍 تشخيص المنظمة","🔍 Organization Diagnosis"),_t("📊 تحليل OD","📊 OD Analysis"),_t("🎯 استراتيجية OD","🎯 OD Strategy"),_t("📋 خطة التنفيذ","📋 Implementation Plan"),_t("📥 تصدير OD","📥 Export OD")], label_visibility="collapsed")
+        elif _sec == "📈 التحليلات المتقدمة":
+            page = st.radio("📌", [_t("📊 مؤشرات HR المتقدمة","📊 Advanced HR KPIs"),_t("🔔 التنبيهات الذكية","🔔 Smart Alerts"),_t("🔮 سيناريوهات What-If","🔮 What-If Scenarios"),_t("🤖 التحليل التنبؤي","🤖 Predictive Analytics"),_t("💬 تحليل المشاعر","💬 Sentiment Analysis"),_t("📋 سجل التدقيق","📋 Audit Log")], label_visibility="collapsed")
+        elif _sec == "🔍 التحليل العام":
+            page = st.radio("📌", [_t("📊 تحليل تلقائي","📊 Auto Analysis"),_t("🤖 أسئلة ذكية","🤖 Smart Questions")], label_visibility="collapsed")
+        elif _sec == "📝 الاستبيانات":
+            page = st.radio("📌", [_t("📋 قوالب جاهزة","📋 Templates"),_t("🔨 بناء استبيان","🔨 Build Survey"),_t("📊 تحليل النتائج","📊 Results Analysis"),_t("📥 تصدير الاستبيانات","📥 Export Surveys")], label_visibility="collapsed")
+        elif _sec == "🧠 اختبارات الشخصية":
+            page = st.radio("📌", [_t("📋 تعيين الاختبارات","📋 Assign Tests"),_t("🧠 Big Five (OCEAN)","🧠 Big Five (OCEAN)"),_t("📊 Thomas PPA","📊 Thomas PPA"),_t("🔬 Hogan HPI","🔬 Hogan HPI"),_t("💡 MBTI","💡 MBTI"),_t("💎 DISC","💎 DISC"),_t("📈 تقارير الشخصية","📈 Personality Reports"),_t("📥 تصدير الاختبارات","📥 Export Tests")], label_visibility="collapsed")
+        elif _sec == "📤 التقارير والتصدير":
+            page = st.radio("📌", [_t("📊 تقرير Dashboard","📊 Dashboard Report"),_t("📝 تقرير Word","📝 Word Report"),_t("📊 تقرير شامل","📊 Comprehensive Report")], label_visibility="collapsed")
+        elif _sec == "👥 إدارة المستخدمين":
+            page = _t("👥 إدارة المستخدمين","👥 User Management")
         else:
-            page = st.radio("📌", ["📚 ميزانية التدريب","💹 ROI التدريب","📋 خطة ADDIE","🏫 جهات التدريب","📥 تصدير التدريب"], label_visibility="collapsed")
+            page = st.radio("📌", [_t("📚 ميزانية التدريب","📚 Training Budget"),_t("💹 ROI التدريب","💹 Training ROI"),_t("📋 خطة ADDIE","📋 ADDIE Plan"),_t("🏫 جهات التدريب","🏫 Training Providers"),_t("📥 تصدير التدريب","📥 Export Training")], label_visibility="collapsed")
 
         # Logout button
         st.markdown("---")
-        if st.button("🚪 تسجيل الخروج", use_container_width=True):
+        if st.button(_t("🚪 تسجيل الخروج", "🚪 Logout"), use_container_width=True):
             # Clear login token from DB
             token = st.session_state.get('_login_token')
             if token:
@@ -4232,7 +4419,7 @@ def main():
             st.rerun()
 
         st.markdown("---")
-        st.markdown("##### 📁 ملف البيانات")
+        st.markdown(_t("##### 📁 ملف البيانات", "##### 📁 Data File"))
         file = st.file_uploader("ارفع Excel", type=["xlsx","xls","csv"], label_visibility="collapsed", key="main_uploader")
         if file:
             # Store file bytes in session_state + save to DB for persistence
@@ -4290,6 +4477,36 @@ def main():
                         conn.close()
                 except: pass
 
+
+    # ===== PAGE KEY NORMALIZATION =====
+    # Map English page names back to Arabic keys for internal routing
+    _PAGE_EN_TO_AR = {
+        "🏠 Overview":"🏠 نظرة عامة","📊 Departments":"📊 الأقسام","🤖 Smart Analyzer":"🤖 المحلل الذكي","📋 Data":"📋 البيانات",
+        "🎁 Total Rewards Dashboard":"🎁 لوحة Total Rewards","💰 Salary Dashboard":"💰 لوحة الرواتب","📈 Monthly/Quarterly Analysis":"📈 تحليل شهري/ربعي",
+        "🏷️ Category Analysis":"🏷️ تحليل حسب الفئات","📊 Salary Scale":"📊 سلم الرواتب","💰 Salary Structure":"💰 هيكل الرواتب",
+        "🏥 Benefits & Insurance":"🏥 المزايا والتأمينات","📊 Competitiveness Analysis":"📊 تحليل التنافسية","📥 Export TR":"📥 تصدير TR",
+        "👥 Headcount Report":"👥 Headcount Report","📊 Performance Analysis":"📊 تحليل الأداء","📋 Employee Data":"📋 بيانات الموظفين","📥 Export Headcount":"📥 تصدير Headcount",
+        "⚖️ Entitlements Calculator":"⚖️ حاسبة المستحقات",
+        "📋 Recruitment Planning":"📋 تخطيط التوظيف","🤖 AI Benchmark":"🤖 Benchmark ذكاء اصطناعي","🌍 Market Comparison":"🌍 مقارنة الأسواق",
+        "📊 Recruitment Tracking":"📊 متابعة التوظيف","📄 Resume Analysis":"📄 تحليل السير الذاتية","🎤 Interview Analysis":"🎤 تحليل المقابلات",
+        "📋 ATS Applicant Tracking":"📋 ATS تتبع المتقدمين","📥 Export Recruitment":"📥 تصدير التوظيف",
+        "🚀 Create Onboarding":"🚀 إنشاء Onboarding","📋 30/60/90 Plan":"📋 خطة 30/60/90","👥 New Employee Tracking":"👥 متابعة الموظفين الجدد",
+        "📊 Onboarding Analytics":"📊 تحليلات Onboarding","🎬 AI Presentation":"🎬 عرض تقديمي AI","🏢 Company Info":"🏢 معلومات الشركة","📥 Export Onboarding":"📥 تصدير Onboarding",
+        "📜 Create Contract":"📜 إنشاء عقد","🔍 Contract Analysis":"🔍 تحليل العقود","📋 Saved Contracts":"📋 العقود المحفوظة","📥 Export Contracts":"📥 تصدير العقود",
+        "⚖️ Labor Law Consultant":"⚖️ مستشار القضايا العمالية","📚 HR Expert Consultant":"📚 مستشار الموارد البشرية",
+        "🧠 RAG Knowledge Base":"🧠 قاعدة المعرفة RAG","📊 Learning & Improvement":"📊 التعلم والتحسين","📋 Reference Management":"📋 إدارة المراجع",
+        "🔍 Organization Diagnosis":"🔍 تشخيص المنظمة","📊 OD Analysis":"📊 تحليل OD","🎯 OD Strategy":"🎯 استراتيجية OD","📋 Implementation Plan":"📋 خطة التنفيذ","📥 Export OD":"📥 تصدير OD",
+        "📊 Advanced HR KPIs":"📊 مؤشرات HR المتقدمة","🔔 Smart Alerts":"🔔 التنبيهات الذكية","🔮 What-If Scenarios":"🔮 سيناريوهات What-If",
+        "🤖 Predictive Analytics":"🤖 التحليل التنبؤي","💬 Sentiment Analysis":"💬 تحليل المشاعر","📋 Audit Log":"📋 سجل التدقيق",
+        "📊 Auto Analysis":"📊 تحليل تلقائي","🤖 Smart Questions":"🤖 أسئلة ذكية",
+        "📋 Templates":"📋 قوالب جاهزة","🔨 Build Survey":"🔨 بناء استبيان","📊 Results Analysis":"📊 تحليل النتائج","📥 Export Surveys":"📥 تصدير الاستبيانات",
+        "📋 Assign Tests":"📋 تعيين الاختبارات","📈 Personality Reports":"📈 تقارير الشخصية","📥 Export Tests":"📥 تصدير الاختبارات",
+        "📊 Dashboard Report":"📊 تقرير Dashboard","📝 Word Report":"📝 تقرير Word","📊 Comprehensive Report":"📊 تقرير شامل",
+        "👥 User Management":"👥 إدارة المستخدمين",
+        "📚 Training Budget":"📚 ميزانية التدريب","💹 Training ROI":"💹 ROI التدريب","📋 ADDIE Plan":"📋 خطة ADDIE","🏫 Training Providers":"🏫 جهات التدريب","📥 Export Training":"📥 تصدير التدريب",
+    }
+    if _lang() == 'en':
+        page = _PAGE_EN_TO_AR.get(page, page)
 
     # ===== LOAD DATA =====
     emp = pd.DataFrame()
@@ -9362,7 +9579,8 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                     st.session_state._learning_system = _init_learning()
                 return st.session_state._orchestrator.call(system_prompt, user_message, chat_history, model_type, asking_party)
             except Exception as e:
-                return None, f"⚠️ خطأ في الاتصال بالذكاء الاصطناعي. يرجى المحاولة مرة أخرى."
+                return None, _t("⚠️ خطأ في الاتصال بالذكاء الاصطناعي. يرجى المحاولة مرة أخرى.",
+                               "⚠️ Error connecting to AI. Please try again.")
 
         def call_claude_api(system_prompt, user_message, chat_history=None, model_type="general"):
             return call_ai_api(system_prompt, user_message, chat_history, model_type)
@@ -9406,8 +9624,8 @@ function stopSpeak(){{speechSynthesis.cancel()}}
         has_hf = bool(st.session_state.get('huggingface_api_key'))
 
         if not has_gemini and not has_claude and not has_groq and not has_or and not has_hf:
-            st.warning("⚠️ يرجى إدخال API Key واحد على الأقل")
-            st.markdown("### 🔷 Google Gemini (مُوصى به - مجاني)")
+            st.warning(_t("⚠️ يرجى إدخال API Key واحد على الأقل", "⚠️ Please enter at least one API Key"))
+            st.markdown(_t("### 🔷 Google Gemini (مُوصى به - مجاني)", "### 🔷 Google Gemini (Recommended - Free)"))
             gemini_input = st.text_input("🔑 Gemini API Key:", type="password", key="gemini_key_input",
                 help="مجاني من https://aistudio.google.com/apikey")
             if gemini_input:
@@ -9446,7 +9664,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
         if has_or: available_providers.append("🟠 OpenRouter")
         if has_claude: available_providers.append("🔵 Claude")
         if has_hf: available_providers.append("🤗 HuggingFace")
-        sel_provider = st.radio("🤖 المحرك:", available_providers, horizontal=True, key="provider_sel")
+        sel_provider = st.radio(_t("🤖 المحرك:", "🤖 AI Engine:"), available_providers, horizontal=True, key="provider_sel")
         if "Gemini" in sel_provider: st.session_state.ai_provider = 'gemini'
         elif "Groq" in sel_provider: st.session_state.ai_provider = 'groq'
         elif "HuggingFace" in sel_provider: st.session_state.ai_provider = 'huggingface'
@@ -9456,13 +9674,17 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 
         # ===== MODEL 1: Labor Law Consultant =====
         if page == "⚖️ مستشار القضايا العمالية":
-            hdr("⚖️ مستشار القضايا العمالية بالذكاء الاصطناعي",
-                "مدعوم بـ Google Gemini + بحث Google + نظام العمل السعودي + التأمينات + الضمان الصحي")
+            hdr(_t("⚖️ مستشار القضايا العمالية بالذكاء الاصطناعي", "⚖️ AI Labor Law Consultant"),
+                _t("مدعوم بـ Google Gemini + بحث Google + نظام العمل السعودي + التأمينات + الضمان الصحي",
+                   "Powered by Google Gemini + Google Search + Saudi Labor Law + GOSI + CCHI"))
 
-            st.markdown("""
+            st.markdown(_t("""
             **المصادر المعتمدة:**
             🔷 Google Gemini + بحث Google المباشر | نظام العمل (245 مادة) | اللائحة التنفيذية | GOSI | CCHI | قرارات وزارة الموارد البشرية
-            """)
+            """, """
+            **Approved Sources:**
+            🔷 Google Gemini + Google Search | Saudi Labor Law (245 Articles) | Executive Regulations | GOSI | CCHI | HRSD Ministerial Decisions
+            """))
 
             # Chat history
             if 'labor_chat' not in st.session_state:
@@ -9486,7 +9708,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
             }
 
             # Quick buttons - inject answer DIRECTLY (no form needed)
-            st.markdown("### 💡 أسئلة شائعة")
+            st.markdown(_t("### 💡 أسئلة شائعة", "### 💡 Common Questions"))
             qc1, qc2, qc3 = st.columns(3)
             for i, q in enumerate(INSTANT_ANSWERS.keys()):
                 with [qc1, qc2, qc3][i % 3]:
@@ -9496,26 +9718,29 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 
             # Input for custom questions
             with st.form("labor_form", clear_on_submit=True):
-                labor_party = st.radio("👤 أنا أسأل بصفتي:", [
-                    "🔍 اكتشاف تلقائي",
-                    "👷 موظف/عامل",
-                    "🏢 صاحب عمل",
-                    "📋 مسؤول موارد بشرية",
-                    "👔 مدير"
+                labor_party = st.radio(_t("👤 أنا أسأل بصفتي:", "👤 I am asking as:"), [
+                    _t("🔍 اكتشاف تلقائي", "🔍 Auto-detect"),
+                    _t("👷 موظف/عامل", "👷 Employee/Worker"),
+                    _t("🏢 صاحب عمل", "🏢 Employer"),
+                    _t("📋 مسؤول موارد بشرية", "📋 HR Officer"),
+                    _t("👔 مدير", "👔 Manager")
                 ], horizontal=True, key="labor_party_sel")
-                labor_q = st.text_area("اكتب سؤالك القانوني:", height=80, key="labor_q_input",
-                    placeholder="مثال: تم فصلي بعد 3 سنوات خدمة بدون سبب، ما مستحقاتي؟")
-                submitted = st.form_submit_button("⚖️ استشارة", type="primary", use_container_width=True)
+                labor_q = st.text_area(_t("اكتب سؤالك القانوني:", "Write your legal question:"), height=80, key="labor_q_input",
+                    placeholder=_t("مثال: تم فصلي بعد 3 سنوات خدمة بدون سبب، ما مستحقاتي؟",
+                                   "Example: I was dismissed after 3 years of service without cause, what are my entitlements?"))
+                submitted = st.form_submit_button(_t("⚖️ استشارة", "⚖️ Consult"), type="primary", use_container_width=True)
 
             if submitted and labor_q:
                 if True:  # All questions go through reasoning pipeline
                     # Map UI selection to asking_party value
                     _party_map = {"👷 موظف/عامل": "employee", "🏢 صاحب عمل": "employer",
-                                  "📋 مسؤول موارد بشرية": "hr_officer", "👔 مدير": "manager"}
+                                  "📋 مسؤول موارد بشرية": "hr_officer", "👔 مدير": "manager",
+                                  "👷 Employee/Worker": "employee", "🏢 Employer": "employer",
+                                  "📋 HR Officer": "hr_officer", "👔 Manager": "manager"}
                     _asking = _party_map.get(labor_party, None)  # None = auto-detect
 
                     # Use AI model with the full Labor Law system prompt
-                    with st.spinner("⚖️ جاري تحليل القضية بالذكاء الاصطناعي..."):
+                    with st.spinner(_t("⚖️ جاري تحليل القضية بالذكاء الاصطناعي...", "⚖️ Analyzing case with AI...")):
                         response, error = call_ai_api(
                             LABOR_LAW_SYSTEM_PROMPT, labor_q,
                             chat_history=st.session_state.labor_chat,
@@ -9523,30 +9748,42 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                             asking_party=_asking
                         )
                         if not response or len(str(response)) < 20:
-                            response = ("**لم يتمكن النظام من توليد إجابة تحليلية**\n\n"
-                                       "**الحلول:**\n"
-                                       "1. تأكد من إضافة مفتاح Groq أو Gemini في الإعدادات\n"
-                                       "2. أعد المحاولة بعد لحظات\n"
-                                       "3. أعد صياغة السؤال بشكل أوضح\n"
-                                       "4. للاستشارات العاجلة: اتصل على 19911 (مكتب العمل)")
+                            response = _t(
+                                ("**لم يتمكن النظام من توليد إجابة تحليلية**\n\n"
+                                 "**الحلول:**\n"
+                                 "1. تأكد من إضافة مفتاح Groq أو Gemini في الإعدادات\n"
+                                 "2. أعد المحاولة بعد لحظات\n"
+                                 "3. أعد صياغة السؤال بشكل أوضح\n"
+                                 "4. للاستشارات العاجلة: اتصل على 19911 (مكتب العمل)"),
+                                ("**The system could not generate an analytical answer**\n\n"
+                                 "**Solutions:**\n"
+                                 "1. Make sure you have added a Groq or Gemini API key in settings\n"
+                                 "2. Try again in a few moments\n"
+                                 "3. Rephrase your question more clearly\n"
+                                 "4. For urgent consultations: call 19911 (Labor Office)")
+                            )
                         st.session_state.labor_chat.append({"role":"user","content":labor_q})
                         st.session_state.labor_chat.append({"role":"assistant","content":response})
                         st.rerun()
 
             # Clear chat
-            if st.session_state.labor_chat and st.button("🗑️ مسح المحادثة", key="labor_clear"):
+            if st.session_state.labor_chat and st.button(_t("🗑️ مسح المحادثة", "🗑️ Clear Chat"), key="labor_clear"):
                 st.session_state.labor_chat = []
                 st.rerun()
 
         # ===== MODEL 2: HR Expert =====
         elif page == "📚 مستشار الموارد البشرية":
-            hdr("📚 مستشار الموارد البشرية بالذكاء الاصطناعي",
-                "مدعوم بـ Google Gemini + بحث Google + مناهج PHRi + SHRM + CIPD + APTD + SPHR")
+            hdr(_t("📚 مستشار الموارد البشرية بالذكاء الاصطناعي", "📚 AI HR Expert Consultant"),
+                _t("مدعوم بـ Google Gemini + بحث Google + مناهج PHRi + SHRM + CIPD + APTD + SPHR",
+                   "Powered by Google Gemini + Google Search + PHRi + SHRM + CIPD + APTD + SPHR"))
 
-            st.markdown("""
+            st.markdown(_t("""
             **المناهج المعتمدة:**
             🔷 Google Gemini + بحث Google المباشر | PHRi (HRCI) | SHRM-SCP | CIPD Level 7 | APTD | SPHR | أفضل الممارسات العالمية
-            """)
+            """, """
+            **Approved Frameworks:**
+            🔷 Google Gemini + Google Search | PHRi (HRCI) | SHRM-SCP | CIPD Level 7 | APTD | SPHR | Global Best Practices
+            """))
 
             # Chat history
             if 'hr_chat' not in st.session_state:
@@ -9569,7 +9806,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
             }
 
             # Quick buttons - inject answer DIRECTLY
-            st.markdown("### 💡 مواضيع شائعة")
+            st.markdown(_t("### 💡 مواضيع شائعة", "### 💡 Popular Topics"))
             tc1, tc2, tc3 = st.columns(3)
             for i, t in enumerate(HR_INSTANT.keys()):
                 with [tc1, tc2, tc3][i % 3]:
@@ -9578,25 +9815,28 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                         st.rerun()
 
             with st.form("hr_form", clear_on_submit=True):
-                hr_party = st.radio("👤 أنا أسأل بصفتي:", [
-                    "🔍 اكتشاف تلقائي",
-                    "📋 مختص موارد بشرية",
-                    "👔 مدير",
-                    "👷 موظف",
-                    "🏢 صاحب عمل"
+                hr_party = st.radio(_t("👤 أنا أسأل بصفتي:", "👤 I am asking as:"), [
+                    _t("🔍 اكتشاف تلقائي", "🔍 Auto-detect"),
+                    _t("📋 مختص موارد بشرية", "📋 HR Professional"),
+                    _t("👔 مدير", "👔 Manager"),
+                    _t("👷 موظف", "👷 Employee"),
+                    _t("🏢 صاحب عمل", "🏢 Employer")
                 ], horizontal=True, key="hr_party_sel")
-                hr_q = st.text_area("اكتب سؤالك:", height=80, key="hr_q_input",
-                    placeholder="مثال: كيف أقيس فعالية برنامج التدريب باستخدام نموذج Kirkpatrick؟")
-                submitted = st.form_submit_button("📚 استشارة", type="primary", use_container_width=True)
+                hr_q = st.text_area(_t("اكتب سؤالك:", "Write your question:"), height=80, key="hr_q_input",
+                    placeholder=_t("مثال: كيف أقيس فعالية برنامج التدريب باستخدام نموذج Kirkpatrick؟",
+                                   "Example: How do I measure training program effectiveness using the Kirkpatrick model?"))
+                submitted = st.form_submit_button(_t("📚 استشارة", "📚 Consult"), type="primary", use_container_width=True)
 
             if submitted and hr_q:
                 if True:  # All questions go through reasoning pipeline
                     # Map UI selection to asking_party value
                     _hr_party_map = {"📋 مختص موارد بشرية": "hr_officer", "👔 مدير": "manager",
-                                     "👷 موظف": "employee", "🏢 صاحب عمل": "employer"}
+                                     "👷 موظف": "employee", "🏢 صاحب عمل": "employer",
+                                     "📋 HR Professional": "hr_officer", "👔 Manager": "manager",
+                                     "👷 Employee": "employee", "🏢 Employer": "employer"}
                     _hr_asking = _hr_party_map.get(hr_party, None)  # None = auto-detect
 
-                    with st.spinner("📚 جاري البحث بالذكاء الاصطناعي..."):
+                    with st.spinner(_t("📚 جاري البحث بالذكاء الاصطناعي...", "📚 Searching with AI...")):
                         response, error = call_ai_api(
                             HR_EXPERT_SYSTEM_PROMPT, hr_q,
                             chat_history=st.session_state.hr_chat,
@@ -9604,16 +9844,23 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                             asking_party=_hr_asking
                         )
                         if not response or len(str(response)) < 20:
-                            response = ("**لم يتمكن النظام من توليد إجابة مهنية**\n\n"
-                                       "**الحلول:**\n"
-                                       "1. تأكد من إضافة مفتاح Groq أو Gemini في الإعدادات\n"
-                                       "2. أعد المحاولة بعد لحظات\n"
-                                       "3. أعد صياغة السؤال بشكل أوضح")
+                            response = _t(
+                                ("**لم يتمكن النظام من توليد إجابة مهنية**\n\n"
+                                 "**الحلول:**\n"
+                                 "1. تأكد من إضافة مفتاح Groq أو Gemini في الإعدادات\n"
+                                 "2. أعد المحاولة بعد لحظات\n"
+                                 "3. أعد صياغة السؤال بشكل أوضح"),
+                                ("**The system could not generate a professional answer**\n\n"
+                                 "**Solutions:**\n"
+                                 "1. Make sure you have added a Groq or Gemini API key in settings\n"
+                                 "2. Try again in a few moments\n"
+                                 "3. Rephrase your question more clearly")
+                            )
                         st.session_state.hr_chat.append({"role":"user","content":hr_q})
                         st.session_state.hr_chat.append({"role":"assistant","content":response})
                         st.rerun()
 
-            if st.session_state.hr_chat and st.button("🗑️ مسح المحادثة", key="hr_clear"):
+            if st.session_state.hr_chat and st.button(_t("🗑️ مسح المحادثة", "🗑️ Clear Chat"), key="hr_clear"):
                 st.session_state.hr_chat = []
                 st.rerun()
 
