@@ -199,6 +199,9 @@ class ModelOrchestrator:
                 # Only articles found in retrieved context + system prompt may be cited
                 if model_type == 'labor':
                     grounded_articles = set(reasoning.SYSTEM_PROMPT_ARTICLES)
+                    # Add articles from topic analysis
+                    if analysis and analysis.get('matched_articles'):
+                        grounded_articles.update(analysis['matched_articles'])
                     # Extract articles from RAG retrieval results
                     if retrieval_results:
                         for r in retrieval_results:
@@ -775,21 +778,24 @@ class KnowledgeEngine:
 
             # Add new chunks with enriched metadata
             for i, chunk in enumerate(chunks):
+                chunk_text = chunk['text'] if isinstance(chunk, dict) else chunk
+                chunk_article = chunk.get('article_number', '') if isinstance(chunk, dict) else ''
                 chunk_meta = {
-                    "text": chunk, "source": source, "type": doc_type,
+                    "text": chunk_text, "source": source, "type": doc_type,
+                    "article_number": chunk_article,
                     "version": ver, "chunk_id": i,
                     "added": datetime.now().strftime("%Y-%m-%d"),
-                    "hash": hashlib.md5(chunk.encode()).hexdigest()[:12],
+                    "hash": hashlib.md5(chunk_text.encode()).hexdigest()[:12],
                 }
                 # Enrich with optional metadata
                 if extra_meta:
                     for mk in ['category','topic','priority','article_number','tags']:
                         if mk in extra_meta:
                             chunk_meta[mk] = extra_meta[mk]
-                # Auto-detect article numbers in legal docs
-                if doc_type in self.LABOR_TYPES:
+                # Auto-detect article numbers in legal docs (supplement chunk metadata)
+                if doc_type in self.LABOR_TYPES and not chunk_article:
                     import re
-                    art_matches = re.findall(r'المادة\s*(\d+)', chunk)
+                    art_matches = re.findall(r'المادة\s*(\d+)', chunk_text)
                     if art_matches:
                         chunk_meta['article_number'] = ','.join(art_matches[:3])
                 existing.append(chunk_meta)
@@ -804,10 +810,11 @@ class KnowledgeEngine:
         except: return 0
 
     def _smart_chunk(self, text, doc_type="legal"):
-        """Smart chunking that respects document structure.
-        Legal docs: split by article boundaries.
+        """Smart chunking that respects document structure and extracts metadata.
+        Legal docs: split by article boundaries, extract article_number.
         HR docs: split by heading boundaries.
-        Default: overlapping word chunks."""
+        Default: overlapping word chunks.
+        Returns list of dicts: {text, article_number}."""
         import re
 
         # Legal documents: split by article markers (المادة)
@@ -819,10 +826,14 @@ class KnowledgeEngine:
                 for part in parts:
                     part = part.strip()
                     if not part: continue
+                    # Extract article number from this chunk
+                    art_match = re.search(r'(?:المادة|مادة)\s*(\d+)', part)
+                    art_num = art_match.group(1) if art_match else ''
                     if len(part.split()) > 600:
-                        chunks.extend(self._chunk_text(part, 500, 50))
-                    elif part:
-                        chunks.append(part)
+                        for sub in self._chunk_text(part, 500, 50):
+                            chunks.append({'text': sub, 'article_number': art_num})
+                    else:
+                        chunks.append({'text': part, 'article_number': art_num})
                 if chunks:
                     return chunks
 
@@ -836,14 +847,15 @@ class KnowledgeEngine:
                     part = part.strip()
                     if not part: continue
                     if len(part.split()) > 600:
-                        chunks.extend(self._chunk_text(part, 500, 50))
-                    elif part:
-                        chunks.append(part)
+                        for sub in self._chunk_text(part, 500, 50):
+                            chunks.append({'text': sub, 'article_number': ''})
+                    else:
+                        chunks.append({'text': part, 'article_number': ''})
                 if chunks:
                     return chunks
 
         # Default: overlapping word chunks
-        return self._chunk_text(text, 500, 50)
+        return [{'text': t, 'article_number': ''} for t in self._chunk_text(text, 500, 50)]
 
     def _chunk_text(self, text, chunk_size=500, overlap=50):
         """Split text into overlapping chunks."""
@@ -1032,8 +1044,49 @@ class ReasoningLayer:
 
     # ---- Articles embedded in the system prompt (always grounded) ----
     SYSTEM_PROMPT_ARTICLES = {
-        '50', '53', '55', '74', '77', '80', '81', '84', '85', '88',
-        '98', '99', '107', '109', '113', '151',
+        # ===== نظام العمل السعودي (245 مادة) =====
+        # الباب 1: تعريفات
+        '1','2','3','4','5','6','7',
+        # الباب 2: التوظيف
+        '8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24',
+        # الباب 3: استخدام غير السعوديين
+        '25','26','27','28','29','30','31','32','33','34','35','36','37','38','39','40','41',
+        # الباب 4: التدريب والتأهيل
+        '42','43','44','45','46','47','48',
+        # الباب 5: علاقات العمل (العقود)
+        '49','50','51','52','53','54','55','56','57','58','59','60',
+        # الباب 6: شروط العمل وظروفه
+        '61','62','63','64','65','66','67','68','69','70','71','72','73',
+        # الباب 7: انتهاء عقد العمل
+        '74','75','76','77','78','79','80','81','82',
+        # الباب 8: مكافأة نهاية الخدمة
+        '83','84','85','86','87','88',
+        # الباب 9: الأجور
+        '89','90','91','92','93','94','95','96','97',
+        # الباب 10: ساعات العمل وفترات الراحة
+        '98','99','100','101','102','103','104','105','106','107',
+        # الباب 11: الإجازات
+        '108','109','110','111','112','113','114','115','116',
+        # الباب 12: تشغيل الأحداث
+        '117','118','119','120',
+        # الباب 13: تشغيل المرأة
+        '121','122','123','124','125','126','127','128','129','130',
+        # الباب 14: الوقاية من المخاطر المهنية
+        '131','132','133','134','135','136','137','138','139','140','141','142','143','144','145',
+        # الباب 15: إصابات العمل والتعويض
+        '146','147','148','149','150','151','152','153','154','155',
+        # الباب 16: العمل البحري
+        '156','157','158','159','160','161','162','163','164','165','166','167','168',
+        '169','170','171','172','173','174','175','176','177','178',
+        # الباب 17: المناجم والمحاجر
+        '179','180','181','182','183','184','185','186','187','188','189','190',
+        '191','192','193','194','195','196','197','198','199',
+        # الباب 18: تسوية الخلافات العمالية
+        '200','201','202','203','204','205','206','207','208','209','210',
+        '211','212','213','214','215','216','217','218','219','220',
+        '221','222','223','224','225','226','227','228','229','230','231',
+        # الباب 19: العقوبات
+        '232','233','234','235','236','237','238','239','240','241','242','243','244','245',
     }
 
     # ---- Known/Approved Legal References ----
@@ -1060,11 +1113,110 @@ class ReasoningLayer:
     KNOWN_LEGAL_SOURCES = {
         'نظام العمل', 'نظام العمل السعودي', 'اللائحة التنفيذية لنظام العمل',
         'نظام التأمينات الاجتماعية', 'اللائحة التنفيذية للتأمينات الاجتماعية',
-        'نظام الضمان الصحي التعاوني', 'اللائحة التنفيذية للضمان الصحي',
+        'نظام الضمان الصحي التعاوني', 'نظام مجلس الضمان الصحي',
+        'اللائحة التنفيذية للضمان الصحي', 'اللائحة التنفيذية لنظام الضمان الصحي',
         'قرارات وزارية', 'وزارة الموارد البشرية', 'MHRSD',
         'GOSI', 'CCHI', 'التأمينات الاجتماعية', 'ساند',
-        'نطاقات', 'برنامج حماية الأجور', 'مبادرة تحسين العلاقة التعاقدية',
+        'نطاقات', 'برنامج حماية الأجور', 'نظام حماية الأجور',
+        'مبادرة تحسين العلاقة التعاقدية',
         'لائحة السلامة والصحة المهنية',
+        'لائحة عمال الخدمة المنزلية',
+        'نظام التأمين ضد التعطل', 'نظام ساند',
+        'منصة ودي', 'منصة قوى', 'المحكمة العمالية',
+        'نظام التسوية الودية',
+        'برنامج نطاقات',
+        'قرار وزاري', 'قرار وزير الموارد البشرية',
+        'لائحة العمل عن بُعد', 'لائحة العمل المرن',
+    }
+
+    # Known regulations and their identifiers (for source verification)
+    KNOWN_REGULATIONS = {
+        'labor_law': {
+            'name_ar': 'نظام العمل',
+            'name_en': 'Saudi Labor Law',
+            'articles': 245,
+            'royal_decree': 'م/51 بتاريخ 23/8/1426هـ',
+        },
+        'labor_executive': {
+            'name_ar': 'اللائحة التنفيذية لنظام العمل',
+            'name_en': 'Labor Law Executive Regulations',
+        },
+        'gosi': {
+            'name_ar': 'نظام التأمينات الاجتماعية',
+            'name_en': 'Social Insurance Law (GOSI)',
+            'articles': 62,
+            'royal_decree': 'م/33 بتاريخ 3/9/1421هـ',
+            'key_provisions': {
+                'contribution_saudi': '9.75% employee + 11.75% employer (total 21.5%)',
+                'contribution_non_saudi': '2% employer only (occupational hazards)',
+                'sand': '0.75% employee + 0.75% employer',
+                'retirement_age': '60 male, 55 female',
+                'minimum_pension': '120 months contribution',
+            }
+        },
+        'gosi_executive': {
+            'name_ar': 'اللائحة التنفيذية لنظام التأمينات الاجتماعية',
+            'name_en': 'GOSI Executive Regulations',
+        },
+        'cchi': {
+            'name_ar': 'نظام مجلس الضمان الصحي التعاوني',
+            'name_en': 'Council of Cooperative Health Insurance (CCHI)',
+            'articles': 28,
+            'royal_decree': 'م/10 بتاريخ 1/5/1420هـ',
+            'key_provisions': {
+                'mandatory': 'إلزامي على صاحب العمل لجميع العاملين ومعاليهم',
+            }
+        },
+        'cchi_executive': {
+            'name_ar': 'اللائحة التنفيذية لنظام الضمان الصحي',
+            'name_en': 'CCHI Executive Regulations',
+        },
+        'occupational_safety': {
+            'name_ar': 'لائحة السلامة والصحة المهنية',
+            'name_en': 'Occupational Safety and Health Regulations',
+        },
+        'domestic_workers': {
+            'name_ar': 'لائحة عمال الخدمة المنزلية ومن في حكمهم',
+            'name_en': 'Domestic Workers Regulation',
+            'articles': 23,
+        },
+        'sand_system': {
+            'name_ar': 'نظام التأمين ضد التعطل عن العمل (ساند)',
+            'name_en': 'SANED Unemployment Insurance',
+            'key_provisions': {
+                'benefit_first_3': '60% of average salary (max 9000 SAR)',
+                'benefit_remaining_9': '50% of average salary (max 7500 SAR)',
+                'duration': '12 months maximum',
+                'eligibility': '12 months contribution in last 36 months',
+            }
+        },
+        'nitaqat': {
+            'name_ar': 'برنامج نطاقات',
+            'name_en': 'Nitaqat Saudization Program',
+            'bands': 'بلاتيني > أخضر عالي > أخضر منخفض > أصفر > أحمر',
+        },
+        'wage_protection': {
+            'name_ar': 'نظام حماية الأجور',
+            'name_en': 'Wage Protection System (WPS)',
+        },
+        'contractual_relationship': {
+            'name_ar': 'مبادرة تحسين العلاقة التعاقدية',
+            'name_en': 'Labor Relationship Initiative',
+            'key_provisions': {
+                'mobility': 'حرية التنقل الوظيفي بعد انتهاء العقد',
+                'notice_period': '90 يوم إشعار مسبق',
+            }
+        },
+        'amicable_settlement': {
+            'name_ar': 'نظام التسوية الودية للخلافات العمالية',
+            'name_en': 'Amicable Settlement System',
+            'platform': 'منصة ودي',
+            'key_provisions': {
+                'duration': '21 يوم عمل',
+                'escalation': 'المحكمة العمالية بعد فشل التسوية',
+                'statute_of_limitations': '12 شهر من تاريخ انتهاء العلاقة',
+            }
+        },
     }
 
     # ---- Known/Approved HR Frameworks ----
@@ -1159,19 +1311,19 @@ class ReasoningLayer:
         },
         'disputes': {
             'keywords': ['شكوى','نزاع','محكمة','مكتب العمل','تظلم','ودي','قضية'],
-            'articles': [],
+            'articles': ['200','215'],
             'category': 'النزاعات العمالية',
             'priority': 'medium'
         },
         'saudization': {
             'keywords': ['نطاقات','سعودة','توطين','nitaqat','نسبة السعودة'],
-            'articles': [],
+            'articles': ['26'],
             'category': 'السعودة والتوطين',
             'priority': 'low'
         },
         'women_rights': {
             'keywords': ['حقوق المرأة','المرأة','حامل','وضع','رضاعة','أمومة'],
-            'articles': ['151'],
+            'articles': ['121','122','128','151','152'],
             'category': 'حقوق المرأة',
             'priority': 'medium'
         },
@@ -1193,6 +1345,43 @@ class ReasoningLayer:
             'articles': ['81'],
             'category': 'ترك العمل بدون إشعار',
             'priority': 'high'
+        },
+        'training': {
+            'keywords': ['تدريب','تأهيل','عقد تأهيل','دورة تدريبية','نسبة التدريب','تكاليف التدريب'],
+            'articles': ['42','43','44','45','46','47','48'],
+            'category': 'التدريب والتأهيل',
+            'priority': 'medium'
+        },
+        'probation': {
+            'keywords': ['تجربة','فترة التجربة','فترة الاختبار','اختبار'],
+            'articles': ['53','54'],
+            'category': 'فترة التجربة',
+            'priority': 'medium'
+        },
+        'disciplinary': {
+            'keywords': ['جزاء','عقوبة','إنذار','لفت نظر','مخالفة','تأديب','جزاءات',
+                         'اعتداء لفظي','تحرش','سب','شتم','إهانة','ضرب','تهديد'],
+            'articles': ['66','67','68','69','70','71','72','80','81'],
+            'category': 'الجزاءات والتأديب',
+            'priority': 'high'
+        },
+        'safety': {
+            'keywords': ['سلامة','إصابة','حادث عمل','إصابة مهنية','خطر','وفاة عمل'],
+            'articles': ['131','133','135','140','146','149'],
+            'category': 'السلامة والإصابات',
+            'priority': 'medium'
+        },
+        'certificate': {
+            'keywords': ['شهادة خبرة','شهادة عمل','خطاب تعريف'],
+            'articles': ['64'],
+            'category': 'الشهادات',
+            'priority': 'low'
+        },
+        'absence': {
+            'keywords': ['غياب','تغيب','انقطاع','عدم حضور'],
+            'articles': ['80'],
+            'category': 'الغياب',
+            'priority': 'medium'
         },
     }
 
@@ -1887,6 +2076,10 @@ class ReasoningLayer:
                 for m in matches:
                     # Check if it matches a known source
                     is_known = any(ks in m for ks in self.KNOWN_LEGAL_SOURCES)
+                    if not is_known:
+                        # Also check against KNOWN_REGULATIONS names
+                        reg_names = [r.get('name_ar','') for r in self.KNOWN_REGULATIONS.values() if isinstance(r, dict)]
+                        is_known = any(rn in m for rn in reg_names if rn)
                     if not is_known:
                         warnings.append(f"المرجع '{m[:50]}' قد لا يكون مصدراً قانونياً معتمداً")
 
@@ -9353,20 +9546,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                 submitted = st.form_submit_button("⚖️ استشارة", type="primary", use_container_width=True)
 
             if submitted and labor_q:
-                # Check instant answers first
-                answer = None
-                for k, v in INSTANT_ANSWERS.items():
-                    if labor_q.strip() == k or labor_q.strip().rstrip('؟?') == k.rstrip('؟?'):
-                        answer = v; break
-                if not answer:
-                    for k, v in INSTANT_ANSWERS.items():
-                        if k.rstrip('؟?') in labor_q or labor_q.rstrip('؟?') in k:
-                            answer = v; break
-                if answer:
-                    st.session_state.labor_chat.append({"role":"user","content":labor_q})
-                    st.session_state.labor_chat.append({"role":"assistant","content":answer})
-                    st.rerun()
-                else:
+                if True:  # All questions go through reasoning pipeline
                     # Map UI selection to asking_party value
                     _party_map = {"👷 موظف/عامل": "employee", "🏢 صاحب عمل": "employer",
                                   "📋 مسؤول موارد بشرية": "hr_officer", "👔 مدير": "manager"}
@@ -9381,7 +9561,12 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                             asking_party=_asking
                         )
                         if not response or len(str(response)) < 20:
-                            response = get_labor_fallback_answer(labor_q)
+                            response = ("**لم يتمكن النظام من توليد إجابة تحليلية**\n\n"
+                                       "**الحلول:**\n"
+                                       "1. تأكد من إضافة مفتاح Groq أو Gemini في الإعدادات\n"
+                                       "2. أعد المحاولة بعد لحظات\n"
+                                       "3. أعد صياغة السؤال بشكل أوضح\n"
+                                       "4. للاستشارات العاجلة: اتصل على 19911 (مكتب العمل)")
                         st.session_state.labor_chat.append({"role":"user","content":labor_q})
                         st.session_state.labor_chat.append({"role":"assistant","content":response})
                         st.rerun()
@@ -9443,19 +9628,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                 submitted = st.form_submit_button("📚 استشارة", type="primary", use_container_width=True)
 
             if submitted and hr_q:
-                answer = None
-                for k, v in HR_INSTANT.items():
-                    if hr_q.strip() == k or hr_q.strip().rstrip('؟?') == k.rstrip('؟?'):
-                        answer = v; break
-                if not answer:
-                    for k, v in HR_INSTANT.items():
-                        if k.rstrip('؟?') in hr_q or hr_q.rstrip('؟?') in k:
-                            answer = v; break
-                if answer:
-                    st.session_state.hr_chat.append({"role":"user","content":hr_q})
-                    st.session_state.hr_chat.append({"role":"assistant","content":answer})
-                    st.rerun()
-                else:
+                if True:  # All questions go through reasoning pipeline
                     # Map UI selection to asking_party value
                     _hr_party_map = {"📋 مختص موارد بشرية": "hr_officer", "👔 مدير": "manager",
                                      "👷 موظف": "employee", "🏢 صاحب عمل": "employer"}
@@ -9469,7 +9642,11 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                             asking_party=_hr_asking
                         )
                         if not response or len(str(response)) < 20:
-                            response = get_hr_fallback_answer(hr_q)
+                            response = ("**لم يتمكن النظام من توليد إجابة مهنية**\n\n"
+                                       "**الحلول:**\n"
+                                       "1. تأكد من إضافة مفتاح Groq أو Gemini في الإعدادات\n"
+                                       "2. أعد المحاولة بعد لحظات\n"
+                                       "3. أعد صياغة السؤال بشكل أوضح")
                         st.session_state.hr_chat.append({"role":"user","content":hr_q})
                         st.session_state.hr_chat.append({"role":"assistant","content":response})
                         st.rerun()
