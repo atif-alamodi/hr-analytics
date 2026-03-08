@@ -9,7 +9,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import io, math, json, sqlite3, os, smtplib
+import io, math, json, sqlite3, os, smtplib, re
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import openpyxl
@@ -6384,25 +6384,76 @@ def main():
 
             # === CV Upload (REQUIRED) ===
             st.markdown("### 📄 السيرة الذاتية (مطلوب)")
-            cv_file = st.file_uploader("ارفع السيرة الذاتية:", type=["pdf","docx","txt"], key="cv_file")
+            cv_input_method = st.radio("طريقة الإدخال:", ["📁 رفع ملف","✍️ لصق النص"], horizontal=True, key="cv_input")
+
             cv_text = ""
-            if cv_file:
-                if cv_file.name.endswith('.txt'):
-                    cv_text = cv_file.read().decode('utf-8',errors='ignore')
-                elif cv_file.name.endswith('.docx'):
+            if cv_input_method == "📁 رفع ملف":
+                cv_file = st.file_uploader("ارفع السيرة الذاتية:", type=["pdf","docx","txt","doc","rtf"], key="cv_file")
+                if cv_file:
+                    file_bytes = cv_file.getvalue()
+                    fname = cv_file.name.lower()
+                    file_size = len(file_bytes)
+                    st.caption(f"📎 {cv_file.name} ({file_size:,} bytes)")
+
                     try:
-                        from docx import Document
-                        doc = Document(io.BytesIO(cv_file.read()))
-                        cv_text = "\n".join([p.text for p in doc.paragraphs])
-                    except: pass
-                elif cv_file.name.endswith('.pdf'):
-                    try:
-                        import pdfplumber
-                        with pdfplumber.open(io.BytesIO(cv_file.read())) as pdf:
-                            cv_text = "\n".join([p.extract_text() or '' for p in pdf.pages])
-                    except: pass
-                if cv_text: st.success(f"✅ تم قراءة {len(cv_text)} حرف من السيرة الذاتية")
-                else: st.error("❌ تعذر قراءة الملف. جرب صيغة أخرى.")
+                        if fname.endswith('.txt') or fname.endswith('.rtf'):
+                            cv_text = file_bytes.decode('utf-8', errors='ignore')
+
+                        elif fname.endswith('.docx') or fname.endswith('.doc'):
+                            try:
+                                from docx import Document
+                                doc = Document(io.BytesIO(file_bytes))
+                                cv_text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
+                            except Exception as e:
+                                st.warning(f"تعذر قراءة Word: {e}")
+                                cv_text = file_bytes.decode('utf-8', errors='ignore')
+                                cv_text = ''.join(c for c in cv_text if c.isprintable() or c in '\n\r\t')
+
+                        elif fname.endswith('.pdf'):
+                            # Method 1: pdfplumber
+                            try:
+                                import pdfplumber
+                                with pdfplumber.open(io.BytesIO(file_bytes)) as pdf_doc:
+                                    pages = []
+                                    for pg in pdf_doc.pages:
+                                        txt = pg.extract_text()
+                                        if txt and len(txt.strip()) > 10:
+                                            pages.append(txt)
+                                    cv_text = "\n".join(pages)
+                            except Exception as e1:
+                                st.warning(f"الطريقة 1 (pdfplumber): {e1}")
+
+                            # Method 2: raw decode if pdfplumber failed
+                            if not cv_text or len(cv_text.strip()) < 30:
+                                try:
+                                    raw = file_bytes.decode('utf-8', errors='ignore')
+                                    import re as _re
+                                    # Extract readable text from PDF raw
+                                    text_parts = _re.findall(r'\(([^\)]{2,})\)', raw)
+                                    if text_parts:
+                                        cv_text = ' '.join(text_parts)
+                                except:
+                                    pass
+
+                            # If still empty, it's likely a scanned/image PDF
+                            if not cv_text or len(cv_text.strip()) < 30:
+                                st.error("❌ هذا ملف PDF يبدو أنه مبني على صور (Scanned). الرجاء استخدام 'لصق النص' بدلاً من رفع الملف.")
+                                st.info("💡 افتح الـ PDF واستخدم Ctrl+A ثم Ctrl+C لنسخ النص، ثم الصقه في مربع 'لصق النص'")
+
+                    except Exception as e:
+                        st.error(f"❌ خطأ عام: {e}")
+
+                    if cv_text and len(cv_text.strip()) > 20:
+                        st.success(f"✅ تم قراءة السيرة الذاتية ({len(cv_text):,} حرف)")
+                        with st.expander("👁️ معاينة النص المستخرج"):
+                            st.text_area("", cv_text[:2000], height=200, disabled=True)
+
+            else:
+                # Manual text input
+                cv_text = st.text_area("الصق نص السيرة الذاتية هنا:", height=300, key="cv_manual",
+                    placeholder="الاسم: ...\nالخبرة: ...\nالمهارات: ...\nالتعليم: ...")
+                if cv_text:
+                    st.success(f"✅ تم إدخال {len(cv_text):,} حرف")
 
             # === JD Upload (OPTIONAL) ===
             with st.expander("📋 الوصف الوظيفي (اختياري - يزيد دقة الموائمة)", expanded=False):
@@ -6414,20 +6465,21 @@ def main():
                 else:
                     jd_file = st.file_uploader("ارفع الوصف الوظيفي:", type=["pdf","docx","txt"], key="jd_file")
                     if jd_file:
-                        if jd_file.name.endswith('.txt'):
-                            jd_text = jd_file.read().decode('utf-8',errors='ignore')
-                        elif jd_file.name.endswith('.docx'):
-                            try:
+                        jd_bytes = jd_file.getvalue()
+                        jd_fname = jd_file.name.lower()
+                        try:
+                            if jd_fname.endswith('.txt'):
+                                jd_text = jd_bytes.decode('utf-8', errors='ignore')
+                            elif jd_fname.endswith('.docx'):
                                 from docx import Document
-                                doc = Document(io.BytesIO(jd_file.read()))
-                                jd_text = "\n".join([p.text for p in doc.paragraphs])
-                            except: pass
-                        elif jd_file.name.endswith('.pdf'):
-                            try:
+                                doc = Document(io.BytesIO(jd_bytes))
+                                jd_text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
+                            elif jd_fname.endswith('.pdf'):
                                 import pdfplumber
-                                with pdfplumber.open(io.BytesIO(jd_file.read())) as pdf:
-                                    jd_text = "\n".join([p.extract_text() or '' for p in pdf.pages])
-                            except: pass
+                                with pdfplumber.open(io.BytesIO(jd_bytes)) as pdf_doc:
+                                    jd_text = "\n".join([pg.extract_text() or '' for pg in pdf_doc.pages])
+                        except Exception as e:
+                            st.warning(f"تعذر قراءة الوصف: {e}")
                         if jd_text: st.success(f"✅ تم قراءة الوصف الوظيفي ({len(jd_text)} حرف)")
 
             # Company context (OPTIONAL)
