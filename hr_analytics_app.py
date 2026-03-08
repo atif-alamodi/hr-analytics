@@ -6440,113 +6440,289 @@ def main():
                     st.error("❌ يرجى رفع السيرة الذاتية أولاً")
                 else:
                     with st.spinner("جاري التحليل الذكي بالذكاء الاصطناعي..."):
-                        # Company info from config
+                        # ========================================
+                        #   SMART PRE-PROCESSING (Rule-based NLP)
+                        # ========================================
+                        import re
+                        cv_lower = cv_text.lower()
+
+                        # 1. Extract contact info
+                        emails = re.findall(r'[\w.+-]+@[\w-]+\.[\w.]+', cv_text)
+                        phones = re.findall(r'[\+]?[\d\s\-\(\)]{8,15}', cv_text)
+                        phones = [p.strip() for p in phones if len(re.sub(r'\D','',p)) >= 8][:3]
+                        linkedin = re.findall(r'linkedin\.com/in/[\w-]+', cv_lower)
+
+                        # 2. Extract years of experience
+                        exp_patterns = [
+                            r'(\d+)\+?\s*(?:سنة|سنوات|years?|yrs?)\s*(?:خبرة|experience|of experience)?',
+                            r'(?:خبرة|experience).*?(\d+)\+?\s*(?:سنة|سنوات|years?)',
+                        ]
+                        years_found = []
+                        for p in exp_patterns:
+                            years_found.extend([int(m) for m in re.findall(p, cv_lower) if int(m) < 50])
+                        total_years = max(years_found) if years_found else 0
+
+                        # 3. Extract education
+                        edu_keywords = {
+                            'دكتوراه': 'PhD', 'phd': 'PhD', 'doctorate': 'PhD',
+                            'ماجستير': 'Masters', 'master': 'Masters', 'mba': 'MBA', 'msc': 'Masters',
+                            'بكالوريوس': 'Bachelors', 'bachelor': 'Bachelors', 'bsc': 'Bachelors',
+                            'دبلوم': 'Diploma', 'diploma': 'Diploma',
+                            'ثانوي': 'High School', 'high school': 'High School',
+                        }
+                        edu_level = "غير محدد"
+                        for kw, level in edu_keywords.items():
+                            if kw in cv_lower:
+                                edu_level = level
+                                break
+
+                        # 4. Extract skills with scoring
+                        SKILL_DB = {
+                            # Technical
+                            'python': ('Python', 'تقنية', 9), 'sql': ('SQL', 'تقنية', 8),
+                            'excel': ('Excel', 'تقنية', 7), 'power bi': ('Power BI', 'تقنية', 8),
+                            'tableau': ('Tableau', 'تقنية', 8), 'sap': ('SAP', 'تقنية', 9),
+                            'erp': ('ERP', 'تقنية', 8), 'javascript': ('JavaScript', 'تقنية', 8),
+                            'html': ('HTML/CSS', 'تقنية', 6), 'react': ('React', 'تقنية', 8),
+                            'machine learning': ('Machine Learning', 'تقنية', 9),
+                            'ai': ('Artificial Intelligence', 'تقنية', 9),
+                            'الذكاء الاصطناعي': ('AI', 'تقنية', 9),
+                            'data analysis': ('Data Analysis', 'تقنية', 8),
+                            'تحليل البيانات': ('تحليل البيانات', 'تقنية', 8),
+                            # HR specific
+                            'الموارد البشرية': ('HR Management', 'مهنية', 8),
+                            'human resources': ('HR', 'مهنية', 8),
+                            'payroll': ('Payroll', 'مهنية', 7), 'الرواتب': ('Payroll', 'مهنية', 7),
+                            'recruitment': ('Recruitment', 'مهنية', 7), 'التوظيف': ('Recruitment', 'مهنية', 7),
+                            'talent acquisition': ('Talent Acquisition', 'مهنية', 8),
+                            'performance management': ('Performance Mgmt', 'مهنية', 8),
+                            'إدارة الأداء': ('Performance Mgmt', 'مهنية', 8),
+                            'training': ('Training & Dev', 'مهنية', 7), 'التدريب': ('Training', 'مهنية', 7),
+                            'labor law': ('Labor Law', 'مهنية', 8), 'نظام العمل': ('Labor Law', 'مهنية', 8),
+                            'gosi': ('GOSI/Social Insurance', 'مهنية', 7),
+                            'التأمينات': ('Social Insurance', 'مهنية', 7),
+                            # Soft skills
+                            'leadership': ('Leadership', 'قيادية', 8), 'القيادة': ('Leadership', 'قيادية', 8),
+                            'communication': ('Communication', 'شخصية', 7), 'التواصل': ('Communication', 'شخصية', 7),
+                            'project management': ('Project Mgmt', 'قيادية', 8),
+                            'إدارة المشاريع': ('Project Mgmt', 'قيادية', 8),
+                            'team management': ('Team Mgmt', 'قيادية', 7),
+                            'problem solving': ('Problem Solving', 'شخصية', 7),
+                            'negotiation': ('Negotiation', 'شخصية', 8), 'التفاوض': ('Negotiation', 'شخصية', 8),
+                            # Certifications
+                            'pmp': ('PMP', 'شهادة', 9), 'shrm': ('SHRM', 'شهادة', 9),
+                            'cipd': ('CIPD', 'شهادة', 9), 'phri': ('PHRi', 'شهادة', 9),
+                            'sphr': ('SPHRi', 'شهادة', 9), 'cpa': ('CPA', 'شهادة', 9),
+                            'cfa': ('CFA', 'شهادة', 9), 'aws': ('AWS', 'شهادة', 8),
+                            'google': ('Google Cert', 'شهادة', 7), 'scrum': ('Scrum/Agile', 'شهادة', 8),
+                            # Languages
+                            'english': ('English', 'لغة', 7), 'الإنجليزية': ('English', 'لغة', 7),
+                            'arabic': ('Arabic', 'لغة', 7), 'العربية': ('Arabic', 'لغة', 7),
+                            'french': ('French', 'لغة', 6), 'الفرنسية': ('French', 'لغة', 6),
+                        }
+
+                        found_skills = {}
+                        for kw, (name, cat, weight) in SKILL_DB.items():
+                            if kw in cv_lower and name not in found_skills:
+                                found_skills[name] = {'category': cat, 'weight': weight}
+
+                        # 5. Categorize skills
+                        tech_skills = {k:v for k,v in found_skills.items() if v['category'] == 'تقنية'}
+                        prof_skills = {k:v for k,v in found_skills.items() if v['category'] == 'مهنية'}
+                        lead_skills = {k:v for k,v in found_skills.items() if v['category'] == 'قيادية'}
+                        soft_skills = {k:v for k,v in found_skills.items() if v['category'] == 'شخصية'}
+                        certs = {k:v for k,v in found_skills.items() if v['category'] == 'شهادة'}
+                        langs = {k:v for k,v in found_skills.items() if v['category'] == 'لغة'}
+
+                        # 6. Calculate pre-scores
+                        tech_score = min(100, len(tech_skills) * 15 + sum(v['weight'] for v in tech_skills.values()))
+                        prof_score = min(100, len(prof_skills) * 12 + sum(v['weight'] for v in prof_skills.values()))
+                        lead_score = min(100, len(lead_skills) * 20 + sum(v['weight'] for v in lead_skills.values()))
+                        cert_score = min(100, len(certs) * 25)
+                        exp_score = min(100, total_years * 8) if total_years else 50
+                        edu_scores = {'PhD':95, 'MBA':90, 'Masters':85, 'Bachelors':70, 'Diploma':55, 'High School':40, 'غير محدد':50}
+                        edu_score = edu_scores.get(edu_level, 50)
+
+                        # ========================================
+                        #   SHOW PRE-ANALYSIS DASHBOARD
+                        # ========================================
+                        st.markdown("---")
+                        st.markdown("### 📊 التحليل الأولي (Rule-based NLP)")
+
+                        # KPIs row
+                        pk1, pk2, pk3, pk4, pk5, pk6 = st.columns(6)
+                        with pk1: kpi("📧 البريد", emails[0][:20] if emails else "غير موجود")
+                        with pk2: kpi("📅 سنوات الخبرة", str(total_years) if total_years else "غير محدد")
+                        with pk3: kpi("🎓 التعليم", edu_level)
+                        with pk4: kpi("🔧 المهارات", str(len(found_skills)))
+                        with pk5: kpi("📜 الشهادات", str(len(certs)))
+                        with pk6: kpi("🌐 اللغات", str(len(langs)))
+
+                        # Skills breakdown
+                        if found_skills:
+                            sk_cols = st.columns(2)
+                            with sk_cols[0]:
+                                st.markdown("#### 🔧 المهارات المكتشفة")
+                                for cat_name, cat_skills in [("تقنية",tech_skills),("مهنية",prof_skills),("قيادية",lead_skills),("شخصية",soft_skills)]:
+                                    if cat_skills:
+                                        st.markdown(f"**{cat_name}:** {', '.join(cat_skills.keys())}")
+                                if certs: st.markdown(f"**شهادات:** {', '.join(certs.keys())}")
+                                if langs: st.markdown(f"**لغات:** {', '.join(langs.keys())}")
+
+                            with sk_cols[1]:
+                                # Pre-scores radar
+                                pre_labels = ['تقنية','مهنية','قيادية','شهادات','خبرة','تعليم']
+                                pre_vals = [tech_score, prof_score, lead_score, cert_score, exp_score, edu_score]
+                                fig = go.Figure()
+                                fig.add_trace(go.Scatterpolar(r=pre_vals+[pre_vals[0]], theta=pre_labels+[pre_labels[0]],
+                                    fill='toself', line_color='#E36414', fillcolor='rgba(227,100,20,0.15)'))
+                                fig.update_layout(polar=dict(radialaxis=dict(range=[0,100])),
+                                    title='التقييم الأولي', height=350, showlegend=False,
+                                    font=dict(family="Noto Sans Arabic"))
+                                st.plotly_chart(fig, use_container_width=True)
+
+                        # ========================================
+                        #   AI DEEP ANALYSIS
+                        # ========================================
+                        st.markdown("---")
+                        st.markdown("### 🤖 التحليل العميق بالذكاء الاصطناعي")
+
+                        # Company info
                         company_info = ""
                         try:
                             ci = st.session_state.get('company_info', {})
                             if ci:
-                                company_info = f"الشركة: {ci.get('name','رسال الود لتقنية المعلومات')}\nالنشاط: {ci.get('activity','تقنية المعلومات والمدفوعات الرقمية')}\nالمقر: {ci.get('location','جدة')}"
+                                company_info = f"الشركة: {ci.get('name','رسال الود لتقنية المعلومات')}\nالنشاط: {ci.get('activity','تقنية المعلومات')}\nالمقر: {ci.get('location','جدة')}"
                         except: pass
 
                         has_jd = bool(jd_text and jd_text.strip())
 
+                        # Build structured pre-analysis for AI
+                        pre_analysis = f"""[تحليل أولي آلي]
+سنوات الخبرة: {total_years if total_years else 'غير محدد'}
+التعليم: {edu_level}
+المهارات التقنية ({len(tech_skills)}): {', '.join(tech_skills.keys()) if tech_skills else 'لم تُكتشف'}
+المهارات المهنية ({len(prof_skills)}): {', '.join(prof_skills.keys()) if prof_skills else 'لم تُكتشف'}
+المهارات القيادية ({len(lead_skills)}): {', '.join(lead_skills.keys()) if lead_skills else 'لم تُكتشف'}
+الشهادات ({len(certs)}): {', '.join(certs.keys()) if certs else 'لم تُكتشف'}
+اللغات: {', '.join(langs.keys()) if langs else 'لم تُكتشف'}
+التقييم الأولي: تقنية {tech_score}/100 | مهنية {prof_score}/100 | قيادية {lead_score}/100 | شهادات {cert_score}/100"""
+
                         if has_jd:
-                            # === WITH JD: Matching analysis ===
-                            prompt = f"""أنت خبير توظيف وتحليل سير ذاتية بخبرة 15 سنة. حلل السيرة الذاتية مقابل الوصف الوظيفي.
+                            prompt = f"""أنت خبير توظيف وتقييم كفاءات بخبرة 20 سنة. لديك سيرة ذاتية وتحليل أولي آلي ووصف وظيفي.
 
 **السيرة الذاتية:**
 {cv_text[:4000]}
+
+{pre_analysis}
 
 **الوصف الوظيفي:**
 {jd_text[:2000]}
 
-**بيانات الشركة:**
-{company_info if company_info else company_goals if company_goals else 'غير محدد'}
+**الشركة:** {company_info if company_info else company_goals if company_goals else 'شركة تقنية في السعودية'}
 
-قدم التحليل بالعربية:
+أنت تحلل هذا المرشح لهذه الوظيفة تحديداً. كن دقيقاً ومحدداً. قدم التحليل بالعربية:
 
-## 1. ملخص المرشح (3 أسطر)
+## 1. ملخص تنفيذي (3 أسطر)
 
-## 2. نقاط الخبرة المتوافقة مع الوصف الوظيفي
-- الخبرة: ... | التوافق: .../10
+## 2. الموائمة مع الوصف الوظيفي
+لكل متطلب في الوصف الوظيفي، حدد هل المرشح يستوفيه أم لا:
+| المتطلب | الحالة | الدليل من السيرة |
+(استخدم ✅ مستوفى / ⚠️ جزئياً / ❌ غير مستوفى)
 
-## 3. المتطلبات الناقصة عند المرشح
-- المتطلب: ...
+## 3. تقييم المهارات التفصيلي
+لكل مهارة مطلوبة في الوظيفة:
+- المهارة: ... | المستوى: .../10 | الدليل: ...
 
-## 4. تقييم المهارات (كل مهارة من 10)
-- المهارة: ... | الدرجة: .../10
+## 4. نقاط القوة الحاسمة (أقوى 5)
 
-## 5. نقاط القوة (أقوى 5)
+## 5. الفجوات الحرجة (أهم 5 نقاط ضعف أو نقص)
 
-## 6. نقاط الضعف والفجوات
+## 6. تحليل المخاطر
+(3 مخاطر في توظيف هذا المرشح مع احتمالية كل مخاطرة)
 
 ## 7. التقييم الرقمي
-- مطابقة الوصف الوظيفي: XX من 100
-- جودة الخبرات: XX من 100
-- المهارات التقنية: XX من 100
-- المهارات القيادية: XX من 100
-- الدرجة النهائية: XX من 100
+- مطابقة المتطلبات الوظيفية: XX/100
+- جودة الخبرات: XX/100
+- المهارات التقنية: XX/100
+- المهارات القيادية: XX/100
+- التوافق الثقافي: XX/100
+- الدرجة النهائية: XX/100
 
-## 8. التوصية (مناسب جداً / مناسب / يحتاج تطوير / غير مناسب)
+## 8. القرار والتوصية
+(مناسب جداً / مناسب / مناسب بشروط / غير مناسب)
+التبرير في 3 أسطر.
 
-## 9. أسئلة مقترحة للمقابلة (5 أسئلة)"""
+## 9. خطة الـ 90 يوم الأولى (إذا تم توظيفه)
+
+## 10. أسئلة مقابلة مخصصة (5 أسئلة تكشف الفجوات)"""
 
                         else:
-                            # === WITHOUT JD: General best-practice analysis ===
-                            prompt = f"""أنت خبير توظيف دولي بخبرة 15 سنة. حلل السيرة الذاتية التالية وفق أفضل الممارسات العالمية في تقييم المرشحين.
+                            prompt = f"""أنت خبير توظيف دولي وتقييم مواهب بخبرة 20 سنة في أسواق الخليج والشرق الأوسط.
 
 **السيرة الذاتية:**
 {cv_text[:4000]}
 
-**معلومات إضافية:**
-{company_info if company_info else ''} {company_goals if company_goals else ''}
+{pre_analysis}
 
-لا يوجد وصف وظيفي محدد. حلل السيرة بشكل شامل ومستقل.
+**ملاحظات:** {company_info if company_info else ''} {company_goals if company_goals else ''}
+
+لا يوجد وصف وظيفي محدد. حلل هذا المرشح بشكل شامل وفق أفضل الممارسات العالمية (SHRM, CIPD, Hays, McKinsey). كن محدداً وليس عاماً.
 
 قدم التحليل بالعربية:
 
-## 1. ملخص المرشح (3 أسطر عن الخبرة والتخصص والمستوى)
+## 1. الملف التنفيذي (Executive Profile - 5 أسطر)
 
-## 2. المسار المهني وتطوره
-(تحليل المسار الوظيفي: هل هو تصاعدي؟ متنوع؟ متخصص؟)
+## 2. تحليل المسار المهني (Career Trajectory)
+- هل المسار تصاعدي أم أفقي أم متذبذب؟
+- الخبرات الأكثر قيمة ولماذا
+- الفجوات الزمنية إن وجدت
 
-## 3. تقييم المهارات (كل مهارة موجودة في السيرة من 10)
-- المهارة: ... | الدرجة: .../10
+## 3. خريطة المهارات التفصيلية
+لكل مهارة مكتشفة:
+- المهارة: ... | المستوى: .../10 | التصنيف: تقنية/مهنية/قيادية/شخصية
 
-## 4. نقاط القوة (أقوى 5 نقاط مع شرح)
+## 4. نقاط القوة التنافسية (أقوى 5 نقاط تميزه عن غيره)
 
-## 5. نقاط الضعف والفجوات (3-5 نقاط)
+## 5. نقاط الضعف والفجوات (5 نقاط مع خطة معالجة لكل واحدة)
 
-## 6. الوظائف المناسبة (أفضل 5 مسميات وظيفية تناسب المرشح مع السبب)
-1. المسمى: ... | السبب: ...
+## 6. أفضل 5 وظائف مناسبة (مع السبب والراتب المتوقع بالسوق السعودي)
+1. المسمى: ... | السبب: ... | الراتب: ... ريال
 
-## 7. القطاعات المناسبة (أفضل 3 قطاعات)
+## 7. أفضل 3 قطاعات صناعية مناسبة
 
-## 8. التقييم الرقمي
-- جودة الخبرات: XX من 100
-- المهارات التقنية: XX من 100
-- المهارات القيادية: XX من 100
-- جودة التعليم والشهادات: XX من 100
-- القيمة السوقية للمرشح: XX من 100
-- الدرجة النهائية: XX من 100
+## 8. التقييم الشامل
+- جودة الخبرات: XX/100
+- المهارات التقنية: XX/100
+- المهارات القيادية: XX/100
+- التعليم والشهادات: XX/100
+- القيمة السوقية: XX/100
+- إمكانية النمو (Growth Potential): XX/100
+- الدرجة النهائية: XX/100
 
-## 9. توصيات للمرشح (5 نصائح لتطوير سيرته الذاتية ومساره المهني)
+## 9. نطاق الراتب المتوقع في السوق السعودي
+(الحد الأدنى - المتوسط - الحد الأعلى بالريال)
 
-## 10. نطاق الراتب المتوقع في السوق السعودي (بالريال)"""
+## 10. خطة تطوير مهني مقترحة (6 أشهر)
+- الشهر 1-2: ...
+- الشهر 3-4: ...
+- الشهر 5-6: ...
+
+## 11. توصيات لتحسين السيرة الذاتية (5 نصائح محددة)"""
 
                         response, error = call_ai_api(prompt, prompt, model_type="hr")
                         if response:
                             st.session_state['_cv_result'] = response
                             st.session_state['_cv_name'] = cv_file.name if cv_file else "مرشح"
                             st.session_state['_cv_has_jd'] = has_jd
+                            st.session_state['_cv_pre'] = {
+                                'skills': len(found_skills), 'tech': tech_score, 'prof': prof_score,
+                                'lead': lead_score, 'cert': cert_score, 'exp': exp_score, 'edu': edu_score,
+                                'years': total_years, 'edu_level': edu_level, 'certs_list': list(certs.keys())
+                            }
                         elif error:
                             st.error(f"❌ {error}")
                             st.info("💡 تأكد من إعداد مفتاح API في ⚙️ الإعدادات (Gemini مجاني أو Groq أو Claude)")
-
-                    response, error = call_ai_api(prompt, prompt, model_type="hr")
-                    if response:
-                        st.session_state['_cv_result'] = response
-                        st.session_state['_cv_name'] = cv_file.name if cv_file else "مرشح"
 
             # Display results
             if '_cv_result' in st.session_state:
