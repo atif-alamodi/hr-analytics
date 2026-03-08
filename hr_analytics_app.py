@@ -10718,7 +10718,7 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
 
 
 
-            export_widget(data if len(data)>0 else None, "تحليل_النتائج", "svrs")
+            export_widget(pd.DataFrame(st.session_state.get('survey_responses', [])) if st.session_state.get('survey_responses') else None, "تحليل_النتائج", "svrs")
         elif page == "📥 تصدير الاستبيانات":
             hdr("📥 تصدير بيانات الاستبيانات")
             if st.session_state.survey_responses:
@@ -11201,7 +11201,6 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
 
         # ===== PAGE: Thomas PPA =====
 
-            export_widget(data if len(data)>0 else None, "BigFive_OCEAN", "bf01")
         elif page == "📊 Thomas PPA":
             hdr("📊 Thomas PPA", "تحليل الملف الشخصي المهني (24 سؤال)")
             st.caption("مبني على نموذج DISC لتحليل السلوك المهني: الهيمنة، التأثير، الثبات، الامتثال")
@@ -11224,7 +11223,6 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
 
         # ===== PAGE: Hogan HPI =====
 
-            export_widget(data if len(data)>0 else None, "Thomas_PPA", "tp01")
         elif page == "🔬 Hogan HPI":
             hdr("🔬 Hogan HPI", "مقياس هوجان للشخصية المهنية (28 سؤال)")
             st.caption("يقيس 7 مقاييس أساسية: التوازن النفسي، الطموح، الاجتماعية، الحساسية، الحصافة، الفضول، التعلم")
@@ -11247,7 +11245,6 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
 
         # ===== PAGE: MBTI =====
 
-            export_widget(data if len(data)>0 else None, "Hogan_HPI", "hg01")
         elif page == "💡 MBTI":
             hdr("💡 MBTI", "مؤشر مايرز بريغز لأنماط الشخصية (32 سؤال)")
             st.caption("يحدد نمط الشخصية من 16 نمط عبر 4 أبعاد: الطاقة، المعلومات، القرارات، أسلوب الحياة")
@@ -11270,7 +11267,6 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
 
         # ===== PAGE: DISC =====
 
-            export_widget(data if len(data)>0 else None, "MBTI", "mb01")
         elif page == "💎 DISC":
             hdr("💎 اختبار DISC", "تقييم أنماط السلوك المهني الأربعة (24 سؤال)")
             st.caption("يقيس 4 أنماط سلوكية: الهيمنة (D)، التأثير (I)، الثبات (S)، الالتزام (C) مع تحديد النمط المركب")
@@ -11293,7 +11289,6 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
 
         # ===== PAGE: Reports =====
 
-            export_widget(data if len(data)>0 else None, "DISC", "dc01")
         elif page == "📈 تقارير الشخصية":
             hdr("📈 تقارير اختبارات الشخصية", "قاعدة بيانات دائمة - لا تُحذف إلا بموافقة مدير النظام")
 
