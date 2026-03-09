@@ -3152,41 +3152,41 @@ def main():
             available_sections.append("👥 إدارة المستخدمين")
 
 
-        section = st.radio("📂", available_sections, label_visibility="collapsed")
+        section = st.radio("📂", available_sections, label_visibility="collapsed", key="_nav_section")
         st.markdown("---")
 
         if section == "📊 التحليلات العامة":
-            page = st.radio("📌", ["🏠 نظرة عامة","📊 الأقسام","🤖 المحلل الذكي","📋 البيانات"], label_visibility="collapsed")
+            page = st.radio("📌", ["🏠 نظرة عامة","📊 الأقسام","🤖 المحلل الذكي","📋 البيانات"], label_visibility="collapsed", key="_nav_p_analytics")
         elif section == "🎁 Total Rewards":
-            page = st.radio("📌", ["🎁 لوحة Total Rewards","💰 لوحة الرواتب","📈 تحليل شهري/ربعي","🏷️ تحليل حسب الفئات","📊 سلم الرواتب","💰 هيكل الرواتب","🏥 المزايا والتأمينات","📊 تحليل التنافسية","📥 تصدير TR"], label_visibility="collapsed")
+            page = st.radio("📌", ["🎁 لوحة Total Rewards","💰 لوحة الرواتب","📈 تحليل شهري/ربعي","🏷️ تحليل حسب الفئات","📊 سلم الرواتب","💰 هيكل الرواتب","🏥 المزايا والتأمينات","📊 تحليل التنافسية","📥 تصدير TR"], label_visibility="collapsed", key="_nav_p_tr")
         elif section == "👥 Headcount":
-            page = st.radio("📌", ["👥 Headcount Report","📊 تحليل الأداء","📋 بيانات الموظفين","📥 تصدير Headcount"], label_visibility="collapsed")
+            page = st.radio("📌", ["👥 Headcount Report","📊 تحليل الأداء","📋 بيانات الموظفين","📥 تصدير Headcount"], label_visibility="collapsed", key="_nav_p_hc")
         elif section == "⚖️ حاسبة المستحقات":
             page = "⚖️ حاسبة المستحقات"
         elif section == "🎯 التوظيف":
-            page = st.radio("📌", ["📋 تخطيط التوظيف","🤖 Benchmark ذكاء اصطناعي","🌍 مقارنة الأسواق","📊 متابعة التوظيف","📄 تحليل السير الذاتية","🎤 تحليل المقابلات","📋 ATS تتبع المتقدمين","📥 تصدير التوظيف"], label_visibility="collapsed")
+            page = st.radio("📌", ["📋 تخطيط التوظيف","🤖 Benchmark ذكاء اصطناعي","🌍 مقارنة الأسواق","📊 متابعة التوظيف","📄 تحليل السير الذاتية","🎤 تحليل المقابلات","📋 ATS تتبع المتقدمين","📥 تصدير التوظيف"], label_visibility="collapsed", key="_nav_p_recruit")
         elif section == "🚀 Onboarding":
-            page = st.radio("📌", ["🚀 إنشاء Onboarding","📋 خطة 30/60/90","👥 متابعة الموظفين الجدد","📊 تحليلات Onboarding","🎬 عرض تقديمي AI","🏢 معلومات الشركة","📥 تصدير Onboarding"], label_visibility="collapsed")
+            page = st.radio("📌", ["🚀 إنشاء Onboarding","📋 خطة 30/60/90","👥 متابعة الموظفين الجدد","📊 تحليلات Onboarding","🎬 عرض تقديمي AI","🏢 معلومات الشركة","📥 تصدير Onboarding"], label_visibility="collapsed", key="_nav_p_onboard")
         elif section == "📜 العقود":
-            page = st.radio("📌", ["📜 إنشاء عقد","🔍 تحليل العقود","📋 العقود المحفوظة","📥 تصدير العقود"], label_visibility="collapsed")
+            page = st.radio("📌", ["📜 إنشاء عقد","🔍 تحليل العقود","📋 العقود المحفوظة","📥 تصدير العقود"], label_visibility="collapsed", key="_nav_p_contracts")
         elif section == "🤖 المستشار الذكي":
-            page = st.radio("📌", ["⚖️ المستشار القانوني","📚 مستشار الموارد البشرية","🧠 قاعدة المعرفة RAG","📊 التعلم والتحسين","📋 إدارة المراجع"], label_visibility="collapsed")
+            page = st.radio("📌", ["⚖️ المستشار القانوني","📚 مستشار الموارد البشرية","🧠 قاعدة المعرفة RAG","📊 التعلم والتحسين","📋 إدارة المراجع"], label_visibility="collapsed", key="_nav_p_advisor")
         elif section == "🏗️ التطوير المؤسسي OD":
-            page = st.radio("📌", ["🔍 تشخيص المنظمة","📊 تحليل OD","🎯 استراتيجية OD","📋 خطة التنفيذ","📥 تصدير OD"], label_visibility="collapsed")
+            page = st.radio("📌", ["🔍 تشخيص المنظمة","📊 تحليل OD","🎯 استراتيجية OD","📋 خطة التنفيذ","📥 تصدير OD"], label_visibility="collapsed", key="_nav_p_od")
         elif section == "📈 التحليلات المتقدمة":
-            page = st.radio("📌", ["📊 مؤشرات HR المتقدمة","🔔 التنبيهات الذكية","🔮 سيناريوهات What-If","🤖 التحليل التنبؤي","💬 تحليل المشاعر","📋 سجل التدقيق"], label_visibility="collapsed")
+            page = st.radio("📌", ["📊 مؤشرات HR المتقدمة","🔔 التنبيهات الذكية","🔮 سيناريوهات What-If","🤖 التحليل التنبؤي","💬 تحليل المشاعر","📋 سجل التدقيق"], label_visibility="collapsed", key="_nav_p_advanced")
         elif section == "🔍 التحليل العام":
-            page = st.radio("📌", ["📊 تحليل تلقائي","🤖 أسئلة ذكية"], label_visibility="collapsed")
+            page = st.radio("📌", ["📊 تحليل تلقائي","🤖 أسئلة ذكية"], label_visibility="collapsed", key="_nav_p_general")
         elif section == "📝 الاستبيانات":
-            page = st.radio("📌", ["📋 قوالب جاهزة","🔨 بناء استبيان","📊 تحليل النتائج","📥 تصدير الاستبيانات"], label_visibility="collapsed")
+            page = st.radio("📌", ["📋 قوالب جاهزة","🔨 بناء استبيان","📊 تحليل النتائج","📥 تصدير الاستبيانات"], label_visibility="collapsed", key="_nav_p_surveys")
         elif section == "🧠 اختبارات الشخصية":
-            page = st.radio("📌", ["📋 تعيين الاختبارات","🧠 Big Five (OCEAN)","📊 Thomas PPA","🔬 Hogan HPI","💡 MBTI","💎 DISC","📈 تقارير الشخصية","📥 تصدير الاختبارات"], label_visibility="collapsed")
+            page = st.radio("📌", ["📋 تعيين الاختبارات","🧠 Big Five (OCEAN)","📊 Thomas PPA","🔬 Hogan HPI","💡 MBTI","💎 DISC","📈 تقارير الشخصية","📥 تصدير الاختبارات"], label_visibility="collapsed", key="_nav_p_tests")
         elif section == "📤 التقارير والتصدير":
-            page = st.radio("📌", ["📊 تقرير Dashboard","📝 تقرير Word","📊 تقرير شامل"], label_visibility="collapsed")
+            page = st.radio("📌", ["📊 تقرير Dashboard","📝 تقرير Word","📊 تقرير شامل"], label_visibility="collapsed", key="_nav_p_reports")
         elif section == "👥 إدارة المستخدمين":
             page = "👥 إدارة المستخدمين"
         else:
-            page = st.radio("📌", ["📚 ميزانية التدريب","💹 ROI التدريب","📋 خطة ADDIE","🏫 جهات التدريب","📥 تصدير التدريب"], label_visibility="collapsed")
+            page = st.radio("📌", ["📚 ميزانية التدريب","💹 ROI التدريب","📋 خطة ADDIE","🏫 جهات التدريب","📥 تصدير التدريب"], label_visibility="collapsed", key="_nav_p_training")
 
         # Logout button
         st.markdown("---")
