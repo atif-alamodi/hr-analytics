@@ -6384,51 +6384,118 @@ def main():
 
             # === CV Upload ===
             st.markdown("### 📄 السيرة الذاتية")
-            cv_input_method = st.radio("طريقة الإدخال:", ["📁 رفع ملف","✍️ لصق النص"], horizontal=True, key="cv_input")
+            cv_input_method = st.radio("طريقة الإدخال:", ["📁 رفع ملف","✍️ لصق النص"], horizontal=True, key="cv_inp_m")
             cv_text = ""
-            cv_file = None
+            cv_file_name = ""
 
             if cv_input_method == "📁 رفع ملف":
-                cv_file = st.file_uploader("ارفع السيرة الذاتية:", type=["pdf","docx","txt","doc","rtf"], key="cv_file")
-                if cv_file:
-                    file_bytes = cv_file.getvalue()
-                    fname = cv_file.name.lower()
+                uploaded_cv = st.file_uploader("ارفع السيرة الذاتية (PDF, Word, نص):", type=["pdf","docx","txt","doc","rtf","odt"], key="cv_upload_file")
+                if uploaded_cv:
+                    cv_file_name = uploaded_cv.name
+                    file_bytes = uploaded_cv.getvalue()
+                    fname = uploaded_cv.name.lower()
+                    st.caption(f"📎 **{uploaded_cv.name}** ({len(file_bytes):,} bytes)")
+
+                    # Determine file type
+                    is_pdf = fname.endswith('.pdf')
+                    is_docx = fname.endswith('.docx') or fname.endswith('.doc') or fname.endswith('.odt')
+                    is_text = fname.endswith('.txt') or fname.endswith('.rtf')
+
                     try:
-                        if fname.endswith('.txt') or fname.endswith('.rtf'):
-                            cv_text = file_bytes.decode('utf-8', errors='ignore')
-                        elif fname.endswith('.docx') or fname.endswith('.doc'):
+                        if is_text:
+                            for enc in ['utf-8', 'utf-8-sig', 'cp1256', 'iso-8859-6', 'latin-1']:
+                                try:
+                                    cv_text = file_bytes.decode(enc)
+                                    if len(cv_text.strip()) > 10: break
+                                except: continue
+
+                        elif is_docx:
                             try:
-                                from docx import Document
-                                doc = Document(io.BytesIO(file_bytes))
-                                cv_text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
-                            except:
-                                cv_text = file_bytes.decode('utf-8', errors='ignore')
-                                cv_text = ''.join(c for c in cv_text if c.isprintable() or c in '\n\r\t')
-                        elif fname.endswith('.pdf'):
+                                from docx import Document as DocxDoc
+                                ddoc = DocxDoc(io.BytesIO(file_bytes))
+                                paragraphs = [p.text for p in ddoc.paragraphs if p.text.strip()]
+                                # Also extract from tables
+                                for table in ddoc.tables:
+                                    for row in table.rows:
+                                        for cell in row.cells:
+                                            if cell.text.strip(): paragraphs.append(cell.text.strip())
+                                cv_text = "\n".join(paragraphs)
+                            except Exception as e:
+                                st.warning(f"محاولة بديلة لقراءة Word... ({e})")
+                                for enc in ['utf-8', 'latin-1']:
+                                    try:
+                                        raw = file_bytes.decode(enc, errors='ignore')
+                                        cv_text = ''.join(c for c in raw if c.isprintable() or c in '\n\r\t')
+                                        if len(cv_text.strip()) > 30: break
+                                    except: continue
+
+                        elif is_pdf:
+                            # Method 1: pdfplumber
                             try:
                                 import pdfplumber
-                                with pdfplumber.open(io.BytesIO(file_bytes)) as pdf_doc:
-                                    pages = [pg.extract_text() or '' for pg in pdf_doc.pages]
-                                    cv_text = "\n".join([p for p in pages if len(p.strip()) > 10])
-                            except:
-                                try:
-                                    raw = file_bytes.decode('utf-8', errors='ignore')
-                                    import re as _re
-                                    cv_text = ' '.join(_re.findall(r'\(([^\)]{2,})\)', raw))
-                                except: pass
+                                with pdfplumber.open(io.BytesIO(file_bytes)) as pdoc:
+                                    all_pages = []
+                                    for pg in pdoc.pages:
+                                        txt = pg.extract_text()
+                                        if txt and len(txt.strip()) > 5:
+                                            all_pages.append(txt)
+                                        # Also try tables
+                                        for tbl in (pg.extract_tables() or []):
+                                            for row in tbl:
+                                                cells = [str(c) for c in row if c]
+                                                if cells: all_pages.append(" | ".join(cells))
+                                    cv_text = "\n".join(all_pages)
+                            except Exception as e:
+                                st.warning(f"pdfplumber: {e}")
+
+                            # Method 2: PyPDF2 fallback
                             if not cv_text or len(cv_text.strip()) < 30:
-                                st.error("❌ PDF مبني على صور. استخدم 'لصق النص' بدلاً من ذلك.")
-                                st.info("💡 افتح PDF > Ctrl+A > Ctrl+C > الصقه هنا")
+                                try:
+                                    try:
+                                        from PyPDF2 import PdfReader
+                                        reader = PdfReader(io.BytesIO(file_bytes))
+                                        pages = [page.extract_text() or '' for page in reader.pages]
+                                        cv_text = "\n".join([p for p in pages if p.strip()])
+                                    except ImportError: pass
+                                except: pass
+
+                            # Method 3: raw text extraction
+                            if not cv_text or len(cv_text.strip()) < 30:
+                                try:
+                                    import re as _re2
+                                    raw = file_bytes.decode('utf-8', errors='ignore')
+                                    parts = _re2.findall(r'\(([^\)]{2,})\)', raw)
+                                    if parts: cv_text = ' '.join(parts)
+                                except: pass
+
+                        else:
+                            # Unknown format - try as text
+                            for enc in ['utf-8', 'latin-1', 'cp1256']:
+                                try:
+                                    cv_text = file_bytes.decode(enc, errors='ignore')
+                                    cv_text = ''.join(c for c in cv_text if c.isprintable() or c in '\n\r\t')
+                                    if len(cv_text.strip()) > 20: break
+                                except: continue
+
                     except Exception as e:
-                        st.error(f"❌ {e}")
+                        st.error(f"❌ خطأ: {e}")
+
+                    # Result feedback
                     if cv_text and len(cv_text.strip()) > 20:
-                        st.success(f"✅ تم قراءة {len(cv_text):,} حرف")
+                        st.success(f"✅ تم قراءة السيرة الذاتية بنجاح ({len(cv_text):,} حرف)")
+                        with st.expander("👁️ معاينة النص المستخرج (أول 500 حرف)"):
+                            st.text(cv_text[:500])
+                    elif uploaded_cv:
+                        st.error("❌ تعذر استخراج النص. جرب أحد الحلول:")
+                        st.info("1. استخدم صيغة **.docx** بدل PDF\n2. اختر **'لصق النص'** وانسخ المحتوى يدوياً\n3. افتح الملف > Ctrl+A > Ctrl+C > الصقه هنا")
+
             else:
-                cv_text = st.text_area("الصق نص السيرة الذاتية:", height=250, key="cv_manual",
-                    placeholder="الاسم: أحمد محمد\nالمسمى: مدير موارد بشرية\nالخبرة: 8 سنوات\n...")
+                cv_text = st.text_area("الصق نص السيرة الذاتية:", height=250, key="cv_manual_txt",
+                    placeholder="الاسم: أحمد محمد\nالمسمى: مدير موارد بشرية\nالخبرة: 8 سنوات في إدارة شؤون الموظفين\nالتعليم: بكالوريوس إدارة أعمال\nالمهارات: Excel, SAP, نظام العمل السعودي...")
                 if cv_text: st.success(f"✅ {len(cv_text):,} حرف")
 
             # === JD (Optional) ===
+            jd_text = ""
             with st.expander("📋 الوصف الوظيفي (اختياري - يزيد دقة الموائمة)", expanded=False):
                 jd_text = st.text_area("الوصف الوظيفي:", height=120, key="jd_txt",
                     placeholder="المسمى: ...\nالمتطلبات: ...")
@@ -6459,7 +6526,7 @@ def main():
 
                         # --- Name extraction ---
                         name_match = re.search(r'^([^\n]{3,40})', cv_text.strip())
-                        candidate_name = name_match.group(1).strip() if name_match else (cv_file.name.rsplit('.',1)[0] if cv_file else "مرشح")
+                        candidate_name = name_match.group(1).strip() if name_match else (cv_file_name.rsplit('.',1)[0] if cv_file_name else "مرشح")
 
                         # --- Years of experience ---
                         exp_nums = []
@@ -6832,13 +6899,16 @@ def main():
 ## 10. توصيات ذهبية (5 نصائح عملية لتعزيز القيمة السوقية)"""
 
                         if prompt:
-                            response, error = call_ai_api(prompt, prompt, model_type="hr")
+                            try:
+                                response, error = call_ai_api(prompt, prompt, model_type="hr")
+                            except Exception as api_e:
+                                response, error = None, f"خطأ في استدعاء AI: {api_e}"
                         else:
-                            response, error = None, "خطأ في بناء التحليل"
+                            response, error = None, "تعذر بناء طلب التحليل"
 
                         if response:
                             st.session_state['_cv_result'] = response
-                            st.session_state['_cv_name'] = cv_file.name if cv_file else candidate_name
+                            st.session_state['_cv_name'] = cv_file_name if cv_file_name else candidate_name
                             st.session_state['_cv_has_jd'] = has_jd
                             st.session_state['_cv_scores'] = {'tech':s_tech,'prof':s_prof,'lead':s_lead,'soft':s_soft,
                                 'cert':s_cert,'exp':s_exp,'edu':s_edu,'lang':s_lang,'overall':s_overall}
@@ -6967,7 +7037,10 @@ def main():
 7. **التوصية النهائية** (قبول / قبول مشروط / رفض)
 أعط كل درجة كرقم."""
 
-                    response, error = call_ai_api(prompt, prompt, model_type="hr")
+                    try:
+                        response, error = call_ai_api(prompt, prompt, model_type="hr")
+                    except Exception as api_e:
+                        response, error = None, f"خطأ: {api_e}"
                     if response:
                         st.session_state['_intv_result'] = response
 
@@ -8544,7 +8617,10 @@ function stopSpeak(){{speechSynthesis.cancel()}}
 
 أجب بالعربية."""
 
-                        response, error = call_ai_api(ct_ai_prompt, ct_ai_prompt, model_type="labor_law")
+                        try:
+                            response, error = call_ai_api(ct_ai_prompt, ct_ai_prompt, model_type="labor_law")
+                        except Exception as api_e:
+                            response, error = None, f"خطأ: {api_e}"
                         if response:
                             st.markdown("### 🤖 التحليل القانوني بالذكاء الاصطناعي")
                             st.markdown(response)
@@ -11831,7 +11907,10 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
 
 أجب بالعربية بأسلوب مهني."""
 
-                        response, error = call_ai_api(ai_prompt, ai_prompt, model_type="hr")
+                        try:
+                            response, error = call_ai_api(ai_prompt, ai_prompt, model_type="hr")
+                        except Exception as api_e:
+                            response, error = None, f"خطأ: {api_e}"
                         if response:
                             st.markdown("### 🤖 التحليل المعمّق بالذكاء الاصطناعي")
                             st.markdown(response)
