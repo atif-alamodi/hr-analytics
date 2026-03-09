@@ -6184,135 +6184,186 @@ def main():
 
 
             export_widget(None, "Benchmark", "rec2")
-        # ===== Market Comparison =====
+        # ===== Global Salary Intelligence =====
         elif page == "🌍 مقارنة الأسواق":
-            hdr("🌍 مقارنة تكاليف التوظيف: السعودية مقابل مصر","تحليل مقارن شامل للتكاليف والمزايا")
+            hdr("🌍 كاشف الأجور العالمي","أداة ذكية لاستكشاف الرواتب في أي دولة بالعالم مدعومة بالذكاء الاصطناعي")
 
-            st.markdown("### 📊 اختر الوظائف للمقارنة")
-            # Find common positions between markets
-            ksa_positions = MARKET_BENCHMARKS["السعودية"]["positions"]
-            egy_positions = MARKET_BENCHMARKS["مصر"]["positions"]
-            common_depts = set(ksa_positions.keys()) & set(egy_positions.keys())
+            # === Country Database ===
+            COUNTRIES = {
+                "🇸🇦 السعودية": {"code":"SA","currency":"SAR","to_sar":1.0,"region":"الخليج","min_wage":"4,000 SAR (سعوديين)"},
+                "🇦🇪 الإمارات": {"code":"AE","currency":"AED","to_sar":1.02,"region":"الخليج","min_wage":"لا يوجد حد أدنى عام"},
+                "🇶🇦 قطر": {"code":"QA","currency":"QAR","to_sar":1.03,"region":"الخليج","min_wage":"1,000 QAR"},
+                "🇰🇼 الكويت": {"code":"KW","currency":"KWD","to_sar":12.2,"region":"الخليج","min_wage":"75 KWD"},
+                "🇧🇭 البحرين": {"code":"BH","currency":"BHD","to_sar":9.95,"region":"الخليج","min_wage":"300 BHD (بحرينيين)"},
+                "🇴🇲 عُمان": {"code":"OM","currency":"OMR","to_sar":9.74,"region":"الخليج","min_wage":"325 OMR (عمانيين)"},
+                "🇪🇬 مصر": {"code":"EG","currency":"EGP","to_sar":0.077,"region":"شمال أفريقيا","min_wage":"6,000 EGP"},
+                "🇯🇴 الأردن": {"code":"JO","currency":"JOD","to_sar":5.29,"region":"بلاد الشام","min_wage":"260 JOD"},
+                "🇱🇧 لبنان": {"code":"LB","currency":"USD","to_sar":3.75,"region":"بلاد الشام","min_wage":"9M LBP"},
+                "🇮🇶 العراق": {"code":"IQ","currency":"IQD","to_sar":0.0029,"region":"بلاد الشام","min_wage":"350,000 IQD"},
+                "🇲🇦 المغرب": {"code":"MA","currency":"MAD","to_sar":0.38,"region":"شمال أفريقيا","min_wage":"3,111 MAD"},
+                "🇹🇳 تونس": {"code":"TN","currency":"TND","to_sar":1.22,"region":"شمال أفريقيا","min_wage":"480 TND"},
+                "🇵🇰 باكستان": {"code":"PK","currency":"PKR","to_sar":0.013,"region":"جنوب آسيا","min_wage":"32,000 PKR"},
+                "🇮🇳 الهند": {"code":"IN","currency":"INR","to_sar":0.045,"region":"جنوب آسيا","min_wage":"يختلف بالولاية"},
+                "🇧🇩 بنغلاديش": {"code":"BD","currency":"BDT","to_sar":0.031,"region":"جنوب آسيا","min_wage":"12,500 BDT"},
+                "🇵🇭 الفلبين": {"code":"PH","currency":"PHP","to_sar":0.067,"region":"جنوب شرق آسيا","min_wage":"610 PHP/يوم"},
+                "🇮🇩 إندونيسيا": {"code":"ID","currency":"IDR","to_sar":0.00024,"region":"جنوب شرق آسيا","min_wage":"يختلف بالمنطقة"},
+                "🇹🇷 تركيا": {"code":"TR","currency":"TRY","to_sar":0.11,"region":"أوروبا/آسيا","min_wage":"20,002 TRY"},
+                "🇬🇧 بريطانيا": {"code":"GB","currency":"GBP","to_sar":4.75,"region":"أوروبا","min_wage":"£11.44/ساعة"},
+                "🇺🇸 أمريكا": {"code":"US","currency":"USD","to_sar":3.75,"region":"أمريكا الشمالية","min_wage":"$7.25/ساعة (فيدرالي)"},
+                "🇩🇪 ألمانيا": {"code":"DE","currency":"EUR","to_sar":4.05,"region":"أوروبا","min_wage":"€12.41/ساعة"},
+                "🇫🇷 فرنسا": {"code":"FR","currency":"EUR","to_sar":4.05,"region":"أوروبا","min_wage":"€11.65/ساعة"},
+                "🇨🇦 كندا": {"code":"CA","currency":"CAD","to_sar":2.75,"region":"أمريكا الشمالية","min_wage":"C$17.30/ساعة"},
+                "🇦🇺 أستراليا": {"code":"AU","currency":"AUD","to_sar":2.45,"region":"أوقيانوسيا","min_wage":"A$23.23/ساعة"},
+                "🇸🇬 سنغافورة": {"code":"SG","currency":"SGD","to_sar":2.80,"region":"جنوب شرق آسيا","min_wage":"لا يوجد (عدا قطاعات محددة)"},
+                "🇲🇾 ماليزيا": {"code":"MY","currency":"MYR","to_sar":0.85,"region":"جنوب شرق آسيا","min_wage":"1,500 MYR"},
+                "🇰🇷 كوريا الجنوبية": {"code":"KR","currency":"KRW","to_sar":0.0027,"region":"شرق آسيا","min_wage":"9,860 KRW/ساعة"},
+                "🇯🇵 اليابان": {"code":"JP","currency":"JPY","to_sar":0.025,"region":"شرق آسيا","min_wage":"¥1,004/ساعة"},
+                "🇿🇦 جنوب أفريقيا": {"code":"ZA","currency":"ZAR","to_sar":0.21,"region":"أفريقيا","min_wage":"27.58 ZAR/ساعة"},
+                "🇳🇬 نيجيريا": {"code":"NG","currency":"NGN","to_sar":0.0024,"region":"أفريقيا","min_wage":"70,000 NGN"},
+                "🇧🇷 البرازيل": {"code":"BR","currency":"BRL","to_sar":0.66,"region":"أمريكا الجنوبية","min_wage":"1,412 BRL"},
+                "🇨🇳 الصين": {"code":"CN","currency":"CNY","to_sar":0.52,"region":"شرق آسيا","min_wage":"يختلف بالمنطقة"},
+            }
 
-            comp_dept = st.selectbox("القسم:", sorted(common_depts), key="comp_dept")
-            ksa_pos = {p['title_ar']: p for p in ksa_positions[comp_dept]}
-            egy_pos = {p['title_ar']: p for p in egy_positions[comp_dept]}
-            common_titles = sorted(set(ksa_pos.keys()) & set(egy_pos.keys()))
+            # Job Categories
+            JOB_CATEGORIES = {
+                "الموارد البشرية": ["مدير موارد بشرية","أخصائي موارد بشرية","أخصائي توظيف","أخصائي رواتب","مدير التدريب","أخصائي شؤون موظفين","محلل بيانات HR"],
+                "تقنية المعلومات": ["مدير تقنية المعلومات","مطور برمجيات","مطور واجهات أمامية","مطور خلفية","محلل بيانات","مهندس DevOps","أخصائي أمن سيبراني","مدير مشاريع تقنية"],
+                "المالية والمحاسبة": ["مدير مالي","محاسب عام","محاسب تكاليف","مدقق داخلي","محلل مالي","أخصائي ضريبة"],
+                "التسويق والمبيعات": ["مدير تسويق","أخصائي تسويق رقمي","مدير مبيعات","مندوب مبيعات","أخصائي محتوى","مدير علاقات عملاء"],
+                "العمليات والإدارة": ["مدير عمليات","مدير إداري","سكرتير تنفيذي","أخصائي مشتريات","مدير سلسلة إمداد","مدير جودة"],
+                "القانون والامتثال": ["مستشار قانوني","أخصائي امتثال","مدير حوكمة"],
+                "التصميم والإبداع": ["مصمم جرافيك","مصمم UX/UI","مدير إبداعي"],
+            }
 
-            if not common_titles:
-                st.warning("لا توجد وظائف مشتركة للمقارنة في هذا القسم")
-            else:
-                comp_titles = st.multiselect("الوظائف:", common_titles, default=common_titles[:3], key="comp_titles")
+            # === Interface ===
+            st.markdown("### 🔍 اختر الدولة والوظيفة")
+            sc1, sc2, sc3 = st.columns(3)
+            with sc1:
+                country1 = st.selectbox("الدولة الأولى:", list(COUNTRIES.keys()), index=0, key="gc1")
+            with sc2:
+                country2 = st.selectbox("الدولة الثانية (للمقارنة):", list(COUNTRIES.keys()), index=6, key="gc2")
+            with sc3:
+                job_cat = st.selectbox("التخصص:", list(JOB_CATEGORIES.keys()), key="gjc")
 
-                if comp_titles:
-                    sar_to_egp = MARKET_BENCHMARKS["مصر"].get("sar_to_egp", 13.2)
+            job_title = st.selectbox("المسمى الوظيفي:", JOB_CATEGORIES[job_cat], key="gjt")
+            exp_years = st.slider("سنوات الخبرة:", 0, 25, 5, key="gexp")
 
-                    # Build comparison table
-                    comp_rows = []
-                    for title in comp_titles:
-                        kp = ksa_pos[title]
-                        ep = egy_pos[title]
+            c1_info = COUNTRIES[country1]
+            c2_info = COUNTRIES[country2]
 
-                        # KSA costs
-                        ksa_housing = kp['mid'] * 0.25
-                        ksa_gosi = (kp['mid'] + ksa_housing) * 0.1175
-                        ksa_monthly = kp['mid'] + ksa_housing + 500 + ksa_gosi + 500
-                        ksa_annual = ksa_monthly * 12
+            # Country info cards
+            ci1, ci2 = st.columns(2)
+            with ci1:
+                st.markdown(f"**{country1}**")
+                st.caption(f"العملة: {c1_info['currency']} | المنطقة: {c1_info['region']} | الحد الأدنى: {c1_info['min_wage']}")
+            with ci2:
+                st.markdown(f"**{country2}**")
+                st.caption(f"العملة: {c2_info['currency']} | المنطقة: {c2_info['region']} | الحد الأدنى: {c2_info['min_wage']}")
 
-                        # Egypt costs (converted to SAR)
-                        egy_monthly_egp = ep['mid'] + ep['mid'] * 0.184 + 800
-                        egy_monthly_sar = egy_monthly_egp / sar_to_egp
-                        egy_annual_sar = egy_monthly_sar * 12
+            if st.button("🔍 كشف الأجور والمقارنة", type="primary", use_container_width=True, key="gsb"):
+                with st.spinner("جاري البحث عن بيانات الأجور بالذكاء الاصطناعي..."):
 
-                        saving = ksa_annual - egy_annual_sar
-                        saving_pct = saving / max(ksa_annual, 1) * 100
+                    salary_prompt = f"""أنت خبير تعويضات ومزايا (Compensation & Benefits Expert) بخبرة 20 سنة مع Mercer وRadford وPayScale.
 
-                        comp_rows.append({
-                            "الوظيفة": title,
-                            "🇸🇦 الراتب (SAR)": f"{kp['mid']:,}",
-                            "🇸🇦 التكلفة الشهرية (SAR)": f"{ksa_monthly:,.0f}",
-                            "🇸🇦 السنوية (SAR)": f"{ksa_annual:,.0f}",
-                            "🇪🇬 الراتب (EGP)": f"{ep['mid']:,}",
-                            "🇪🇬 التكلفة الشهرية (SAR≈)": f"{egy_monthly_sar:,.0f}",
-                            "🇪🇬 السنوية (SAR≈)": f"{egy_annual_sar:,.0f}",
-                            "💰 الوفر السنوي (SAR)": f"{saving:,.0f}",
-                            "📊 نسبة الوفر": f"{saving_pct:.0f}%"
-                        })
+**المطلوب:** أعط بيانات رواتب دقيقة وواقعية لعام 2025 للوظيفة التالية في الدولتين:
 
-                    st.dataframe(pd.DataFrame(comp_rows), use_container_width=True, hide_index=True)
+**الوظيفة:** {job_title}
+**التخصص:** {job_cat}
+**سنوات الخبرة:** {exp_years}
+**الدولة 1:** {country1.split(' ',1)[1]} (العملة: {c1_info['currency']})
+**الدولة 2:** {country2.split(' ',1)[1]} (العملة: {c2_info['currency']})
 
-                    # Visual comparison
-                    ksa_costs = []
-                    egy_costs = []
-                    for title in comp_titles:
-                        kp = ksa_pos[title]
-                        ep = egy_pos[title]
-                        ksa_housing = kp['mid'] * 0.25
-                        ksa_costs.append(kp['mid'] + ksa_housing + 500 + (kp['mid']+ksa_housing)*0.1175 + 500)
-                        egy_costs.append((ep['mid'] + ep['mid']*0.184 + 800) / sar_to_egp)
+أعط الأرقام بالعملة المحلية لكل دولة. كن دقيقاً ومبنياً على بيانات السوق الفعلية.
 
-                    fig = go.Figure()
-                    fig.add_trace(go.Bar(name='🇸🇦 السعودية (SAR)', x=comp_titles, y=ksa_costs, marker_color='#27AE60'))
-                    fig.add_trace(go.Bar(name='🇪🇬 مصر (SAR معادل)', x=comp_titles, y=egy_costs, marker_color='#3498DB'))
-                    fig.update_layout(barmode='group', title='مقارنة التكلفة الشهرية الإجمالية (SAR)',
-                        font=dict(family="Noto Sans Arabic"), height=450, yaxis_tickformat=',')
-                    st.plotly_chart(fig, use_container_width=True)
+أجب بالعربية بالتنسيق التالي بالضبط:
 
-                    # Summary analysis
-                    st.markdown("---")
-                    st.markdown("### 📈 ملخص التحليل")
-                    total_ksa = sum(c * 12 for c in ksa_costs)
-                    total_egy = sum(c * 12 for c in egy_costs)
-                    total_saving = total_ksa - total_egy
+## الراتب في {country1.split(' ',1)[1]}
+- الحد الأدنى: [رقم] {c1_info['currency']}
+- المتوسط: [رقم] {c1_info['currency']}
+- الحد الأعلى: [رقم] {c1_info['currency']}
+- البدلات الشائعة: (سكن، مواصلات، تأمين...)
+- التكلفة الإجمالية على الشركة: [رقم] {c1_info['currency']} شهرياً
+- ملاحظات السوق: (العرض والطلب، اتجاه الرواتب)
 
-                    k1,k2,k3,k4 = st.columns(4)
-                    with k1: kpi("🇸🇦 إجمالي سنوي (KSA)", f"{total_ksa:,.0f} SAR")
-                    with k2: kpi("🇪🇬 إجمالي سنوي (EGY≈)", f"{total_egy:,.0f} SAR")
-                    with k3: kpi("💰 الوفر السنوي", f"{total_saving:,.0f} SAR")
-                    with k4: kpi("📊 نسبة الوفر", f"{total_saving/max(total_ksa,1)*100:.0f}%")
+## الراتب في {country2.split(' ',1)[1]}
+- الحد الأدنى: [رقم] {c2_info['currency']}
+- المتوسط: [رقم] {c2_info['currency']}
+- الحد الأعلى: [رقم] {c2_info['currency']}
+- البدلات الشائعة: (سكن، مواصلات، تأمين...)
+- التكلفة الإجمالية على الشركة: [رقم] {c2_info['currency']} شهرياً
+- ملاحظات السوق: (العرض والطلب، اتجاه الرواتب)
 
-                    # Pros and cons
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        st.markdown("#### 🇸🇦 مزايا التوظيف في السعودية")
-                        ibox("نسبة السعودة وبرنامج نطاقات\nقرب من العمليات الأساسية\nلا حاجة لتأشيرات عمل للسعوديين\nدعم صندوق الموارد البشرية (هدف)", "success")
-                    with c2:
-                        st.markdown("#### 🇪🇬 مزايا التوظيف في مصر")
-                        ibox("تكلفة أقل بنسبة 50-70%\nتوفر الكفاءات التقنية\nتوقيت عمل متقارب\nسهولة التواصل (نفس اللغة)", "success")
+## المقارنة
+- الفرق بالنسبة المئوية: X%
+- أيهما أوفر للشركة ولماذا
+- جودة الكفاءات المتاحة في كل سوق
 
-                    # Recommendation
-                    st.markdown("---")
-                    st.markdown("### 💡 التوصية الذكية")
-                    if total_saving > 0:
-                        ibox(f"""بناءً على التحليل، يمكن تحقيق وفر سنوي يقدر بـ **{total_saving:,.0f} SAR** ({total_saving/max(total_ksa,1)*100:.0f}%) عند توظيف الوظائف المختارة من السوق المصري.
+## التوصية
+- أين يُفضل التوظيف ولماذا (3 أسباب)
+- متى يكون التوظيف من {country1.split(' ',1)[1]} أفضل؟
+- متى يكون التوظيف من {country2.split(' ',1)[1]} أفضل؟
 
-**التوصية:** النموذج المختلط (Hybrid Model)
-- الوظائف القيادية والمبيعات المحلية: **السعودية** (قرب من السوق + السعودة)
-- الوظائف التقنية والداعمة: **مصر** (تكلفة أقل + كفاءات متوفرة)
-- يُنصح بتخصيص 60% من الميزانية للسعودية و40% لمصر""")
+## مصادر البيانات
+اذكر 3-5 مصادر يمكن التحقق منها (مثل: Glassdoor, LinkedIn Salary, PayScale, GulfTalent, Bayt, Robert Half)"""
 
-                    # Export comparison
-                    if st.button("📥 تصدير المقارنة Excel", key="comp_exp"):
-                        ox = io.BytesIO()
-                        with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
-                            pd.DataFrame(comp_rows).to_excel(w, sheet_name='Market Comparison', index=False)
-                            # KSA benchmarks
-                            ksa_all = []
-                            for dept, poss in ksa_positions.items():
-                                for p in poss:
-                                    ksa_all.append({"Dept":dept, "Title":p['title'], "Title_AR":p['title_ar'],
-                                        "Min":p['min'], "Mid":p['mid'], "Max":p['max'], "Level":p['level'], "Demand":p['demand']})
-                            pd.DataFrame(ksa_all).to_excel(w, sheet_name='KSA Benchmarks', index=False)
-                            # Egypt benchmarks
-                            egy_all = []
-                            for dept, poss in egy_positions.items():
-                                for p in poss:
-                                    egy_all.append({"Dept":dept, "Title":p['title'], "Title_AR":p['title_ar'],
-                                        "Min":p['min'], "Mid":p['mid'], "Max":p['max'], "Level":p['level'], "Demand":p['demand']})
-                            pd.DataFrame(egy_all).to_excel(w, sheet_name='Egypt Benchmarks', index=False)
-                        st.download_button("📥 تحميل", data=ox.getvalue(),
-                            file_name=f"Market_Comparison_{datetime.now().strftime('%Y%m%d')}.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                    try:
+                        response, error = call_ai_api(salary_prompt, salary_prompt, model_type="hr")
+                    except Exception as e:
+                        response, error = None, str(e)
+
+                    if response:
+                        st.session_state['_salary_result'] = response
+                        st.session_state['_salary_c1'] = country1
+                        st.session_state['_salary_c2'] = country2
+                        st.session_state['_salary_job'] = job_title
+                    elif error:
+                        st.error(f"❌ {error}")
+                        st.info("💡 أعد مفتاح API في الإعدادات.")
+
+            # Display results
+            if '_salary_result' in st.session_state:
+                result = st.session_state['_salary_result']
+                st.markdown("---")
+                st.markdown(f"### 💰 نتائج كشف الأجور: {st.session_state.get('_salary_job','')}")
+                st.markdown(result)
+
+                # Extract numbers for charts
+                import re
+                numbers = re.findall(r'([\d,]+)\s*(?:SAR|AED|QAR|EGP|USD|GBP|EUR|INR|PKR|' + c1_info['currency'] + '|' + c2_info['currency'] + ')', result)
+                numbers = [int(n.replace(',','')) for n in numbers if n.replace(',','').isdigit()]
+
+                if len(numbers) >= 6:
+                    st.markdown("### 📊 الرسوم البيانية")
+                    gc1, gc2 = st.columns(2)
+                    with gc1:
+                        fig = go.Figure()
+                        fig.add_trace(go.Bar(name=st.session_state.get('_salary_c1',''), x=['الأدنى','المتوسط','الأعلى'],
+                            y=numbers[:3], marker_color='#27AE60', text=numbers[:3], textposition='outside'))
+                        fig.add_trace(go.Bar(name=st.session_state.get('_salary_c2',''), x=['الأدنى','المتوسط','الأعلى'],
+                            y=numbers[3:6], marker_color='#3498DB', text=numbers[3:6], textposition='outside'))
+                        fig.update_layout(barmode='group', title='مقارنة نطاقات الرواتب', height=400,
+                            font=dict(family="Noto Sans Arabic"), yaxis_tickformat=',')
+                        st.plotly_chart(fig, use_container_width=True)
+
+                    with gc2:
+                        if len(numbers) >= 2:
+                            fig = go.Figure(data=[go.Pie(
+                                labels=[st.session_state.get('_salary_c1',''), st.session_state.get('_salary_c2','')],
+                                values=[numbers[1], numbers[4] if len(numbers)>4 else numbers[1]],
+                                hole=0.4, marker_colors=['#27AE60','#3498DB'])])
+                            fig.update_layout(title='مقارنة المتوسطات', height=400, font=dict(family="Noto Sans Arabic"))
+                            st.plotly_chart(fig, use_container_width=True)
+
+                # Export
+                if st.button("📥 تصدير التقرير Excel", key="gs_exp"):
+                    ox = io.BytesIO()
+                    with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
+                        pd.DataFrame([{"التحليل": result}]).to_excel(w, sheet_name='Salary Intelligence', index=False)
+                        pd.DataFrame([{"الدولة":k,"العملة":v['currency'],"المنطقة":v['region'],"الحد الأدنى":v['min_wage']}
+                            for k,v in COUNTRIES.items()]).to_excel(w, sheet_name='Countries Database', index=False)
+                    st.download_button("📥 تحميل", data=ox.getvalue(),
+                        file_name=f"Salary_Intelligence_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
         elif page == "📊 متابعة التوظيف":
             hdr("📊 متابعة عمليات التوظيف", "تتبع مراحل التوظيف والتكاليف والوقت المستغرق")
