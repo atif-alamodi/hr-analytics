@@ -6389,105 +6389,160 @@ def main():
             cv_file_name = ""
 
             if cv_input_method == "📁 رفع ملف":
-                uploaded_cv = st.file_uploader("ارفع السيرة الذاتية (PDF, Word, نص):", type=["pdf","docx","txt","doc","rtf","odt"], key="cv_upload_file")
+                uploaded_cv = st.file_uploader("ارفع السيرة الذاتية (أي صيغة):", key="cv_upload_file",
+                    help="يقبل: PDF, DOCX, DOC, TXT, RTF, ODT, HTML, CSV, XML, JSON, MD, وأي ملف نصي آخر")
                 if uploaded_cv:
                     cv_file_name = uploaded_cv.name
                     file_bytes = uploaded_cv.getvalue()
                     fname = uploaded_cv.name.lower()
-                    st.caption(f"📎 **{uploaded_cv.name}** ({len(file_bytes):,} bytes)")
+                    fsize = len(file_bytes)
+                    st.caption(f"📎 **{uploaded_cv.name}** ({fsize:,} bytes)")
 
-                    # Determine file type
-                    is_pdf = fname.endswith('.pdf')
-                    is_docx = fname.endswith('.docx') or fname.endswith('.doc') or fname.endswith('.odt')
-                    is_text = fname.endswith('.txt') or fname.endswith('.rtf')
+                    # === UNIVERSAL FILE READER ===
+                    def read_any_file(fbytes, filename):
+                        """Universal file reader - reads ANY file format"""
+                        fn = filename.lower()
+                        text = ""
 
-                    try:
-                        if is_text:
-                            for enc in ['utf-8', 'utf-8-sig', 'cp1256', 'iso-8859-6', 'latin-1']:
-                                try:
-                                    cv_text = file_bytes.decode(enc)
-                                    if len(cv_text.strip()) > 10: break
-                                except: continue
-
-                        elif is_docx:
-                            try:
-                                from docx import Document as DocxDoc
-                                ddoc = DocxDoc(io.BytesIO(file_bytes))
-                                paragraphs = [p.text for p in ddoc.paragraphs if p.text.strip()]
-                                # Also extract from tables
-                                for table in ddoc.tables:
-                                    for row in table.rows:
-                                        for cell in row.cells:
-                                            if cell.text.strip(): paragraphs.append(cell.text.strip())
-                                cv_text = "\n".join(paragraphs)
-                            except Exception as e:
-                                st.warning(f"محاولة بديلة لقراءة Word... ({e})")
-                                for enc in ['utf-8', 'latin-1']:
-                                    try:
-                                        raw = file_bytes.decode(enc, errors='ignore')
-                                        cv_text = ''.join(c for c in raw if c.isprintable() or c in '\n\r\t')
-                                        if len(cv_text.strip()) > 30: break
-                                    except: continue
-
-                        elif is_pdf:
-                            # Method 1: pdfplumber
+                        # --- PDF ---
+                        if fn.endswith('.pdf') or fbytes[:5] == b'%PDF-':
+                            # Try pdfplumber
                             try:
                                 import pdfplumber
-                                with pdfplumber.open(io.BytesIO(file_bytes)) as pdoc:
-                                    all_pages = []
+                                with pdfplumber.open(io.BytesIO(fbytes)) as pdoc:
+                                    parts = []
                                     for pg in pdoc.pages:
-                                        txt = pg.extract_text()
-                                        if txt and len(txt.strip()) > 5:
-                                            all_pages.append(txt)
-                                        # Also try tables
+                                        t = pg.extract_text()
+                                        if t and len(t.strip()) > 3: parts.append(t)
                                         for tbl in (pg.extract_tables() or []):
                                             for row in tbl:
                                                 cells = [str(c) for c in row if c]
-                                                if cells: all_pages.append(" | ".join(cells))
-                                    cv_text = "\n".join(all_pages)
-                            except Exception as e:
-                                st.warning(f"pdfplumber: {e}")
-
-                            # Method 2: PyPDF2 fallback
-                            if not cv_text or len(cv_text.strip()) < 30:
+                                                if cells: parts.append(" | ".join(cells))
+                                    text = "\n".join(parts)
+                            except: pass
+                            # Try PyPDF2
+                            if not text or len(text.strip()) < 20:
                                 try:
-                                    try:
-                                        from PyPDF2 import PdfReader
-                                        reader = PdfReader(io.BytesIO(file_bytes))
-                                        pages = [page.extract_text() or '' for page in reader.pages]
-                                        cv_text = "\n".join([p for p in pages if p.strip()])
-                                    except ImportError: pass
+                                    from PyPDF2 import PdfReader
+                                    reader = PdfReader(io.BytesIO(fbytes))
+                                    text = "\n".join([p.extract_text() or '' for p in reader.pages])
                                 except: pass
-
-                            # Method 3: raw text extraction
-                            if not cv_text or len(cv_text.strip()) < 30:
+                            # Raw extraction
+                            if not text or len(text.strip()) < 20:
                                 try:
-                                    import re as _re2
-                                    raw = file_bytes.decode('utf-8', errors='ignore')
-                                    parts = _re2.findall(r'\(([^\)]{2,})\)', raw)
-                                    if parts: cv_text = ' '.join(parts)
+                                    import re
+                                    raw = fbytes.decode('latin-1', errors='ignore')
+                                    parts = re.findall(r'\(([^\)]{2,200})\)', raw)
+                                    if parts: text = ' '.join(parts)
                                 except: pass
+                            return text
 
-                        else:
-                            # Unknown format - try as text
-                            for enc in ['utf-8', 'latin-1', 'cp1256']:
-                                try:
-                                    cv_text = file_bytes.decode(enc, errors='ignore')
-                                    cv_text = ''.join(c for c in cv_text if c.isprintable() or c in '\n\r\t')
-                                    if len(cv_text.strip()) > 20: break
-                                except: continue
+                        # --- DOCX/DOC ---
+                        if fn.endswith('.docx') or fn.endswith('.doc') or fn.endswith('.odt'):
+                            try:
+                                from docx import Document as DDoc
+                                dd = DDoc(io.BytesIO(fbytes))
+                                parts = [p.text for p in dd.paragraphs if p.text.strip()]
+                                for tbl in dd.tables:
+                                    for row in tbl.rows:
+                                        for cell in row.cells:
+                                            if cell.text.strip() and cell.text.strip() not in parts:
+                                                parts.append(cell.text.strip())
+                                text = "\n".join(parts)
+                            except: pass
+                            if text and len(text.strip()) > 15: return text
 
+                        # --- HTML/HTM ---
+                        if fn.endswith('.html') or fn.endswith('.htm') or b'<html' in fbytes[:500].lower():
+                            try:
+                                import re
+                                html = fbytes.decode('utf-8', errors='ignore')
+                                html = re.sub(r'<style[^>]*>.*?</style>', '', html, flags=re.DOTALL)
+                                html = re.sub(r'<script[^>]*>.*?</script>', '', html, flags=re.DOTALL)
+                                text = re.sub(r'<[^>]+>', ' ', html)
+                                text = re.sub(r'\s+', ' ', text).strip()
+                            except: pass
+                            if text and len(text.strip()) > 15: return text
+
+                        # --- CSV/TSV ---
+                        if fn.endswith('.csv') or fn.endswith('.tsv'):
+                            try:
+                                raw = fbytes.decode('utf-8', errors='ignore')
+                                text = raw
+                            except: pass
+                            if text: return text
+
+                        # --- JSON ---
+                        if fn.endswith('.json'):
+                            try:
+                                import json as _json
+                                data = _json.loads(fbytes.decode('utf-8'))
+                                if isinstance(data, dict):
+                                    text = "\n".join([f"{k}: {v}" for k,v in data.items() if isinstance(v,(str,int,float))])
+                                elif isinstance(data, list):
+                                    for item in data[:50]:
+                                        if isinstance(item, dict):
+                                            text += "\n".join([f"{k}: {v}" for k,v in item.items()]) + "\n---\n"
+                                        else:
+                                            text += str(item) + "\n"
+                            except: pass
+                            if text: return text
+
+                        # --- XML ---
+                        if fn.endswith('.xml'):
+                            try:
+                                import re
+                                raw = fbytes.decode('utf-8', errors='ignore')
+                                text = re.sub(r'<[^>]+>', ' ', raw)
+                                text = re.sub(r'\s+', ' ', text).strip()
+                            except: pass
+                            if text: return text
+
+                        # --- XLSX/XLS ---
+                        if fn.endswith('.xlsx') or fn.endswith('.xls'):
+                            try:
+                                df = pd.read_excel(io.BytesIO(fbytes))
+                                text = df.to_string(index=False)
+                            except: pass
+                            if text: return text
+
+                        # --- Image files (inform user) ---
+                        img_exts = ['.jpg','.jpeg','.png','.gif','.bmp','.tiff','.webp']
+                        if any(fn.endswith(ext) for ext in img_exts):
+                            return "__IMAGE_FILE__"
+
+                        # --- UNIVERSAL TEXT FALLBACK ---
+                        # Try every encoding
+                        for enc in ['utf-8','utf-8-sig','cp1256','iso-8859-6','windows-1256','latin-1','cp1252','ascii','iso-8859-1']:
+                            try:
+                                decoded = fbytes.decode(enc)
+                                clean = ''.join(c for c in decoded if c.isprintable() or c in '\n\r\t')
+                                if len(clean.strip()) > 15:
+                                    text = clean
+                                    break
+                            except: continue
+
+                        return text
+                    # === END UNIVERSAL READER ===
+
+                    try:
+                        cv_text = read_any_file(file_bytes, fname)
                     except Exception as e:
-                        st.error(f"❌ خطأ: {e}")
+                        st.error(f"❌ خطأ غير متوقع: {e}")
+                        cv_text = ""
 
-                    # Result feedback
-                    if cv_text and len(cv_text.strip()) > 20:
-                        st.success(f"✅ تم قراءة السيرة الذاتية بنجاح ({len(cv_text):,} حرف)")
-                        with st.expander("👁️ معاينة النص المستخرج (أول 500 حرف)"):
-                            st.text(cv_text[:500])
+                    # Handle results
+                    if cv_text == "__IMAGE_FILE__":
+                        cv_text = ""
+                        st.error("❌ هذا ملف صورة. لا يمكن استخراج النص منه مباشرة.")
+                        st.info("💡 **الحل:** افتح الصورة واقرأ النص، ثم اختر 'لصق النص' والصقه يدوياً.")
+                    elif cv_text and len(cv_text.strip()) > 15:
+                        st.success(f"✅ تم قراءة السيرة الذاتية ({len(cv_text):,} حرف)")
+                        with st.expander("👁️ معاينة النص المستخرج"):
+                            st.text(cv_text[:800])
                     elif uploaded_cv:
-                        st.error("❌ تعذر استخراج النص. جرب أحد الحلول:")
-                        st.info("1. استخدم صيغة **.docx** بدل PDF\n2. اختر **'لصق النص'** وانسخ المحتوى يدوياً\n3. افتح الملف > Ctrl+A > Ctrl+C > الصقه هنا")
+                        st.error("❌ تعذر استخراج نص كافٍ من الملف.")
+                        st.info("💡 اختر **'لصق النص'** وانسخ محتوى الملف يدوياً (افتح الملف > Ctrl+A > Ctrl+C)")
 
             else:
                 cv_text = st.text_area("الصق نص السيرة الذاتية:", height=250, key="cv_manual_txt",
