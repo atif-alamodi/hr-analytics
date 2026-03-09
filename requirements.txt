@@ -11,4 +11,5 @@ arabic-reshaper
 python-bidi
 scikit-learn
 pdfplumber
+PyPDF2
 requests
