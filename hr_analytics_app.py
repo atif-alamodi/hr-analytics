@@ -6380,450 +6380,544 @@ def main():
 
         # ===== CV ANALYSIS =====
         elif page == "📄 تحليل السير الذاتية":
-            hdr("📄 تحليل السير الذاتية بالذكاء الاصطناعي","تحليل شامل للمرشح وفق أفضل الممارسات العالمية")
+            hdr("📄 تحليل السير الذاتية بالذكاء الاصطناعي","نظام تحليل ذكي متعدد الطبقات بمعايير SHRM وCIPD العالمية")
 
-            # === CV Upload (REQUIRED) ===
-            st.markdown("### 📄 السيرة الذاتية (مطلوب)")
+            # === CV Upload ===
+            st.markdown("### 📄 السيرة الذاتية")
             cv_input_method = st.radio("طريقة الإدخال:", ["📁 رفع ملف","✍️ لصق النص"], horizontal=True, key="cv_input")
-
             cv_text = ""
             cv_file = None
+
             if cv_input_method == "📁 رفع ملف":
                 cv_file = st.file_uploader("ارفع السيرة الذاتية:", type=["pdf","docx","txt","doc","rtf"], key="cv_file")
                 if cv_file:
                     file_bytes = cv_file.getvalue()
                     fname = cv_file.name.lower()
-                    file_size = len(file_bytes)
-                    st.caption(f"📎 {cv_file.name} ({file_size:,} bytes)")
-
                     try:
                         if fname.endswith('.txt') or fname.endswith('.rtf'):
                             cv_text = file_bytes.decode('utf-8', errors='ignore')
-
                         elif fname.endswith('.docx') or fname.endswith('.doc'):
                             try:
                                 from docx import Document
                                 doc = Document(io.BytesIO(file_bytes))
                                 cv_text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
-                            except Exception as e:
-                                st.warning(f"تعذر قراءة Word: {e}")
+                            except:
                                 cv_text = file_bytes.decode('utf-8', errors='ignore')
                                 cv_text = ''.join(c for c in cv_text if c.isprintable() or c in '\n\r\t')
-
                         elif fname.endswith('.pdf'):
-                            # Method 1: pdfplumber
                             try:
                                 import pdfplumber
                                 with pdfplumber.open(io.BytesIO(file_bytes)) as pdf_doc:
-                                    pages = []
-                                    for pg in pdf_doc.pages:
-                                        txt = pg.extract_text()
-                                        if txt and len(txt.strip()) > 10:
-                                            pages.append(txt)
-                                    cv_text = "\n".join(pages)
-                            except Exception as e1:
-                                st.warning(f"الطريقة 1 (pdfplumber): {e1}")
-
-                            # Method 2: raw decode if pdfplumber failed
-                            if not cv_text or len(cv_text.strip()) < 30:
+                                    pages = [pg.extract_text() or '' for pg in pdf_doc.pages]
+                                    cv_text = "\n".join([p for p in pages if len(p.strip()) > 10])
+                            except:
                                 try:
                                     raw = file_bytes.decode('utf-8', errors='ignore')
-                                    text_parts = re.findall(r'\(([^\)]{2,})\)', raw)
-                                    if text_parts:
-                                        cv_text = ' '.join(text_parts)
-                                except:
-                                    pass
-
-                            # If still empty, it's likely a scanned/image PDF
+                                    import re as _re
+                                    cv_text = ' '.join(_re.findall(r'\(([^\)]{2,})\)', raw))
+                                except: pass
                             if not cv_text or len(cv_text.strip()) < 30:
-                                st.error("❌ هذا ملف PDF يبدو أنه مبني على صور (Scanned). الرجاء استخدام 'لصق النص' بدلاً من رفع الملف.")
-                                st.info("💡 افتح الـ PDF واستخدم Ctrl+A ثم Ctrl+C لنسخ النص، ثم الصقه في مربع 'لصق النص'")
-
+                                st.error("❌ PDF مبني على صور. استخدم 'لصق النص' بدلاً من ذلك.")
+                                st.info("💡 افتح PDF > Ctrl+A > Ctrl+C > الصقه هنا")
                     except Exception as e:
-                        st.error(f"❌ خطأ عام: {e}")
-
+                        st.error(f"❌ {e}")
                     if cv_text and len(cv_text.strip()) > 20:
-                        st.success(f"✅ تم قراءة السيرة الذاتية ({len(cv_text):,} حرف)")
-                        with st.expander("👁️ معاينة النص المستخرج"):
-                            st.text_area("", cv_text[:2000], height=200, disabled=True)
-
+                        st.success(f"✅ تم قراءة {len(cv_text):,} حرف")
             else:
-                # Manual text input
-                cv_text = st.text_area("الصق نص السيرة الذاتية هنا:", height=300, key="cv_manual",
-                    placeholder="الاسم: ...\nالخبرة: ...\nالمهارات: ...\nالتعليم: ...")
-                if cv_text:
-                    st.success(f"✅ تم إدخال {len(cv_text):,} حرف")
+                cv_text = st.text_area("الصق نص السيرة الذاتية:", height=250, key="cv_manual",
+                    placeholder="الاسم: أحمد محمد\nالمسمى: مدير موارد بشرية\nالخبرة: 8 سنوات\n...")
+                if cv_text: st.success(f"✅ {len(cv_text):,} حرف")
 
-            # === JD Upload (OPTIONAL) ===
+            # === JD (Optional) ===
             with st.expander("📋 الوصف الوظيفي (اختياري - يزيد دقة الموائمة)", expanded=False):
-                jd_method = st.radio("مصدر الوصف:", ["كتابة يدوية","رفع ملف"], horizontal=True, key="jd_src")
-                jd_text = ""
-                if jd_method == "كتابة يدوية":
-                    jd_text = st.text_area("الوصف الوظيفي:", height=150, key="jd_txt",
-                        placeholder="المسمى: محلل موارد بشرية\nالمتطلبات: خبرة 3 سنوات، شهادة PHRi...")
-                else:
-                    jd_file = st.file_uploader("ارفع الوصف الوظيفي:", type=["pdf","docx","txt"], key="jd_file")
-                    if jd_file:
-                        jd_bytes = jd_file.getvalue()
-                        jd_fname = jd_file.name.lower()
-                        try:
-                            if jd_fname.endswith('.txt'):
-                                jd_text = jd_bytes.decode('utf-8', errors='ignore')
-                            elif jd_fname.endswith('.docx'):
-                                from docx import Document
-                                doc = Document(io.BytesIO(jd_bytes))
-                                jd_text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
-                            elif jd_fname.endswith('.pdf'):
-                                import pdfplumber
-                                with pdfplumber.open(io.BytesIO(jd_bytes)) as pdf_doc:
-                                    jd_text = "\n".join([pg.extract_text() or '' for pg in pdf_doc.pages])
-                        except Exception as e:
-                            st.warning(f"تعذر قراءة الوصف: {e}")
-                        if jd_text: st.success(f"✅ تم قراءة الوصف الوظيفي ({len(jd_text)} حرف)")
+                jd_text = st.text_area("الوصف الوظيفي:", height=120, key="jd_txt",
+                    placeholder="المسمى: ...\nالمتطلبات: ...")
 
-            # Company context (OPTIONAL)
-            company_goals = st.text_area("🏢 أهداف واحتياجات الشركة (اختياري):", height=80, key="cv_goals",
-                placeholder="شركة تقنية معلومات، تحتاج تعزيز فريق HR بالتحليلات والأتمتة...")
+            # === Company context ===
+            company_goals = st.text_area("🏢 أهداف الشركة (اختياري):", height=60, key="cv_goals",
+                placeholder="شركة تقنية معلومات تحتاج تعزيز فريق HR...")
 
-            # === Analysis Button ===
-            if st.button("🤖 تحليل السيرة الذاتية", type="primary", use_container_width=True, key="cv_btn"):
-                if not cv_text:
-                    st.error("❌ يرجى رفع السيرة الذاتية أولاً")
+            # =============================================
+            #        ANALYSIS ENGINE
+            # =============================================
+            if st.button("🤖 تحليل شامل للسيرة الذاتية", type="primary", use_container_width=True, key="cv_btn"):
+                if not cv_text or len(cv_text.strip()) < 30:
+                    st.error("❌ يرجى رفع أو لصق السيرة الذاتية أولاً (30 حرف على الأقل)")
                 else:
-                    with st.spinner("جاري التحليل الذكي بالذكاء الاصطناعي..."):
-                        # ========================================
-                        #   SMART PRE-PROCESSING (Rule-based NLP)
-                        # ========================================
-                        import re
+                    import re
+
+                    # ==================================
+                    #  LAYER 1: SMART NLP PRE-PROCESSING
+                    # ==================================
+                    with st.spinner("🔍 الطبقة 1: استخراج البيانات المهيكلة..."):
                         cv_lower = cv_text.lower()
 
-                        # 1. Extract contact info
+                        # --- Contact Info ---
                         emails = re.findall(r'[\w.+-]+@[\w-]+\.[\w.]+', cv_text)
-                        phones = re.findall(r'[\+]?[\d\s\-\(\)]{8,15}', cv_text)
-                        phones = [p.strip() for p in phones if len(re.sub(r'\D','',p)) >= 8][:3]
+                        phones = [p.strip() for p in re.findall(r'[\+]?[\d\s\-\(\)]{8,15}', cv_text) if len(re.sub(r'\D','',p)) >= 8][:3]
                         linkedin = re.findall(r'linkedin\.com/in/[\w-]+', cv_lower)
 
-                        # 2. Extract years of experience
-                        exp_patterns = [
-                            r'(\d+)\+?\s*(?:سنة|سنوات|years?|yrs?)\s*(?:خبرة|experience|of experience)?',
-                            r'(?:خبرة|experience).*?(\d+)\+?\s*(?:سنة|سنوات|years?)',
-                        ]
-                        years_found = []
-                        for p in exp_patterns:
-                            years_found.extend([int(m) for m in re.findall(p, cv_lower) if int(m) < 50])
-                        total_years = max(years_found) if years_found else 0
+                        # --- Name extraction ---
+                        name_match = re.search(r'^([^\n]{3,40})', cv_text.strip())
+                        candidate_name = name_match.group(1).strip() if name_match else (cv_file.name.rsplit('.',1)[0] if cv_file else "مرشح")
 
-                        # 3. Extract education
-                        edu_keywords = {
-                            'دكتوراه': 'PhD', 'phd': 'PhD', 'doctorate': 'PhD',
-                            'ماجستير': 'Masters', 'master': 'Masters', 'mba': 'MBA', 'msc': 'Masters',
-                            'بكالوريوس': 'Bachelors', 'bachelor': 'Bachelors', 'bsc': 'Bachelors',
-                            'دبلوم': 'Diploma', 'diploma': 'Diploma',
-                            'ثانوي': 'High School', 'high school': 'High School',
-                        }
-                        edu_level = "غير محدد"
-                        for kw, level in edu_keywords.items():
-                            if kw in cv_lower:
-                                edu_level = level
-                                break
+                        # --- Years of experience ---
+                        exp_nums = []
+                        for p in [r'(\d+)\+?\s*(?:سنة|سنوات|years?|yrs?)', r'(?:خبرة|experience).*?(\d+)']:
+                            exp_nums.extend([int(m) for m in re.findall(p, cv_lower) if 0 < int(m) < 50])
+                        total_years = max(exp_nums) if exp_nums else 0
+                        # Estimate from date ranges (2015-2024 = 9 years)
+                        if not total_years:
+                            yr_ranges = re.findall(r'(20\d{2})\s*[-–]\s*(20\d{2}|حالي|present|current)', cv_lower)
+                            if yr_ranges:
+                                spans = []
+                                for s, e in yr_ranges:
+                                    end = 2025 if e in ['حالي','present','current'] else int(e)
+                                    spans.append(end - int(s))
+                                total_years = sum(spans)
 
-                        # 4. Extract skills with scoring
-                        SKILL_DB = {
+                        # --- Education ---
+                        edu_map = {'phd':('دكتوراه',95),'دكتوراه':('دكتوراه',95),'doctorate':('دكتوراه',95),
+                            'mba':('MBA',92),'ماجستير':('ماجستير',85),'master':('ماجستير',85),
+                            'بكالوريوس':('بكالوريوس',70),'bachelor':('بكالوريوس',70),'bsc':('بكالوريوس',70),
+                            'دبلوم':('دبلوم',55),'diploma':('دبلوم',55),'ثانوي':('ثانوية',40)}
+                        edu_level, edu_score = 'غير محدد', 50
+                        for kw, (lvl, sc) in edu_map.items():
+                            if kw in cv_lower: edu_level, edu_score = lvl, sc; break
+
+                        # --- Skills Database (80+ skills) ---
+                        SKILLS = {
                             # Technical
-                            'python': ('Python', 'تقنية', 9), 'sql': ('SQL', 'تقنية', 8),
-                            'excel': ('Excel', 'تقنية', 7), 'power bi': ('Power BI', 'تقنية', 8),
-                            'tableau': ('Tableau', 'تقنية', 8), 'sap': ('SAP', 'تقنية', 9),
-                            'erp': ('ERP', 'تقنية', 8), 'javascript': ('JavaScript', 'تقنية', 8),
-                            'html': ('HTML/CSS', 'تقنية', 6), 'react': ('React', 'تقنية', 8),
-                            'machine learning': ('Machine Learning', 'تقنية', 9),
-                            'ai': ('Artificial Intelligence', 'تقنية', 9),
-                            'الذكاء الاصطناعي': ('AI', 'تقنية', 9),
-                            'data analysis': ('Data Analysis', 'تقنية', 8),
-                            'تحليل البيانات': ('تحليل البيانات', 'تقنية', 8),
-                            # HR specific
-                            'الموارد البشرية': ('HR Management', 'مهنية', 8),
-                            'human resources': ('HR', 'مهنية', 8),
-                            'payroll': ('Payroll', 'مهنية', 7), 'الرواتب': ('Payroll', 'مهنية', 7),
-                            'recruitment': ('Recruitment', 'مهنية', 7), 'التوظيف': ('Recruitment', 'مهنية', 7),
-                            'talent acquisition': ('Talent Acquisition', 'مهنية', 8),
-                            'performance management': ('Performance Mgmt', 'مهنية', 8),
-                            'إدارة الأداء': ('Performance Mgmt', 'مهنية', 8),
-                            'training': ('Training & Dev', 'مهنية', 7), 'التدريب': ('Training', 'مهنية', 7),
-                            'labor law': ('Labor Law', 'مهنية', 8), 'نظام العمل': ('Labor Law', 'مهنية', 8),
-                            'gosi': ('GOSI/Social Insurance', 'مهنية', 7),
-                            'التأمينات': ('Social Insurance', 'مهنية', 7),
-                            # Soft skills
-                            'leadership': ('Leadership', 'قيادية', 8), 'القيادة': ('Leadership', 'قيادية', 8),
-                            'communication': ('Communication', 'شخصية', 7), 'التواصل': ('Communication', 'شخصية', 7),
-                            'project management': ('Project Mgmt', 'قيادية', 8),
-                            'إدارة المشاريع': ('Project Mgmt', 'قيادية', 8),
-                            'team management': ('Team Mgmt', 'قيادية', 7),
-                            'problem solving': ('Problem Solving', 'شخصية', 7),
-                            'negotiation': ('Negotiation', 'شخصية', 8), 'التفاوض': ('Negotiation', 'شخصية', 8),
+                            'python':('Python','تقنية',9),'sql':('SQL','تقنية',8),'excel':('Excel','تقنية',7),
+                            'power bi':('Power BI','تقنية',8),'tableau':('Tableau','تقنية',8),'sap':('SAP','تقنية',9),
+                            'erp':('ERP','تقنية',8),'javascript':('JavaScript','تقنية',8),'java ':('Java','تقنية',8),
+                            'react':('React','تقنية',8),'node':('Node.js','تقنية',8),'angular':('Angular','تقنية',8),
+                            'machine learning':('ML','تقنية',9),'deep learning':('Deep Learning','تقنية',9),
+                            'cloud':('Cloud','تقنية',8),'aws':('AWS','تقنية',8),'azure':('Azure','تقنية',8),
+                            'docker':('Docker','تقنية',8),'api':('API','تقنية',7),'git':('Git','تقنية',7),
+                            'الذكاء الاصطناعي':('AI','تقنية',9),'تحليل البيانات':('Data Analysis','تقنية',8),
+                            'data science':('Data Science','تقنية',9),'automation':('Automation','تقنية',8),
+                            'الأتمتة':('Automation','تقنية',8),'vba':('VBA','تقنية',6),
+                            # HR Professional
+                            'الموارد البشرية':('HR Management','مهنية',8),'human resources':('HR','مهنية',8),
+                            'payroll':('Payroll','مهنية',7),'الرواتب':('Payroll','مهنية',7),
+                            'recruitment':('Recruitment','مهنية',7),'التوظيف':('Recruitment','مهنية',7),
+                            'talent acquisition':('Talent Acquisition','مهنية',8),'الاستقطاب':('Talent Acquisition','مهنية',8),
+                            'performance management':('Performance Mgmt','مهنية',8),'إدارة الأداء':('Performance Mgmt','مهنية',8),
+                            'training':('Training','مهنية',7),'التدريب':('Training','مهنية',7),
+                            'نظام العمل':('Labor Law','مهنية',8),'labor law':('Labor Law','مهنية',8),
+                            'التأمينات':('GOSI','مهنية',7),'gosi':('GOSI','مهنية',7),
+                            'مدد':('Mudad','مهنية',7),'قوى':('Qiwa','مهنية',7),'مقيم':('Muqeem','مهنية',7),
+                            'jisr':('Jisr','مهنية',7),'جسر':('Jisr','مهنية',7),
+                            'onboarding':('Onboarding','مهنية',7),'تهيئة':('Onboarding','مهنية',7),
+                            'compensation':('Compensation','مهنية',8),'benefits':('Benefits','مهنية',7),
+                            'employee relations':('Employee Relations','مهنية',8),
+                            'workforce planning':('Workforce Planning','مهنية',8),
+                            'نطاقات':('Nitaqat','مهنية',8),'nitaqat':('Nitaqat','مهنية',8),
+                            # Leadership
+                            'leadership':('Leadership','قيادية',8),'القيادة':('Leadership','قيادية',8),
+                            'project management':('Project Mgmt','قيادية',8),'إدارة المشاريع':('Project Mgmt','قيادية',8),
+                            'strategic':('Strategic Planning','قيادية',9),'استراتيجي':('Strategic Planning','قيادية',9),
+                            'team management':('Team Mgmt','قيادية',7),'إدارة الفريق':('Team Mgmt','قيادية',7),
+                            'change management':('Change Mgmt','قيادية',8),'إدارة التغيير':('Change Mgmt','قيادية',8),
+                            'budget':('Budget Mgmt','قيادية',7),'الميزانية':('Budget Mgmt','قيادية',7),
+                            # Soft Skills
+                            'communication':('Communication','شخصية',7),'التواصل':('Communication','شخصية',7),
+                            'negotiation':('Negotiation','شخصية',8),'التفاوض':('Negotiation','شخصية',8),
+                            'problem solving':('Problem Solving','شخصية',7),'حل المشكلات':('Problem Solving','شخصية',7),
+                            'presentation':('Presentation','شخصية',7),'العرض':('Presentation','شخصية',7),
+                            'analytical':('Analytical','شخصية',7),'تحليلي':('Analytical','شخصية',7),
+                            'creativity':('Creativity','شخصية',7),'الإبداع':('Creativity','شخصية',7),
                             # Certifications
-                            'pmp': ('PMP', 'شهادة', 9), 'shrm': ('SHRM', 'شهادة', 9),
-                            'cipd': ('CIPD', 'شهادة', 9), 'phri': ('PHRi', 'شهادة', 9),
-                            'sphr': ('SPHRi', 'شهادة', 9), 'cpa': ('CPA', 'شهادة', 9),
-                            'cfa': ('CFA', 'شهادة', 9), 'aws': ('AWS', 'شهادة', 8),
-                            'google': ('Google Cert', 'شهادة', 7), 'scrum': ('Scrum/Agile', 'شهادة', 8),
+                            'pmp':('PMP','شهادة',9),'shrm':('SHRM','شهادة',9),'cipd':('CIPD','شهادة',9),
+                            'phri':('PHRi','شهادة',9),'sphr':('SPHRi','شهادة',10),'sphri':('SPHRi','شهادة',10),
+                            'cpa':('CPA','شهادة',9),'cfa':('CFA','شهادة',9),'cma':('CMA','شهادة',9),
+                            'scrum':('Scrum','شهادة',8),'agile':('Agile','شهادة',8),'itil':('ITIL','شهادة',8),
+                            'six sigma':('Six Sigma','شهادة',8),'prince2':('PRINCE2','شهادة',8),
+                            'google':('Google Cert','شهادة',7),'microsoft certified':('MS Cert','شهادة',7),
                             # Languages
-                            'english': ('English', 'لغة', 7), 'الإنجليزية': ('English', 'لغة', 7),
-                            'arabic': ('Arabic', 'لغة', 7), 'العربية': ('Arabic', 'لغة', 7),
-                            'french': ('French', 'لغة', 6), 'الفرنسية': ('French', 'لغة', 6),
+                            'english':('English','لغة',7),'الإنجليزية':('English','لغة',7),
+                            'arabic':('Arabic','لغة',7),'العربية':('Arabic','لغة',7),
+                            'french':('French','لغة',6),'الفرنسية':('French','لغة',6),
+                            'german':('German','لغة',6),'chinese':('Chinese','لغة',6),
                         }
 
                         found_skills = {}
-                        for kw, (name, cat, weight) in SKILL_DB.items():
+                        for kw, (name, cat, w) in SKILLS.items():
                             if kw in cv_lower and name not in found_skills:
-                                found_skills[name] = {'category': cat, 'weight': weight}
+                                found_skills[name] = {'cat': cat, 'w': w}
 
-                        # 5. Categorize skills
-                        tech_skills = {k:v for k,v in found_skills.items() if v['category'] == 'تقنية'}
-                        prof_skills = {k:v for k,v in found_skills.items() if v['category'] == 'مهنية'}
-                        lead_skills = {k:v for k,v in found_skills.items() if v['category'] == 'قيادية'}
-                        soft_skills = {k:v for k,v in found_skills.items() if v['category'] == 'شخصية'}
-                        certs = {k:v for k,v in found_skills.items() if v['category'] == 'شهادة'}
-                        langs = {k:v for k,v in found_skills.items() if v['category'] == 'لغة'}
+                        cats = {}
+                        for name, info in found_skills.items():
+                            cats.setdefault(info['cat'], {})[name] = info['w']
 
-                        # 6. Calculate pre-scores
-                        tech_score = min(100, len(tech_skills) * 15 + sum(v['weight'] for v in tech_skills.values()))
-                        prof_score = min(100, len(prof_skills) * 12 + sum(v['weight'] for v in prof_skills.values()))
-                        lead_score = min(100, len(lead_skills) * 20 + sum(v['weight'] for v in lead_skills.values()))
-                        cert_score = min(100, len(certs) * 25)
-                        exp_score = min(100, total_years * 8) if total_years else 50
-                        edu_scores = {'PhD':95, 'MBA':90, 'Masters':85, 'Bachelors':70, 'Diploma':55, 'High School':40, 'غير محدد':50}
-                        edu_score = edu_scores.get(edu_level, 50)
+                        tech = cats.get('تقنية', {})
+                        prof = cats.get('مهنية', {})
+                        lead = cats.get('قيادية', {})
+                        soft = cats.get('شخصية', {})
+                        certs = cats.get('شهادة', {})
+                        langs = cats.get('لغة', {})
 
-                        # ========================================
-                        #   SHOW PRE-ANALYSIS DASHBOARD
-                        # ========================================
-                        st.markdown("---")
-                        st.markdown("### 📊 التحليل الأولي (Rule-based NLP)")
+                        # --- Scoring (8 dimensions) ---
+                        s_tech = min(100, sum(tech.values()) + len(tech) * 5)
+                        s_prof = min(100, sum(prof.values()) + len(prof) * 5)
+                        s_lead = min(100, sum(lead.values()) + len(lead) * 8)
+                        s_soft = min(100, sum(soft.values()) + len(soft) * 8)
+                        s_cert = min(100, sum(certs.values()) * 3)
+                        s_exp = min(100, total_years * 7) if total_years else 40
+                        s_edu = edu_score
+                        s_lang = min(100, len(langs) * 35)
+                        s_overall = round((s_tech*0.15 + s_prof*0.20 + s_lead*0.15 + s_soft*0.10 + s_cert*0.10 + s_exp*0.15 + s_edu*0.10 + s_lang*0.05) * 1.0)
 
-                        # KPIs row
-                        pk1, pk2, pk3, pk4, pk5, pk6 = st.columns(6)
-                        with pk1: kpi("📧 البريد", emails[0][:20] if emails else "غير موجود")
-                        with pk2: kpi("📅 سنوات الخبرة", str(total_years) if total_years else "غير محدد")
-                        with pk3: kpi("🎓 التعليم", edu_level)
-                        with pk4: kpi("🔧 المهارات", str(len(found_skills)))
-                        with pk5: kpi("📜 الشهادات", str(len(certs)))
-                        with pk6: kpi("🌐 اللغات", str(len(langs)))
+                        # --- Red Flags Detection ---
+                        red_flags = []
+                        if total_years == 0: red_flags.append(("⚠️ سنوات الخبرة غير واضحة","متوسط","تحقق في المقابلة"))
+                        if not emails: red_flags.append(("❌ لا يوجد بريد إلكتروني","عالي","قد يكون الملف ناقص"))
+                        if len(cv_text) < 200: red_flags.append(("⚠️ السيرة قصيرة جداً","عالي","أقل من 200 حرف"))
+                        if not certs and total_years > 5: red_flags.append(("⚠️ لا شهادات مهنية رغم الخبرة الطويلة","متوسط","استثمار في الشهادات مطلوب"))
+                        if not tech: red_flags.append(("⚠️ لا مهارات تقنية مكتشفة","متوسط","قد تكون مكتوبة بصياغة مختلفة"))
+                        job_gaps = re.findall(r'(20\d{2})\s*[-–]\s*(20\d{2})', cv_text)
+                        if len(job_gaps) >= 2:
+                            sorted_jobs = sorted(job_gaps, key=lambda x: int(x[0]))
+                            for i in range(1, len(sorted_jobs)):
+                                gap = int(sorted_jobs[i][0]) - int(sorted_jobs[i-1][1])
+                                if gap >= 2: red_flags.append((f"⚠️ فجوة وظيفية: {gap} سنوات ({sorted_jobs[i-1][1]}-{sorted_jobs[i][0]})","متوسط","اسأل عن السبب"))
+                        if edu_level == 'غير محدد': red_flags.append(("⚠️ المؤهل التعليمي غير واضح","منخفض","تحقق من الشهادات"))
 
-                        # Skills breakdown
+                        # --- Experience Level ---
+                        if total_years >= 15: exp_level = "تنفيذي (Executive)"
+                        elif total_years >= 10: exp_level = "أول (Senior)"
+                        elif total_years >= 5: exp_level = "متوسط (Mid-Level)"
+                        elif total_years >= 2: exp_level = "مبتدئ (Junior)"
+                        else: exp_level = "حديث التخرج (Entry)"
+
+                    # ==================================
+                    #  DISPLAY: DASHBOARD
+                    # ==================================
+                    st.markdown("---")
+                    st.markdown("## 📊 لوحة التحليل الذكي")
+
+                    # KPIs
+                    k1,k2,k3,k4,k5,k6 = st.columns(6)
+                    with k1: kpi("👤 المرشح", candidate_name[:15])
+                    with k2: kpi("📅 الخبرة", f"{total_years} سنة" if total_years else "غير محدد")
+                    with k3: kpi("🎓 التعليم", edu_level)
+                    with k4: kpi("🔧 المهارات", str(len(found_skills)))
+                    with k5: kpi("📜 الشهادات", str(len(certs)))
+                    with k6: kpi("🎯 الدرجة", f"{s_overall}/100")
+
+                    st.caption(f"📧 {emails[0] if emails else 'غير موجود'} | 📱 {phones[0] if phones else 'غير موجود'} | 💼 {exp_level}")
+
+                    # === Charts Row 1: Radar + Gauge ===
+                    ch1, ch2 = st.columns(2)
+                    with ch1:
+                        dims = ['تقنية','مهنية','قيادية','شخصية','شهادات','خبرة','تعليم','لغات']
+                        vals = [s_tech, s_prof, s_lead, s_soft, s_cert, s_exp, s_edu, s_lang]
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatterpolar(r=vals+[vals[0]], theta=dims+[dims[0]],
+                            fill='toself', line_color='#E36414', fillcolor='rgba(227,100,20,0.15)', name='المرشح'))
+                        # Benchmark line
+                        bench = [60,60,50,55,40,50,65,50]
+                        fig.add_trace(go.Scatterpolar(r=bench+[bench[0]], theta=dims+[dims[0]],
+                            line=dict(color='#27AE60', dash='dash'), name='المعيار المتوسط'))
+                        fig.update_layout(polar=dict(radialaxis=dict(range=[0,100])),
+                            title='تقييم 8 أبعاد مع خط المعيار', height=400, font=dict(family="Noto Sans Arabic"))
+                        st.plotly_chart(fig, use_container_width=True)
+
+                    with ch2:
+                        fig = go.Figure(go.Indicator(mode="gauge+number+delta", value=s_overall,
+                            title={'text':'الدرجة النهائية','font':{'size':16}},
+                            delta={'reference':60,'increasing':{'color':'#27AE60'},'decreasing':{'color':'#E74C3C'}},
+                            gauge={'axis':{'range':[0,100],'tickwidth':1},'bar':{'color':'#E36414'},
+                                'steps':[{'range':[0,30],'color':'#FADBD8'},{'range':[30,50],'color':'#FCF3CF'},
+                                    {'range':[50,70],'color':'#D5F5E3'},{'range':[70,100],'color':'#ABEBC6'}],
+                                'threshold':{'line':{'color':'red','width':4},'thickness':0.75,'value':60}}))
+                        fig.update_layout(height=400)
+                        st.plotly_chart(fig, use_container_width=True)
+
+                    # === Charts Row 2: Skills bars + Scores ===
+                    ch3, ch4 = st.columns(2)
+                    with ch3:
                         if found_skills:
-                            sk_cols = st.columns(2)
-                            with sk_cols[0]:
-                                st.markdown("#### 🔧 المهارات المكتشفة")
-                                for cat_name, cat_skills in [("تقنية",tech_skills),("مهنية",prof_skills),("قيادية",lead_skills),("شخصية",soft_skills)]:
-                                    if cat_skills:
-                                        st.markdown(f"**{cat_name}:** {', '.join(cat_skills.keys())}")
-                                if certs: st.markdown(f"**شهادات:** {', '.join(certs.keys())}")
-                                if langs: st.markdown(f"**لغات:** {', '.join(langs.keys())}")
+                            sk_data = pd.DataFrame([{'المهارة':n,'الوزن':info['w'],'التصنيف':info['cat']}
+                                for n,info in sorted(found_skills.items(), key=lambda x: x[1]['w'], reverse=True)[:15]])
+                            color_map = {'تقنية':'#3498DB','مهنية':'#E36414','قيادية':'#27AE60','شخصية':'#9B59B6','شهادة':'#F39C12','لغة':'#1ABC9C'}
+                            fig = px.bar(sk_data, y='المهارة', x='الوزن', color='التصنيف', orientation='h',
+                                color_discrete_map=color_map, text_auto=True)
+                            fig.update_layout(title='أقوى 15 مهارة حسب الوزن', height=400, yaxis={'categoryorder':'total ascending'},
+                                font=dict(family="Noto Sans Arabic"), showlegend=True, legend=dict(orientation='h',y=-0.15))
+                            st.plotly_chart(fig, use_container_width=True)
 
-                            with sk_cols[1]:
-                                # Pre-scores radar
-                                pre_labels = ['تقنية','مهنية','قيادية','شهادات','خبرة','تعليم']
-                                pre_vals = [tech_score, prof_score, lead_score, cert_score, exp_score, edu_score]
-                                fig = go.Figure()
-                                fig.add_trace(go.Scatterpolar(r=pre_vals+[pre_vals[0]], theta=pre_labels+[pre_labels[0]],
-                                    fill='toself', line_color='#E36414', fillcolor='rgba(227,100,20,0.15)'))
-                                fig.update_layout(polar=dict(radialaxis=dict(range=[0,100])),
-                                    title='التقييم الأولي', height=350, showlegend=False,
-                                    font=dict(family="Noto Sans Arabic"))
-                                st.plotly_chart(fig, use_container_width=True)
+                    with ch4:
+                        score_data = pd.DataFrame({'البُعد': dims, 'الدرجة': vals, 'المعيار': bench})
+                        fig = go.Figure()
+                        fig.add_trace(go.Bar(name='المرشح', x=dims, y=vals, marker_color='#E36414', text=vals, textposition='outside'))
+                        fig.add_trace(go.Bar(name='المعيار', x=dims, y=bench, marker_color='#BDC3C7', text=bench, textposition='outside'))
+                        fig.update_layout(title='المرشح مقابل المعيار', barmode='group', height=400,
+                            font=dict(family="Noto Sans Arabic"), legend=dict(orientation='h',y=-0.15))
+                        st.plotly_chart(fig, use_container_width=True)
 
-                        # ========================================
-                        #   AI DEEP ANALYSIS
-                        # ========================================
-                        st.markdown("---")
-                        st.markdown("### 🤖 التحليل العميق بالذكاء الاصطناعي")
+                    # === Skills Matrix ===
+                    st.markdown("### 🔧 خريطة المهارات المكتشفة")
+                    sm1,sm2,sm3 = st.columns(3)
+                    with sm1:
+                        st.markdown("**💻 تقنية**")
+                        for s in tech: st.markdown(f"- {s}")
+                        if not tech: st.caption("لم تُكتشف")
+                        st.markdown("**🏢 مهنية**")
+                        for s in prof: st.markdown(f"- {s}")
+                        if not prof: st.caption("لم تُكتشف")
+                    with sm2:
+                        st.markdown("**👑 قيادية**")
+                        for s in lead: st.markdown(f"- {s}")
+                        if not lead: st.caption("لم تُكتشف")
+                        st.markdown("**🤝 شخصية**")
+                        for s in soft: st.markdown(f"- {s}")
+                        if not soft: st.caption("لم تُكتشف")
+                    with sm3:
+                        st.markdown("**📜 شهادات**")
+                        for s in certs: st.markdown(f"- {s}")
+                        if not certs: st.caption("لم تُكتشف")
+                        st.markdown("**🌐 لغات**")
+                        for s in langs: st.markdown(f"- {s}")
+                        if not langs: st.caption("لم تُكتشف")
 
-                        # Company info
+                    # === Red Flags ===
+                    if red_flags:
+                        st.markdown("### 🚩 إشارات تحذيرية")
+                        rf_df = pd.DataFrame(red_flags, columns=['الإشارة','الخطورة','التوصية'])
+                        st.dataframe(rf_df, use_container_width=True, hide_index=True)
+
+                    # === Scoring Matrix ===
+                    st.markdown("### 📋 مصفوفة التقييم (8 أبعاد)")
+                    matrix_data = []
+                    for dim, score, desc in [
+                        ('المهارات التقنية', s_tech, f"{len(tech)} مهارة: {', '.join(list(tech.keys())[:4]) if tech else 'لا شيء'}"),
+                        ('المهارات المهنية', s_prof, f"{len(prof)} مهارة: {', '.join(list(prof.keys())[:4]) if prof else 'لا شيء'}"),
+                        ('القدرات القيادية', s_lead, f"{len(lead)} قدرة: {', '.join(list(lead.keys())[:3]) if lead else 'لا شيء'}"),
+                        ('المهارات الشخصية', s_soft, f"{len(soft)} مهارة: {', '.join(list(soft.keys())[:3]) if soft else 'لا شيء'}"),
+                        ('الشهادات المهنية', s_cert, f"{len(certs)} شهادة: {', '.join(list(certs.keys())[:3]) if certs else 'لا شيء'}"),
+                        ('سنوات الخبرة', s_exp, f"{total_years} سنة - {exp_level}"),
+                        ('المؤهل التعليمي', s_edu, edu_level),
+                        ('اللغات', s_lang, f"{len(langs)} لغة: {', '.join(list(langs.keys())[:3]) if langs else 'لا شيء'}"),
+                    ]:
+                        status = "🟢 ممتاز" if score >= 70 else ("🟡 جيد" if score >= 50 else "🔴 ضعيف")
+                        matrix_data.append({'البُعد': dim, 'الدرجة': f"{score}/100", 'المستوى': status, 'التفاصيل': desc})
+                    st.dataframe(pd.DataFrame(matrix_data), use_container_width=True, hide_index=True)
+
+                    # ==================================
+                    #  LAYER 2: AI DEEP ANALYSIS
+                    # ==================================
+                    st.markdown("---")
+                    st.markdown("## 🤖 التحليل العميق بالذكاء الاصطناعي")
+
+                    with st.spinner("🧠 الطبقة 2: تحليل عميق بالذكاء الاصطناعي..."):
                         company_info = ""
                         try:
                             ci = st.session_state.get('company_info', {})
-                            if ci:
-                                company_info = f"الشركة: {ci.get('name','رسال الود لتقنية المعلومات')}\nالنشاط: {ci.get('activity','تقنية المعلومات')}\nالمقر: {ci.get('location','جدة')}"
+                            if ci: company_info = f"الشركة: {ci.get('name','')}, النشاط: {ci.get('activity','')}, المقر: {ci.get('location','')}"
                         except: pass
 
                         has_jd = bool(jd_text and jd_text.strip())
                         prompt = None
 
-                        # Build structured pre-analysis for AI
-                        pre_analysis = f"""[تحليل أولي آلي]
-سنوات الخبرة: {total_years if total_years else 'غير محدد'}
-التعليم: {edu_level}
-المهارات التقنية ({len(tech_skills)}): {', '.join(tech_skills.keys()) if tech_skills else 'لم تُكتشف'}
-المهارات المهنية ({len(prof_skills)}): {', '.join(prof_skills.keys()) if prof_skills else 'لم تُكتشف'}
-المهارات القيادية ({len(lead_skills)}): {', '.join(lead_skills.keys()) if lead_skills else 'لم تُكتشف'}
-الشهادات ({len(certs)}): {', '.join(certs.keys()) if certs else 'لم تُكتشف'}
-اللغات: {', '.join(langs.keys()) if langs else 'لم تُكتشف'}
-التقييم الأولي: تقنية {tech_score}/100 | مهنية {prof_score}/100 | قيادية {lead_score}/100 | شهادات {cert_score}/100"""
+                        pre = f"""[تحليل آلي أولي]
+المرشح: {candidate_name} | الخبرة: {total_years} سنة | التعليم: {edu_level} | المستوى: {exp_level}
+تقنية ({s_tech}/100): {', '.join(tech.keys()) if tech else 'N/A'}
+مهنية ({s_prof}/100): {', '.join(prof.keys()) if prof else 'N/A'}
+قيادية ({s_lead}/100): {', '.join(lead.keys()) if lead else 'N/A'}
+شهادات ({s_cert}/100): {', '.join(certs.keys()) if certs else 'N/A'}
+إشارات تحذيرية: {len(red_flags)}
+الدرجة الأولية: {s_overall}/100"""
 
                         if has_jd:
-                            prompt = f"""أنت خبير توظيف وتقييم كفاءات بخبرة 20 سنة. لديك سيرة ذاتية وتحليل أولي آلي ووصف وظيفي.
+                            prompt = f"""أنت CHRO (Chief HR Officer) بخبرة 25 سنة في التوظيف بشركات Fortune 500. مهمتك: تقييم هذا المرشح مقابل الوصف الوظيفي بدقة متناهية. كن صارماً وموضوعياً.
 
 **السيرة الذاتية:**
-{cv_text[:4000]}
+{cv_text[:4500]}
 
-{pre_analysis}
+{pre}
 
 **الوصف الوظيفي:**
 {jd_text[:2000]}
 
-**الشركة:** {company_info if company_info else company_goals if company_goals else 'شركة تقنية في السعودية'}
+**الشركة:** {company_info or company_goals or 'شركة تقنية معلومات في السعودية'}
 
-أنت تحلل هذا المرشح لهذه الوظيفة تحديداً. كن دقيقاً ومحدداً. قدم التحليل بالعربية:
+قدم تقريراً تنفيذياً بالعربية:
 
-## 1. ملخص تنفيذي (3 أسطر)
+## 1. الحكم السريع (Executive Verdict)
+سطر واحد: هل نوظف هذا الشخص أم لا؟ ولماذا؟
 
-## 2. الموائمة مع الوصف الوظيفي
-لكل متطلب في الوصف الوظيفي، حدد هل المرشح يستوفيه أم لا:
-| المتطلب | الحالة | الدليل من السيرة |
-(استخدم ✅ مستوفى / ⚠️ جزئياً / ❌ غير مستوفى)
+## 2. جدول الموائمة مع المتطلبات
+لكل متطلب في الوصف الوظيفي:
+| المتطلب | الحكم | الدليل من السيرة |
+(✅ مستوفى / ⚠️ جزئياً / ❌ غير مستوفى)
 
-## 3. تقييم المهارات التفصيلي
-لكل مهارة مطلوبة في الوظيفة:
-- المهارة: ... | المستوى: .../10 | الدليل: ...
+## 3. نقاط القوة التنافسية (ما يجعله أفضل من مرشحين آخرين)
+1-5 نقاط محددة
 
-## 4. نقاط القوة الحاسمة (أقوى 5)
+## 4. نقاط الضعف الحرجة (ما قد يسبب فشله في الدور)
+1-5 نقاط محددة
 
-## 5. الفجوات الحرجة (أهم 5 نقاط ضعف أو نقص)
+## 5. تحليل المخاطر
+| المخاطرة | الاحتمالية | الأثر | الإجراء الوقائي |
 
-## 6. تحليل المخاطر
-(3 مخاطر في توظيف هذا المرشح مع احتمالية كل مخاطرة)
-
-## 7. التقييم الرقمي
-- مطابقة المتطلبات الوظيفية: XX/100
-- جودة الخبرات: XX/100
-- المهارات التقنية: XX/100
-- المهارات القيادية: XX/100
-- التوافق الثقافي: XX/100
+## 6. التقييم الرقمي الدقيق
+- مطابقة المتطلبات الفنية: XX/100
+- مطابقة المتطلبات القيادية: XX/100
+- التوافق الثقافي مع الشركة: XX/100
+- احتمالية النجاح في أول 6 أشهر: XX/100
+- احتمالية البقاء أكثر من سنتين: XX/100
 - الدرجة النهائية: XX/100
 
-## 8. القرار والتوصية
-(مناسب جداً / مناسب / مناسب بشروط / غير مناسب)
+## 7. القرار
+(✅ توظيف فوري / ⚠️ توظيف بشروط / 🔄 مقابلة إضافية / ❌ رفض)
 التبرير في 3 أسطر.
 
-## 9. خطة الـ 90 يوم الأولى (إذا تم توظيفه)
+## 8. شروط التوظيف المقترحة (إن كان مناسباً)
+- الراتب المقترح:
+- فترة التجربة:
+- أهداف أول 90 يوم:
 
-## 10. أسئلة مقابلة مخصصة (5 أسئلة تكشف الفجوات)"""
+## 9. أسئلة مقابلة حرجة (5 أسئلة تكشف نقاط الضعف المحددة)
+كل سؤال مع: الهدف منه + الإجابة المثالية المتوقعة + العلامة الحمراء"""
 
                         else:
-                            prompt = f"""أنت خبير توظيف دولي وتقييم مواهب بخبرة 20 سنة في أسواق الخليج والشرق الأوسط.
+                            prompt = f"""أنت خبير تقييم مواهب (Talent Assessment Expert) بخبرة 25 سنة مع McKinsey وKorn Ferry. حلل هذا المرشح بعمق وموضوعية.
 
 **السيرة الذاتية:**
-{cv_text[:4000]}
+{cv_text[:4500]}
 
-{pre_analysis}
+{pre}
 
-**ملاحظات:** {company_info if company_info else ''} {company_goals if company_goals else ''}
+**سياق:** {company_info or ''} {company_goals or ''}
 
-لا يوجد وصف وظيفي محدد. حلل هذا المرشح بشكل شامل وفق أفضل الممارسات العالمية (SHRM, CIPD, Hays, McKinsey). كن محدداً وليس عاماً.
+لا يوجد وصف وظيفي. قدم تحليلاً شاملاً يساعد صانع القرار:
 
-قدم التحليل بالعربية:
+## 1. الملف التنفيذي (Executive Profile)
+5 أسطر تلخص: من هو؟ ما قيمته السوقية؟ أين يتفوق؟
 
-## 1. الملف التنفيذي (Executive Profile - 5 أسطر)
+## 2. تحليل المسار المهني
+- هل المسار تصاعدي/أفقي/متذبذب؟
+- أقوى 3 محطات مهنية ولماذا
+- أي فجوات وظيفية؟
 
-## 2. تحليل المسار المهني (Career Trajectory)
-- هل المسار تصاعدي أم أفقي أم متذبذب؟
-- الخبرات الأكثر قيمة ولماذا
-- الفجوات الزمنية إن وجدت
+## 3. خريطة الكفاءات التفصيلية
+| الكفاءة | المستوى (1-10) | الدليل | ملاحظات |
 
-## 3. خريطة المهارات التفصيلية
-لكل مهارة مكتشفة:
-- المهارة: ... | المستوى: .../10 | التصنيف: تقنية/مهنية/قيادية/شخصية
+## 4. نقاط القوة التنافسية (5 نقاط تميزه عن السوق)
 
-## 4. نقاط القوة التنافسية (أقوى 5 نقاط تميزه عن غيره)
+## 5. نقاط الضعف والمخاطر (5 نقاط مع خطة معالجة)
 
-## 5. نقاط الضعف والفجوات (5 نقاط مع خطة معالجة لكل واحدة)
+## 6. أفضل 5 أدوار وظيفية (مع تبرير وراتب متوقع بالسوق السعودي)
+| الدور | لماذا يناسبه | الراتب المتوقع (ريال) |
 
-## 6. أفضل 5 وظائف مناسبة (مع السبب والراتب المتوقع بالسوق السعودي)
-1. المسمى: ... | السبب: ... | الراتب: ... ريال
-
-## 7. أفضل 3 قطاعات صناعية مناسبة
-
-## 8. التقييم الشامل
+## 7. التقييم الرقمي الشامل
 - جودة الخبرات: XX/100
 - المهارات التقنية: XX/100
-- المهارات القيادية: XX/100
-- التعليم والشهادات: XX/100
-- القيمة السوقية: XX/100
+- القدرات القيادية: XX/100
 - إمكانية النمو (Growth Potential): XX/100
+- القيمة السوقية: XX/100
+- جاهزية المستوى التالي: XX/100
 - الدرجة النهائية: XX/100
 
-## 9. نطاق الراتب المتوقع في السوق السعودي
-(الحد الأدنى - المتوسط - الحد الأعلى بالريال)
+## 8. نطاق الراتب في السوق السعودي
+| المستوى | الحد الأدنى | المتوسط | الحد الأعلى |
 
-## 10. خطة تطوير مهني مقترحة (6 أشهر)
-- الشهر 1-2: ...
+## 9. خطة تطوير استراتيجية (6 أشهر)
+- الشهر 1-2: (هدف محدد + مؤشر قياس)
 - الشهر 3-4: ...
 - الشهر 5-6: ...
 
-## 11. توصيات لتحسين السيرة الذاتية (5 نصائح محددة)"""
+## 10. توصيات ذهبية (5 نصائح عملية لتعزيز القيمة السوقية)"""
 
                         if prompt:
                             response, error = call_ai_api(prompt, prompt, model_type="hr")
                         else:
-                            response, error = None, "تعذر بناء الطلب. حاول مرة أخرى."
+                            response, error = None, "خطأ في بناء التحليل"
+
                         if response:
                             st.session_state['_cv_result'] = response
-                            st.session_state['_cv_name'] = cv_file.name if cv_file else "مرشح"
+                            st.session_state['_cv_name'] = cv_file.name if cv_file else candidate_name
                             st.session_state['_cv_has_jd'] = has_jd
-                            st.session_state['_cv_pre'] = {
-                                'skills': len(found_skills), 'tech': tech_score, 'prof': prof_score,
-                                'lead': lead_score, 'cert': cert_score, 'exp': exp_score, 'edu': edu_score,
-                                'years': total_years, 'edu_level': edu_level, 'certs_list': list(certs.keys())
-                            }
+                            st.session_state['_cv_scores'] = {'tech':s_tech,'prof':s_prof,'lead':s_lead,'soft':s_soft,
+                                'cert':s_cert,'exp':s_exp,'edu':s_edu,'lang':s_lang,'overall':s_overall}
                         elif error:
                             st.error(f"❌ {error}")
-                            st.info("💡 تأكد من إعداد مفتاح API في ⚙️ الإعدادات (Gemini مجاني أو Groq أو Claude)")
+                            st.info("💡 أعد مفتاح API في ⚙️ الإعدادات. Gemini مجاني من Google أو Groq مجاني.")
 
-            # Display results
+            # ==================================
+            #  DISPLAY AI RESULTS
+            # ==================================
             if '_cv_result' in st.session_state:
                 result = st.session_state['_cv_result']
-                st.markdown("### 📊 نتائج التحليل")
+                st.markdown("---")
                 st.markdown(result)
 
-                # Extract scores for charts
+                # Extract AI scores for comparison chart
                 import re
-                scores = re.findall(r'(\d{1,3})\s*(?:من\s*100|/100|%)', result)
-                scores = [int(s) for s in scores if 0 <= int(s) <= 100]
+                ai_scores = re.findall(r'(\d{1,3})\s*[/من]\s*100', result)
+                ai_scores = [int(s) for s in ai_scores if 0 < int(s) <= 100]
 
-                if scores:
-                    st.markdown("### 📊 الرسوم البيانية")
-                    labels = ["المطابقة للوظيفة","التوافق مع الشركة","الدرجة النهائية"][:len(scores)]
+                if ai_scores and len(ai_scores) >= 3:
+                    st.markdown("### 📊 ملخص الدرجات")
                     sc1, sc2 = st.columns(2)
                     with sc1:
-                        score_df = pd.DataFrame({"المعيار":labels,"الدرجة":scores[:len(labels)]})
-                        fig = px.bar(score_df, x='المعيار', y='الدرجة', title='تقييم المرشح',
-                            color='الدرجة', color_continuous_scale='RdYlGn', range_y=[0,100])
-                        fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350, coloraxis_showscale=False)
+                        # AI scores bar chart
+                        has_jd = st.session_state.get('_cv_has_jd', False)
+                        if has_jd:
+                            labels = ['المتطلبات الفنية','المتطلبات القيادية','التوافق الثقافي','النجاح 6 أشهر','البقاء سنتين','النهائية']
+                        else:
+                            labels = ['جودة الخبرات','المهارات التقنية','القدرات القيادية','إمكانية النمو','القيمة السوقية','الجاهزية','النهائية']
+                        labels = labels[:len(ai_scores)]
+                        colors = ['#27AE60' if s >= 70 else '#F39C12' if s >= 50 else '#E74C3C' for s in ai_scores[:len(labels)]]
+                        fig = go.Figure(go.Bar(x=ai_scores[:len(labels)], y=labels, orientation='h',
+                            marker_color=colors, text=ai_scores[:len(labels)], textposition='outside'))
+                        fig.update_layout(title='تقييم الذكاء الاصطناعي', height=350, xaxis_range=[0,110],
+                            font=dict(family="Noto Sans Arabic"))
+                        fig.add_vline(x=60, line_dash="dash", line_color="red", annotation_text="الحد الأدنى")
                         st.plotly_chart(fig, use_container_width=True)
+
                     with sc2:
-                        fig = go.Figure(go.Indicator(mode="gauge+number", value=scores[-1] if scores else 0,
-                            title={'text':'الدرجة النهائية'},
+                        # Final gauge
+                        final = ai_scores[-1] if ai_scores else 0
+                        fig = go.Figure(go.Indicator(mode="gauge+number", value=final,
+                            title={'text':'الحكم النهائي (AI)'},
                             gauge={'axis':{'range':[0,100]},'bar':{'color':'#E36414'},
-                                'steps':[{'range':[0,40],'color':'#EF4444'},{'range':[40,70],'color':'#F59E0B'},{'range':[70,100],'color':'#22C55E'}]}))
+                                'steps':[{'range':[0,40],'color':'#FADBD8'},{'range':[40,60],'color':'#FCF3CF'},
+                                    {'range':[60,80],'color':'#D5F5E3'},{'range':[80,100],'color':'#ABEBC6'}]}))
                         fig.update_layout(height=350)
                         st.plotly_chart(fig, use_container_width=True)
 
-                # Skills radar
-                skill_scores = re.findall(r'(\w[\w\s]+?)[\s:]+(\d{1,2})\s*(?:من\s*10|/10)', result)
-                if skill_scores:
-                    sk_df = pd.DataFrame(skill_scores, columns=['المهارة','الدرجة'])
+                    # Comparison: NLP vs AI
+                    pre_scores = st.session_state.get('_cv_scores', {})
+                    if pre_scores:
+                        st.markdown("### 🔄 مقارنة: التحليل الآلي vs الذكاء الاصطناعي")
+                        comp_df = pd.DataFrame({
+                            'المعيار': ['الدرجة النهائية'],
+                            'التحليل الآلي (NLP)': [pre_scores.get('overall', 0)],
+                            'الذكاء الاصطناعي (AI)': [ai_scores[-1] if ai_scores else 0],
+                        })
+                        diff = (ai_scores[-1] if ai_scores else 0) - pre_scores.get('overall', 0)
+                        comp_df['الفرق'] = [diff]
+                        st.dataframe(comp_df, use_container_width=True, hide_index=True)
+                        if abs(diff) > 15:
+                            st.warning(f"⚠️ فرق كبير ({diff:+d}) بين التحليل الآلي والذكاء الاصطناعي. يُنصح بمراجعة يدوية.")
+
+                # Skills radar from AI
+                skill_scores = re.findall(r'(\w[\w\s]+?)[\s:]+(\d{1,2})\s*[/من]\s*10', result)
+                if skill_scores and len(skill_scores) >= 3:
+                    sk_df = pd.DataFrame(skill_scores[:10], columns=['الكفاءة','الدرجة'])
                     sk_df['الدرجة'] = sk_df['الدرجة'].astype(int)
                     fig = go.Figure()
-                    vals = sk_df['الدرجة'].tolist() + [sk_df['الدرجة'].iloc[0]]
-                    cats = sk_df['المهارة'].tolist() + [sk_df['المهارة'].iloc[0]]
-                    fig.add_trace(go.Scatterpolar(r=vals, theta=cats, fill='toself', line=dict(color='#E36414')))
-                    fig.update_layout(polar=dict(radialaxis=dict(range=[0,10])), title='تقييم المهارات',
-                        font=dict(family="Noto Sans Arabic"), height=400)
+                    fig.add_trace(go.Scatterpolar(r=sk_df['الدرجة'].tolist()+[sk_df['الدرجة'].iloc[0]],
+                        theta=sk_df['الكفاءة'].tolist()+[sk_df['الكفاءة'].iloc[0]],
+                        fill='toself', line_color='#2A9D8F', fillcolor='rgba(42,157,143,0.15)'))
+                    fig.update_layout(polar=dict(radialaxis=dict(range=[0,10])),
+                        title='خريطة الكفاءات (تقييم AI)', height=450, font=dict(family="Noto Sans Arabic"))
                     st.plotly_chart(fig, use_container_width=True)
 
-                # Save to session for interview cross-reference
                 st.session_state['_last_cv_analysis'] = result
-
                 export_widget(pd.DataFrame([{"التحليل": result}]), "تحليل_السيرة_الذاتية", "cv1")
 
         # ===== INTERVIEW ANALYSIS =====
