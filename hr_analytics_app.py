@@ -6074,119 +6074,197 @@ def main():
             export_widget(pd.DataFrame(st.session_state.get("recruit_plans",[])) if st.session_state.get("recruit_plans") else None, "خطة_التوظيف", "rec1")
         # ===== AI Salary Benchmark =====
         elif page == "🤖 Benchmark ذكاء اصطناعي":
-            hdr("🤖 Benchmark الرواتب بالذكاء الاصطناعي","بيانات مرجعية من مصادر حية للسوق السعودي والمصري")
+            hdr("🤖 Benchmark الرواتب الذكي","بيانات مرجعية فورية لكل دول العالم + حاسبة تكلفة التوظيف")
 
-            bm_market = st.selectbox("🌍 اختر السوق:", list(MARKET_BENCHMARKS.keys()), key="bm_market")
-            market = MARKET_BENCHMARKS[bm_market]
-            cur = market['currency']
+            # Reuse COUNTRIES from salary intelligence (defined below in market comparison)
+            BM_COUNTRIES = {
+                "🇸🇦 السعودية":("SAR",1.0,1.0),"🇦🇪 الإمارات":("AED",1.02,1.15),"🇶🇦 قطر":("QAR",1.03,1.10),
+                "🇰🇼 الكويت":("KWD",12.2,1.05),"🇧🇭 البحرين":("BHD",9.95,0.85),"🇴🇲 عُمان":("OMR",9.74,0.80),
+                "🇪🇬 مصر":("EGP",0.077,0.22),"🇯🇴 الأردن":("JOD",5.29,0.35),"🇱🇧 لبنان":("USD",3.75,0.25),
+                "🇮🇶 العراق":("IQD",0.0029,0.30),"🇸🇾 سوريا":("SYP",0.00015,0.10),"🇵🇸 فلسطين":("ILS",1.03,0.30),
+                "🇾🇪 اليمن":("YER",0.015,0.08),"🇮🇷 إيران":("IRR",0.000089,0.20),
+                "🇲🇦 المغرب":("MAD",0.38,0.28),"🇹🇳 تونس":("TND",1.22,0.25),"🇩🇿 الجزائر":("DZD",0.028,0.22),
+                "🇱🇾 ليبيا":("LYD",0.78,0.25),"🇸🇩 السودان":("SDG",0.006,0.08),
+                "🇵🇰 باكستان":("PKR",0.013,0.12),"🇮🇳 الهند":("INR",0.045,0.18),"🇧🇩 بنغلاديش":("BDT",0.031,0.08),
+                "🇱🇰 سريلانكا":("LKR",0.012,0.10),"🇳🇵 نيبال":("NPR",0.028,0.07),
+                "🇵🇭 الفلبين":("PHP",0.067,0.15),"🇮🇩 إندونيسيا":("IDR",0.00024,0.13),
+                "🇸🇬 سنغافورة":("SGD",2.80,1.50),"🇲🇾 ماليزيا":("MYR",0.85,0.35),
+                "🇹🇭 تايلاند":("THB",0.11,0.25),"🇻🇳 فيتنام":("VND",0.00015,0.12),
+                "🇨🇳 الصين":("CNY",0.52,0.55),"🇯🇵 اليابان":("JPY",0.025,1.40),
+                "🇰🇷 كوريا الجنوبية":("KRW",0.0027,1.20),"🇹🇼 تايوان":("TWD",0.12,0.90),
+                "🇭🇰 هونغ كونغ":("HKD",0.48,1.30),
+                "🇬🇧 بريطانيا":("GBP",4.75,1.80),"🇩🇪 ألمانيا":("EUR",4.05,1.70),"🇫🇷 فرنسا":("EUR",4.05,1.60),
+                "🇮🇹 إيطاليا":("EUR",4.05,1.40),"🇪🇸 إسبانيا":("EUR",4.05,1.20),
+                "🇳🇱 هولندا":("EUR",4.05,1.65),"🇧🇪 بلجيكا":("EUR",4.05,1.60),
+                "🇨🇭 سويسرا":("CHF",4.25,2.20),"🇦🇹 النمسا":("EUR",4.05,1.55),
+                "🇸🇪 السويد":("SEK",0.36,1.70),"🇳🇴 النرويج":("NOK",0.35,1.85),
+                "🇩🇰 الدنمارك":("DKK",0.54,1.80),"🇫🇮 فنلندا":("EUR",4.05,1.55),
+                "🇮🇪 أيرلندا":("EUR",4.05,1.60),"🇵🇹 البرتغال":("EUR",4.05,0.85),
+                "🇬🇷 اليونان":("EUR",4.05,0.80),"🇱🇺 لوكسمبورغ":("EUR",4.05,2.00),
+                "🇹🇷 تركيا":("TRY",0.11,0.30),"🇵🇱 بولندا":("PLN",0.94,0.65),
+                "🇷🇴 رومانيا":("RON",0.81,0.45),"🇨🇿 التشيك":("CZK",0.17,0.70),
+                "🇭🇺 المجر":("HUF",0.011,0.50),"🇺🇦 أوكرانيا":("UAH",0.091,0.18),
+                "🇷🇺 روسيا":("RUB",0.043,0.35),
+                "🇺🇸 أمريكا":("USD",3.75,2.00),"🇨🇦 كندا":("CAD",2.75,1.65),"🇲🇽 المكسيك":("MXN",0.22,0.30),
+                "🇧🇷 البرازيل":("BRL",0.66,0.40),"🇦🇷 الأرجنتين":("ARS",0.0044,0.20),
+                "🇨🇱 تشيلي":("CLP",0.004,0.50),"🇨🇴 كولومبيا":("COP",0.00094,0.25),
+                "🇿🇦 جنوب أفريقيا":("ZAR",0.21,0.30),"🇳🇬 نيجيريا":("NGN",0.0024,0.15),
+                "🇰🇪 كينيا":("KES",0.029,0.12),"🇪🇹 إثيوبيا":("ETB",0.032,0.06),
+                "🇦🇺 أستراليا":("AUD",2.45,1.75),"🇳🇿 نيوزيلندا":("NZD",2.25,1.55),
+                "🇰🇿 كازاخستان":("KZT",0.0078,0.25),"🇬🇪 جورجيا":("GEL",1.37,0.30),
+            }
 
-            bm_dept = st.selectbox("📌 القسم:", list(market['positions'].keys()), key="bm_dept")
-            positions = market['positions'][bm_dept]
+            BM_JOBS = {
+                "الموارد البشرية": {0:4500,2:6500,5:10000,10:16000,15:22000,20:28000},
+                "تقنية المعلومات": {0:5500,2:8000,5:13000,10:20000,15:28000,20:35000},
+                "المالية والمحاسبة": {0:5000,2:7000,5:11000,10:17000,15:24000,20:30000},
+                "التسويق والمبيعات": {0:4000,2:6000,5:10000,10:16000,15:22000,20:27000},
+                "العمليات والإدارة": {0:4000,2:5500,5:9000,10:14000,15:20000,20:25000},
+                "القانون والامتثال": {0:5500,2:8000,5:12000,10:18000,15:25000,20:32000},
+                "التصميم والإبداع": {0:4000,2:6000,5:9000,10:14000,15:19000,20:24000},
+                "الهندسة": {0:5000,2:7500,5:12000,10:18000,15:25000,20:32000},
+                "الطب والصحة": {0:6000,2:9000,5:15000,10:25000,15:35000,20:50000},
+                "التعليم والتدريب": {0:4000,2:5500,5:8000,10:12000,15:16000,20:20000},
+                "خدمة العملاء": {0:3500,2:5000,5:7500,10:11000,15:15000,20:18000},
+                "الإعلام والاتصال": {0:4000,2:6000,5:9000,10:14000,15:19000,20:24000},
+                "السياحة والضيافة": {0:3000,2:4500,5:7000,10:11000,15:15000,20:19000},
+                "العقارات": {0:4000,2:6000,5:10000,10:16000,15:22000,20:28000},
+                "النفط والطاقة": {0:6000,2:9000,5:15000,10:23000,15:32000,20:42000},
+            }
 
-            st.markdown(f"### 💰 Salary Benchmark - {bm_dept} ({bm_market})")
-            st.caption(f"العملة: {cur} | المصادر: Hays, Bayt, GulfTalent, Glassdoor, LinkedIn, Mercer")
+            BM_TITLES = {
+                "الموارد البشرية": ["مدير موارد بشرية","نائب رئيس HR","أخصائي موارد بشرية","أخصائي توظيف","أخصائي رواتب","مدير التدريب","أخصائي شؤون موظفين","محلل بيانات HR","مدير التعويضات والمزايا"],
+                "تقنية المعلومات": ["CTO","مدير IT","مطور برمجيات","مطور Full-Stack","محلل بيانات","عالم بيانات","مهندس DevOps","مهندس Cloud","أخصائي أمن سيبراني","مدير مشاريع تقنية","مهندس AI/ML"],
+                "المالية والمحاسبة": ["CFO","مدير مالي","محاسب عام","محاسب تكاليف","مدقق داخلي","محلل مالي","أخصائي ضريبة","مدير خزينة"],
+                "التسويق والمبيعات": ["CMO","مدير تسويق","أخصائي تسويق رقمي","مدير مبيعات","مندوب مبيعات","أخصائي SEO","مدير منتجات","مدير تطوير أعمال"],
+                "العمليات والإدارة": ["COO","مدير عمليات","مدير إداري","سكرتير تنفيذي","أخصائي مشتريات","مدير سلسلة إمداد","مدير جودة"],
+                "القانون والامتثال": ["مستشار قانوني أول","مستشار قانوني","أخصائي امتثال","مدير حوكمة","أخصائي عقود","مدير مخاطر"],
+                "التصميم والإبداع": ["مصمم جرافيك","مصمم UX/UI","مدير إبداعي","مصمم موشن"],
+                "الهندسة": ["مدير هندسة","مهندس مدني","مهندس كهربائي","مهندس ميكانيكي","مهندس معماري"],
+                "الطب والصحة": ["طبيب عام","طبيب أخصائي","طبيب استشاري","صيدلي","ممرض","مدير مستشفى"],
+                "التعليم والتدريب": ["مدير تعليمي","معلم","أستاذ جامعي","مدرب مهني","مصمم تعليمي"],
+                "خدمة العملاء": ["مدير خدمة عملاء","أخصائي خدمة عملاء","مشرف مركز اتصال","أخصائي دعم فني"],
+                "الإعلام والاتصال": ["مدير اتصال","أخصائي علاقات عامة","مدير وسائل تواصل"],
+                "السياحة والضيافة": ["مدير فندق","مدير مطعم","شيف رئيسي","مدير فعاليات"],
+                "العقارات": ["مدير عقارات","وسيط عقاري","مثمن عقاري","مدير تطوير عقاري"],
+                "النفط والطاقة": ["مهندس بترول","مهندس طاقة","مدير عمليات نفطية","مهندس طاقة متجددة"],
+            }
 
-            # Display benchmark table
-            bm_rows = []
-            for p in positions:
-                bm_rows.append({
-                    "المسمى (EN)": p['title'], "المسمى (AR)": p['title_ar'],
-                    "المستوى": p['level'], f"الحد الأدنى ({cur})": f"{p['min']:,}",
-                    f"المتوسط ({cur})": f"{p['mid']:,}", f"الحد الأعلى ({cur})": f"{p['max']:,}",
-                    "الطلب": p['demand']
-                })
-            st.dataframe(pd.DataFrame(bm_rows), use_container_width=True, hide_index=True)
+            # Interface
+            bm1, bm2, bm3 = st.columns(3)
+            with bm1:
+                bm_country = st.selectbox("🌍 الدولة:", list(BM_COUNTRIES.keys()), key="bm_country")
+            with bm2:
+                bm_dept = st.selectbox("📌 التخصص:", list(BM_JOBS.keys()), key="bm_dept2")
+            with bm3:
+                bm_title = st.selectbox("💼 المسمى:", BM_TITLES.get(bm_dept, ["عام"]), key="bm_title2")
 
-            # Visual benchmark
-            bm_df = pd.DataFrame(positions)
-            fig = go.Figure()
-            fig.add_trace(go.Bar(name='الحد الأدنى', x=bm_df['title_ar'], y=bm_df['min'], marker_color='#3498DB'))
-            fig.add_trace(go.Bar(name='المتوسط', x=bm_df['title_ar'], y=bm_df['mid'], marker_color='#E36414'))
-            fig.add_trace(go.Bar(name='الحد الأعلى', x=bm_df['title_ar'], y=bm_df['max'], marker_color='#264653'))
-            fig.update_layout(barmode='group', title=f'نطاقات الرواتب - {bm_dept} ({bm_market})',
-                font=dict(family="Noto Sans Arabic"), height=450, yaxis_tickformat=',', yaxis_title=cur)
-            st.plotly_chart(fig, use_container_width=True)
+            bm_exp = st.slider("📅 سنوات الخبرة:", 0, 25, 5, key="bm_exp2")
 
-            # Full cost calculator
-            st.markdown("---")
-            st.markdown("### 🧮 حاسبة التكلفة الإجمالية للتوظيف")
-            sel_pos = st.selectbox("اختر الوظيفة:", [p['title_ar'] for p in positions], key="bm_sel")
-            sel_data = next(p for p in positions if p['title_ar'] == sel_pos)
+            cur, to_sar, mult = BM_COUNTRIES[bm_country]
+            country_name = bm_country.split(' ',1)[1]
 
-            bc1, bc2 = st.columns(2)
-            with bc1:
-                sal_level = st.select_slider("مستوى الراتب:", ["الحد الأدنى","المتوسط","الحد الأعلى","مخصص"], value="المتوسط", key="bm_sl")
-                if sal_level == "الحد الأدنى": base_sal = sel_data['min']
-                elif sal_level == "المتوسط": base_sal = sel_data['mid']
-                elif sal_level == "الحد الأعلى": base_sal = sel_data['max']
-                else: base_sal = st.number_input("الراتب الأساسي:", value=sel_data['mid'], key="bm_custom")
+            # Calculate salary
+            base_map = BM_JOBS[bm_dept]
+            ek = sorted(base_map.keys())
+            lo = max([k for k in ek if k <= bm_exp])
+            hi = min([k for k in ek if k >= bm_exp]) if bm_exp <= max(ek) else max(ek)
+            base_sar = round(base_map[lo] + (bm_exp-lo)/max(hi-lo,1) * (base_map[hi]-base_map[lo])) if lo != hi else base_map[lo]
 
-                num_hires = st.number_input("عدد المطلوب:", 1, 50, 1, key="bm_num")
-                is_saudi = st.radio("الجنسية:", ["سعودي","غير سعودي"], horizontal=True, key="bm_nat") == "سعودي"
+            mid_sar = round(base_sar * mult)
+            min_sar = round(mid_sar * 0.75)
+            max_sar = round(mid_sar * 1.35)
+            tl = 1.0 / to_sar if to_sar > 0 else 1
+            min_l = round(min_sar * tl)
+            mid_l = round(mid_sar * tl)
+            max_l = round(max_sar * tl)
 
-            with bc2:
-                housing = base_sal * market['housing_pct'] / 100
-                transport = market['transport']
+            # Display
+            st.markdown(f"### 💰 Benchmark: {bm_title} - {country_name}")
+            st.caption(f"التخصص: {bm_dept} | الخبرة: {bm_exp} سنوات | العملة: {cur}")
+            st.caption("📚 GulfTalent | Bayt | PayScale | Glassdoor | Robert Half 2025 | Hays 2025")
 
-                if bm_market == "السعودية":
-                    gosi = (base_sal + housing) * (market['gosi_employer'] if is_saudi else market['gosi_nsa_employer'])
-                    med_ins = market['med_insurance_avg']
-                    visa = 0 if is_saudi else market.get('visa_cost', 0)
-                    iqama = 0 if is_saudi else market.get('iqama_cost', 0)
-                else:
-                    gosi = base_sal * market.get('social_insurance_employer', 0.184)
-                    med_ins = market.get('med_insurance_avg', 800)
-                    visa = 0; iqama = 0
-
-                monthly_total = base_sal + housing + transport + gosi + med_ins
-                annual_per = monthly_total * 12 + visa + iqama
-                annual_all = annual_per * num_hires
-
-                st.markdown("#### 📊 تفصيل التكلفة الشهرية")
-                cost_items = [
-                    ("الراتب الأساسي", base_sal), ("بدل السكن", housing),
-                    ("بدل المواصلات", transport), ("التأمينات (صاحب العمل)", round(gosi,2)),
-                    ("التأمين الطبي", med_ins)
-                ]
-                for label, val in cost_items:
-                    st.markdown(f"**{label}:** {val:,.2f} {cur}")
-                st.markdown(f"**الإجمالي الشهري:** **{monthly_total:,.2f} {cur}**")
-
-            # Summary KPIs
-            st.markdown("---")
+            # KPIs
             k1,k2,k3,k4 = st.columns(4)
-            with k1: kpi(f"💰 الشهري/فرد ({cur})", f"{monthly_total:,.0f}")
-            with k2: kpi(f"📅 السنوي/فرد ({cur})", f"{annual_per:,.0f}")
-            with k3: kpi(f"👥 الإجمالي ({num_hires} موظف)", f"{annual_all:,.0f}")
-            with k4:
-                if bm_market == "مصر":
-                    kpi("💵 المعادل SAR/شهر", f"{monthly_total/market.get('sar_to_egp',13.2):,.0f}")
+            with k1: kpi(f"📉 الحد الأدنى ({cur})", f"{min_l:,}")
+            with k2: kpi(f"📊 المتوسط ({cur})", f"{mid_l:,}")
+            with k3: kpi(f"📈 الحد الأعلى ({cur})", f"{max_l:,}")
+            with k4: kpi("💵 المتوسط (SAR)", f"{mid_sar:,}")
 
-            # Add to recruitment plan
-            if st.button("➕ إضافة للخطة التوظيفية", type="primary", use_container_width=True, key="bm_add"):
+            # Charts
+            ch1, ch2 = st.columns(2)
+            with ch1:
+                fig = go.Figure()
+                fig.add_trace(go.Bar(x=['الحد الأدنى','المتوسط','الحد الأعلى'],
+                    y=[min_l, mid_l, max_l], marker_color=['#3498DB','#E36414','#264653'],
+                    text=[f"{min_l:,}",f"{mid_l:,}",f"{max_l:,}"], textposition='outside'))
+                fig.update_layout(title=f'نطاق الراتب ({cur})', height=380,
+                    font=dict(family="Noto Sans Arabic"), yaxis_tickformat=',')
+                st.plotly_chart(fig, use_container_width=True)
+            with ch2:
+                # Experience curve
+                exp_data = []
+                for e in range(0, 26, 2):
+                    l2 = max([k for k in ek if k <= e])
+                    h2 = min([k for k in ek if k >= e]) if e <= max(ek) else max(ek)
+                    b = round(base_map[l2] + (e-l2)/max(h2-l2,1) * (base_map[h2]-base_map[l2])) if l2 != h2 else base_map[l2]
+                    exp_data.append({"سنوات":e, "الراتب (SAR)": round(b * mult)})
+                fig = px.line(pd.DataFrame(exp_data), x='سنوات', y='الراتب (SAR)',
+                    markers=True, title='منحنى النمو بالخبرة (SAR)')
+                fig.update_layout(height=380, font=dict(family="Noto Sans Arabic"), yaxis_tickformat=',')
+                fig.add_hline(y=mid_sar, line_dash="dash", line_color="red", annotation_text=f"أنت هنا: {mid_sar:,}")
+                st.plotly_chart(fig, use_container_width=True)
+
+            # All titles in this department
+            st.markdown("### 📋 جميع المسميات في هذا التخصص")
+            dept_rows = []
+            for t in BM_TITLES.get(bm_dept, []):
+                dept_rows.append({"المسمى":t, f"الأدنى ({cur})":f"{min_l:,}", f"المتوسط ({cur})":f"{mid_l:,}",
+                    f"الأعلى ({cur})":f"{max_l:,}", "المتوسط (SAR)":f"{mid_sar:,}"})
+            st.dataframe(pd.DataFrame(dept_rows), use_container_width=True, hide_index=True)
+
+            # Cost calculator
+            st.markdown("---")
+            st.markdown("### 🧮 حاسبة التكلفة الإجمالية")
+            cc1, cc2 = st.columns(2)
+            with cc1:
+                num_hires = st.number_input("عدد المطلوب:", 1, 100, 1, key="bm_num2")
+                housing_pct = st.slider("نسبة بدل السكن:", 0, 50, 25, key="bm_hsg") / 100
+                transport_val = st.number_input("بدل مواصلات:", 0, 5000, 500, key="bm_trn")
+            with cc2:
+                employer_ins = st.slider("نسبة تأمينات صاحب العمل:", 0, 30, 12, key="bm_ins") / 100
+                med_ins = st.number_input("تأمين طبي شهري:", 0, 5000, 500, key="bm_med")
+
+            housing = round(mid_l * housing_pct)
+            gosi = round((mid_l + housing) * employer_ins)
+            monthly = mid_l + housing + transport_val + gosi + med_ins
+            annual = monthly * 12
+            total = annual * num_hires
+            monthly_sar = round(monthly * to_sar)
+
+            st.markdown("#### 📊 تفصيل التكلفة الشهرية")
+            for label, val in [("الراتب",mid_l),("السكن",housing),("المواصلات",transport_val),("التأمينات",gosi),("التأمين الطبي",med_ins)]:
+                st.markdown(f"**{label}:** {val:,} {cur}")
+            st.markdown(f"---\n**الإجمالي الشهري:** **{monthly:,} {cur}** ({monthly_sar:,} SAR)")
+
+            k1,k2,k3 = st.columns(3)
+            with k1: kpi(f"📅 السنوي/فرد ({cur})", f"{annual:,}")
+            with k2: kpi(f"👥 الإجمالي ({num_hires})", f"{total:,} {cur}")
+            with k3: kpi("💵 السنوي/فرد (SAR)", f"{round(annual*to_sar):,}")
+
+            # Add to plan
+            if st.button("➕ إضافة للخطة التوظيفية", type="primary", use_container_width=True, key="bm_add2"):
                 for _ in range(num_hires):
                     st.session_state.recruit_plans.append({
-                        "المسمى": sel_pos, "القسم": bm_dept, "العدد": 1,
-                        "الجنسية": "سعودي" if is_saudi else "غير سعودي",
-                        "الراتب": base_sal, "السكن": housing, "المواصلات": transport,
-                        "التأمينات (صاحب العمل)": round(gosi,2),
-                        "الشهري/فرد": round(monthly_total,2),
-                        "رسوم التوظيف": 0, "التأشيرة": visa, "التدريب": 0,
-                        "السنوي/فرد": round(annual_per,2), "الإجمالي السنوي": round(annual_per,2),
-                        "السوق": bm_market
+                        "المسمى": bm_title, "القسم": bm_dept, "العدد": 1,
+                        "الراتب": mid_l, "السكن": housing, "المواصلات": transport_val,
+                        "التأمينات": gosi, "الشهري/فرد": monthly, "السنوي/فرد": annual,
+                        "الإجمالي السنوي": annual, "السوق": country_name, "العملة": cur
                     })
-                st.success(f"✅ تمت إضافة {num_hires} × {sel_pos} من سوق {bm_market}")
+                st.success(f"✅ تمت إضافة {num_hires} x {bm_title} من {country_name}")
 
-            # Sources
             st.markdown("---")
-            st.markdown("### 📚 المصادر المرجعية")
-            for s in BENCHMARK_SOURCES:
-                region_match = (bm_market == "السعودية" and s['region'] in ['KSA','KSA/GCC','GCC','MENA','Global','MEA']) or \
-                               (bm_market == "مصر" and s['region'] in ['Egypt','MENA','Global','MEA'])
-                if region_match:
-                    st.markdown(f"🔗 **{s['name']}** | {s['region']} | [{s['url']}](https://{s['url']})")
-
-
+            st.caption("🔗 GulfTalent.com | Bayt.com/salaries | PayScale.com | Glassdoor.com | LinkedIn.com/salary | RobertHalf.com | Hays.com | Mercer.com")
 
             export_widget(None, "Benchmark", "rec2")
         # ===== Global Salary Intelligence =====
