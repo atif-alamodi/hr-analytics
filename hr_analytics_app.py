@@ -2527,7 +2527,6 @@ def login_page():
                     st.session_state.user_sections = "all"
                     st.session_state.user_email = ""
                     st.session_state.user_dept = ""
-                    st.rerun()
 
         with forgot_tab:
             st.markdown("#### 🔑 استرجاع كلمة المرور عبر البريد الإلكتروني")
@@ -2727,7 +2726,6 @@ def user_management_page():
                         smtp_cfg.get('sender_name', 'HR'))
                     if ok: st.success(f"📧 تم إرسال بيانات الحساب إلى {new_email}")
                     else: st.warning(f"⚠️ لم يتم إرسال البريد: {msg}")
-            st.rerun()
         else:
             st.error("يرجى تعبئة الاسم واسم المستخدم وكلمة المرور على الأقل")
 
@@ -2745,7 +2743,6 @@ def user_management_page():
             st.session_state.users_db[edit_user]["dept"] = upd_dept
             db_save_users(st.session_state.users_db)
             st.success(f"✅ تم تحديث بيانات {edit_user}")
-            st.rerun()
 
     # Delete user
     st.markdown("### 🗑️ حذف مستخدم")
@@ -2755,7 +2752,6 @@ def user_management_page():
             del st.session_state.users_db[del_user]
             db_save_users(st.session_state.users_db)
             st.success(f"✅ تم حذف {del_user}")
-            st.rerun()
 
 # ===== SURVEY TEMPLATES =====
 SURVEY_TEMPLATES = {
@@ -3243,7 +3239,6 @@ def main():
                     conn.commit()
                     conn.close()
                 except: pass
-                st.rerun()
         else:
             # Try restoring file from cloud DB (only once)
             if '_cloud_file_checked' not in st.session_state:
@@ -3267,6 +3262,20 @@ def main():
                         conn.close()
                 except: pass
 
+
+    # ===== AI API FUNCTION (must be before any usage) =====
+    def call_ai_api(system_prompt, user_message, chat_history=None, model_type="general", provider=None):
+        try:
+            if '_orchestrator' not in st.session_state:
+                st.session_state._orchestrator = _init_orchestrator()
+                st.session_state._knowledge_engine = _init_knowledge()
+                st.session_state._learning_system = _init_learning()
+            return st.session_state._orchestrator.call(system_prompt, user_message, chat_history, model_type)
+        except Exception as e:
+            return None, f"⚠️ {e}"
+
+    def call_claude_api(system_prompt, user_message, chat_history=None, model_type="general"):
+        return call_ai_api(system_prompt, user_message, chat_history, model_type)
 
     # ===== LOAD DATA =====
     emp = pd.DataFrame()
@@ -5496,7 +5505,6 @@ def main():
                 for d in DEFAULT_BUDGET:
                     row = dict(d); row['trainees'] = 5; row['trainee_names'] = ''; row['job_titles'] = ''
                     st.session_state.custom_budget.append(row)
-                st.rerun()
 
 
 
@@ -6027,7 +6035,6 @@ def main():
                     "الإجمالي السنوي": round(rp_annual_total, 2)
                 })
                 st.success(f"✅ تمت إضافة {rp_title} ({rp_count})")
-                st.rerun()
 
             # Display plan
             if st.session_state.recruit_plans:
@@ -6061,7 +6068,6 @@ def main():
 
                 if st.button("🗑️ مسح الخطة بالكامل", key="rpclr"):
                     st.session_state.recruit_plans = []
-                    st.rerun()
 
 
 
@@ -6170,7 +6176,6 @@ def main():
                         "السوق": bm_market
                     })
                 st.success(f"✅ تمت إضافة {num_hires} × {sel_pos} من سوق {bm_market}")
-                st.rerun()
 
             # Sources
             st.markdown("---")
@@ -6236,75 +6241,84 @@ def main():
             }
 
             # === Interface ===
-            st.markdown("### 🔍 اختر الدولة والوظيفة")
-            sc1, sc2, sc3 = st.columns(3)
-            with sc1:
-                country1 = st.selectbox("الدولة الأولى:", list(COUNTRIES.keys()), index=0, key="gc1")
-            with sc2:
-                country2 = st.selectbox("الدولة الثانية (للمقارنة):", list(COUNTRIES.keys()), index=6, key="gc2")
-            with sc3:
-                job_cat = st.selectbox("التخصص:", list(JOB_CATEGORIES.keys()), key="gjc")
+            st.markdown("### 🔍 اختر الدول والوظيفة")
+            countries_list = list(COUNTRIES.keys())
+            selected_countries = st.multiselect("اختر حتى 5 دول للمقارنة:", countries_list,
+                default=[countries_list[0], countries_list[6]], max_selections=5, key="gc_multi")
 
-            job_title = st.selectbox("المسمى الوظيفي:", JOB_CATEGORIES[job_cat], key="gjt")
+            if not selected_countries:
+                st.warning("اختر دولة واحدة على الأقل")
+                return
+
+            sc1, sc2 = st.columns(2)
+            with sc1:
+                job_cat = st.selectbox("التخصص:", list(JOB_CATEGORIES.keys()), key="gjc")
+            with sc2:
+                job_title = st.selectbox("المسمى الوظيفي:", JOB_CATEGORIES[job_cat], key="gjt")
+
             exp_years = st.slider("سنوات الخبرة:", 0, 25, 5, key="gexp")
 
-            c1_info = COUNTRIES[country1]
-            c2_info = COUNTRIES[country2]
-
             # Country info cards
-            ci1, ci2 = st.columns(2)
-            with ci1:
-                st.markdown(f"**{country1}**")
-                st.caption(f"العملة: {c1_info['currency']} | المنطقة: {c1_info['region']} | الحد الأدنى: {c1_info['min_wage']}")
-            with ci2:
-                st.markdown(f"**{country2}**")
-                st.caption(f"العملة: {c2_info['currency']} | المنطقة: {c2_info['region']} | الحد الأدنى: {c2_info['min_wage']}")
+            info_cols = st.columns(min(len(selected_countries), 5))
+            for i, country in enumerate(selected_countries):
+                ci = COUNTRIES[country]
+                with info_cols[i]:
+                    st.markdown(f"**{country}**")
+                    st.caption(f"{ci['currency']} | {ci['region']}\n{ci['min_wage']}")
 
             if st.button("🔍 كشف الأجور والمقارنة", type="primary", use_container_width=True, key="gsb"):
                 with st.spinner("جاري البحث عن بيانات الأجور بالذكاء الاصطناعي..."):
 
-                    salary_prompt = f"""أنت خبير تعويضات ومزايا (Compensation & Benefits Expert) بخبرة 20 سنة مع Mercer وRadford وPayScale.
+                    countries_text = "\n".join([f"- {c.split(' ',1)[1]} (العملة: {COUNTRIES[c]['currency']})" for c in selected_countries])
+                    countries_names = [c.split(' ',1)[1] for c in selected_countries]
 
-**المطلوب:** أعط بيانات رواتب دقيقة وواقعية لعام 2025 للوظيفة التالية في الدولتين:
+                    salary_prompt = f"""أنت خبير تعويضات ومزايا (Compensation & Benefits Expert) معتمد من Mercer وWillis Towers Watson.
+
+**المطلوب:** بيانات رواتب دقيقة لعام 2025 لهذه الوظيفة في {len(selected_countries)} دول.
 
 **الوظيفة:** {job_title}
 **التخصص:** {job_cat}
 **سنوات الخبرة:** {exp_years}
-**الدولة 1:** {country1.split(' ',1)[1]} (العملة: {c1_info['currency']})
-**الدولة 2:** {country2.split(' ',1)[1]} (العملة: {c2_info['currency']})
 
-أعط الأرقام بالعملة المحلية لكل دولة. كن دقيقاً ومبنياً على بيانات السوق الفعلية.
+**الدول المطلوبة:**
+{countries_text}
 
-أجب بالعربية بالتنسيق التالي بالضبط:
+كن دقيقاً. أعط الأرقام بالعملة المحلية لكل دولة وبالريال السعودي (SAR) للمقارنة.
 
-## الراتب في {country1.split(' ',1)[1]}
-- الحد الأدنى: [رقم] {c1_info['currency']}
-- المتوسط: [رقم] {c1_info['currency']}
-- الحد الأعلى: [رقم] {c1_info['currency']}
-- البدلات الشائعة: (سكن، مواصلات، تأمين...)
-- التكلفة الإجمالية على الشركة: [رقم] {c1_info['currency']} شهرياً
-- ملاحظات السوق: (العرض والطلب، اتجاه الرواتب)
+أجب بالعربية بهذا التنسيق:
 
-## الراتب في {country2.split(' ',1)[1]}
-- الحد الأدنى: [رقم] {c2_info['currency']}
-- المتوسط: [رقم] {c2_info['currency']}
-- الحد الأعلى: [رقم] {c2_info['currency']}
-- البدلات الشائعة: (سكن، مواصلات، تأمين...)
-- التكلفة الإجمالية على الشركة: [رقم] {c2_info['currency']} شهرياً
-- ملاحظات السوق: (العرض والطلب، اتجاه الرواتب)
+{"".join([f'''
+## {c.split(' ',1)[1]}
+- الحد الأدنى: [رقم] {COUNTRIES[c]['currency']} ([رقم] SAR معادل)
+- المتوسط: [رقم] {COUNTRIES[c]['currency']} ([رقم] SAR معادل)
+- الحد الأعلى: [رقم] {COUNTRIES[c]['currency']} ([رقم] SAR معادل)
+- التكلفة الإجمالية الشهرية: [رقم] {COUNTRIES[c]['currency']}
+- البدلات: (سكن، مواصلات، تأمين...)
+- حالة السوق: (طلب مرتفع/متوسط/منخفض)
+''' for c in selected_countries])}
 
-## المقارنة
-- الفرق بالنسبة المئوية: X%
-- أيهما أوفر للشركة ولماذا
-- جودة الكفاءات المتاحة في كل سوق
+## جدول المقارنة
+| الدولة | المتوسط (عملة محلية) | المتوسط (SAR) | التكلفة الإجمالية (SAR) | حالة السوق |
+{chr(10).join(['| ' + c.split(' ',1)[1] + ' | | | | |' for c in selected_countries])}
 
-## التوصية
-- أين يُفضل التوظيف ولماذا (3 أسباب)
-- متى يكون التوظيف من {country1.split(' ',1)[1]} أفضل؟
-- متى يكون التوظيف من {country2.split(' ',1)[1]} أفضل؟
+## الترتيب من الأوفر للأغلى (بالريال السعودي)
+1. الأوفر: ...
+2. ...
 
-## مصادر البيانات
-اذكر 3-5 مصادر يمكن التحقق منها (مثل: Glassdoor, LinkedIn Salary, PayScale, GulfTalent, Bayt, Robert Half)"""
+## التوصية الذكية
+- أفضل دولة للتوظيف: ... ولماذا (3 أسباب)
+- أفضل نموذج: (توظيف محلي / عن بعد / مختلط)
+- نصائح للتفاوض على الراتب في كل دولة
+
+## مصادر البيانات المرجعية
+اذكر مصادر حقيقية يمكن التحقق منها:
+- Glassdoor.com (ابحث: {job_title} salary in [country])
+- LinkedIn Salary Insights
+- PayScale.com
+- GulfTalent.com (للخليج)
+- Bayt.com (للشرق الأوسط)
+- Robert Half Salary Guide 2025
+- Hays Salary Guide 2025"""
 
                     try:
                         response, error = call_ai_api(salary_prompt, salary_prompt, model_type="hr")
@@ -6313,57 +6327,138 @@ def main():
 
                     if response:
                         st.session_state['_salary_result'] = response
-                        st.session_state['_salary_c1'] = country1
-                        st.session_state['_salary_c2'] = country2
+                        st.session_state['_salary_countries'] = selected_countries
                         st.session_state['_salary_job'] = job_title
+                        st.session_state['_salary_cat'] = job_cat
+                        st.session_state['_salary_exp'] = exp_years
                     elif error:
                         st.error(f"❌ {error}")
-                        st.info("💡 أعد مفتاح API في الإعدادات.")
+                        st.info("💡 أعد مفتاح API في ⚙️ الإعدادات (Gemini مجاني أو Groq)")
 
-            # Display results
+            # ===== Display Results =====
             if '_salary_result' in st.session_state:
                 result = st.session_state['_salary_result']
+                sel_countries = st.session_state.get('_salary_countries', [])
                 st.markdown("---")
                 st.markdown(f"### 💰 نتائج كشف الأجور: {st.session_state.get('_salary_job','')}")
+
+                # Sources banner
+                st.caption("📚 المصادر المرجعية: Glassdoor | LinkedIn Salary | PayScale | GulfTalent | Bayt | Robert Half 2025 | Hays 2025")
+
                 st.markdown(result)
 
-                # Extract numbers for charts
+                # Extract SAR numbers for charts
                 import re
-                numbers = re.findall(r'([\d,]+)\s*(?:SAR|AED|QAR|EGP|USD|GBP|EUR|INR|PKR|' + c1_info['currency'] + '|' + c2_info['currency'] + ')', result)
-                numbers = [int(n.replace(',','')) for n in numbers if n.replace(',','').isdigit()]
+                sar_numbers = re.findall(r'([\d,]+)\s*SAR', result)
+                sar_numbers = [int(n.replace(',','')) for n in sar_numbers if n.replace(',','').isdigit() and int(n.replace(',','')) > 100]
 
-                if len(numbers) >= 6:
-                    st.markdown("### 📊 الرسوم البيانية")
-                    gc1, gc2 = st.columns(2)
-                    with gc1:
+                if sar_numbers and sel_countries:
+                    st.markdown("### 📊 الرسوم البيانية التفاعلية")
+
+                    # Chart 1: Bar comparison
+                    ch1, ch2 = st.columns(2)
+                    with ch1:
+                        # Group SAR numbers by country (3 per country: min, mid, max)
+                        colors = ['#E74C3C','#27AE60','#3498DB','#F39C12','#9B59B6']
                         fig = go.Figure()
-                        fig.add_trace(go.Bar(name=st.session_state.get('_salary_c1',''), x=['الأدنى','المتوسط','الأعلى'],
-                            y=numbers[:3], marker_color='#27AE60', text=numbers[:3], textposition='outside'))
-                        fig.add_trace(go.Bar(name=st.session_state.get('_salary_c2',''), x=['الأدنى','المتوسط','الأعلى'],
-                            y=numbers[3:6], marker_color='#3498DB', text=numbers[3:6], textposition='outside'))
-                        fig.update_layout(barmode='group', title='مقارنة نطاقات الرواتب', height=400,
+                        per_country = min(3, len(sar_numbers) // max(len(sel_countries),1))
+                        for i, country in enumerate(sel_countries):
+                            start = i * per_country
+                            vals = sar_numbers[start:start+per_country]
+                            if vals:
+                                labels = ['الأدنى','المتوسط','الأعلى'][:len(vals)]
+                                fig.add_trace(go.Bar(name=country.split(' ',1)[1], x=labels, y=vals,
+                                    marker_color=colors[i % len(colors)], text=vals, textposition='outside'))
+                        fig.update_layout(barmode='group', title='مقارنة نطاقات الرواتب (SAR)', height=420,
                             font=dict(family="Noto Sans Arabic"), yaxis_tickformat=',')
                         st.plotly_chart(fig, use_container_width=True)
 
-                    with gc2:
-                        if len(numbers) >= 2:
+                    # Chart 2: Pie of averages
+                    with ch2:
+                        avg_per_country = []
+                        for i in range(len(sel_countries)):
+                            start = i * per_country
+                            vals = sar_numbers[start:start+per_country]
+                            avg_per_country.append(vals[1] if len(vals) > 1 else (vals[0] if vals else 0))
+                        if avg_per_country:
                             fig = go.Figure(data=[go.Pie(
-                                labels=[st.session_state.get('_salary_c1',''), st.session_state.get('_salary_c2','')],
-                                values=[numbers[1], numbers[4] if len(numbers)>4 else numbers[1]],
-                                hole=0.4, marker_colors=['#27AE60','#3498DB'])])
-                            fig.update_layout(title='مقارنة المتوسطات', height=400, font=dict(family="Noto Sans Arabic"))
+                                labels=[c.split(' ',1)[1] for c in sel_countries],
+                                values=avg_per_country, hole=0.4,
+                                marker_colors=colors[:len(sel_countries)])])
+                            fig.update_layout(title='توزيع متوسط الرواتب (SAR)', height=420,
+                                font=dict(family="Noto Sans Arabic"))
                             st.plotly_chart(fig, use_container_width=True)
 
-                # Export
-                if st.button("📥 تصدير التقرير Excel", key="gs_exp"):
+                    # Chart 3: Radar comparison
+                    ch3, ch4 = st.columns(2)
+                    with ch3:
+                        if len(sel_countries) >= 2 and avg_per_country:
+                            max_val = max(avg_per_country) if avg_per_country else 1
+                            norm_vals = [round(v/max_val*100) for v in avg_per_country]
+                            dims = [c.split(' ',1)[1] for c in sel_countries]
+                            fig = go.Figure()
+                            fig.add_trace(go.Scatterpolar(r=norm_vals+[norm_vals[0]], theta=dims+[dims[0]],
+                                fill='toself', line_color='#E36414', fillcolor='rgba(227,100,20,0.2)', name='الراتب النسبي'))
+                            fig.update_layout(polar=dict(radialaxis=dict(range=[0,100])),
+                                title='المقارنة النسبية (100 = الأعلى)', height=420,
+                                font=dict(family="Noto Sans Arabic"))
+                            st.plotly_chart(fig, use_container_width=True)
+
+                    # Chart 4: Cost ranking
+                    with ch4:
+                        if avg_per_country:
+                            rank_df = pd.DataFrame({
+                                'الدولة': [c.split(' ',1)[1] for c in sel_countries],
+                                'المتوسط (SAR)': avg_per_country
+                            }).sort_values('المتوسط (SAR)')
+                            fig = px.bar(rank_df, y='الدولة', x='المتوسط (SAR)', orientation='h',
+                                color='المتوسط (SAR)', color_continuous_scale='RdYlGn_r',
+                                text='المتوسط (SAR)')
+                            fig.update_layout(title='الترتيب: من الأوفر للأغلى', height=420,
+                                font=dict(family="Noto Sans Arabic"), coloraxis_showscale=False,
+                                yaxis={'categoryorder':'total ascending'})
+                            fig.update_traces(textposition='outside')
+                            st.plotly_chart(fig, use_container_width=True)
+
+                # Export report
+                st.markdown("---")
+                if st.button("📥 تصدير تقرير كشف الأجور Excel", key="gs_exp"):
                     ox = io.BytesIO()
                     with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
-                        pd.DataFrame([{"التحليل": result}]).to_excel(w, sheet_name='Salary Intelligence', index=False)
-                        pd.DataFrame([{"الدولة":k,"العملة":v['currency'],"المنطقة":v['region'],"الحد الأدنى":v['min_wage']}
-                            for k,v in COUNTRIES.items()]).to_excel(w, sheet_name='Countries Database', index=False)
-                    st.download_button("📥 تحميل", data=ox.getvalue(),
-                        file_name=f"Salary_Intelligence_{datetime.now().strftime('%Y%m%d')}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                        wb = w.book
+                        hf = wb.add_format({'bold':True,'bg_color':'#0F4C5C','font_color':'white','align':'center','border':1})
+
+                        # Sheet 1: AI Report
+                        ws1 = wb.add_worksheet('Salary Report')
+                        ws1.set_column('A:A', 100)
+                        ws1.write(0, 0, f"كشف الأجور: {st.session_state.get('_salary_job','')} | {st.session_state.get('_salary_cat','')}", hf)
+                        ws1.write(1, 0, f"سنوات الخبرة: {st.session_state.get('_salary_exp','')}")
+                        ws1.write(2, 0, f"الدول: {', '.join([c.split(' ',1)[1] for c in sel_countries])}")
+                        ws1.write(3, 0, f"التاريخ: {datetime.now().strftime('%Y-%m-%d')}")
+                        for i, line in enumerate(result.split('\n')):
+                            ws1.write(5+i, 0, line)
+
+                        # Sheet 2: Countries DB
+                        pd.DataFrame([{"الدولة":k,"العملة":v['currency'],"سعر الصرف (SAR)":v['to_sar'],
+                            "المنطقة":v['region'],"الحد الأدنى":v['min_wage']} for k,v in COUNTRIES.items()
+                        ]).to_excel(w, sheet_name='Countries Database', index=False)
+
+                        # Sheet 3: Sources
+                        sources = pd.DataFrame([
+                            {"المصدر":"Glassdoor","الرابط":"glassdoor.com","النوع":"مراجعات رواتب","التغطية":"عالمي"},
+                            {"المصدر":"LinkedIn Salary","الرابط":"linkedin.com/salary","النوع":"بيانات أعضاء","التغطية":"عالمي"},
+                            {"المصدر":"PayScale","الرابط":"payscale.com","النوع":"استبيانات رواتب","التغطية":"عالمي"},
+                            {"المصدر":"GulfTalent","الرابط":"gulftalent.com","النوع":"سوق الخليج","التغطية":"الخليج والشرق الأوسط"},
+                            {"المصدر":"Bayt","الرابط":"bayt.com/salaries","النوع":"سوق عربي","التغطية":"الشرق الأوسط وشمال أفريقيا"},
+                            {"المصدر":"Robert Half 2025","الرابط":"roberthalf.com","النوع":"دليل رواتب سنوي","التغطية":"عالمي"},
+                            {"المصدر":"Hays Salary Guide","الرابط":"hays.com","النوع":"دليل رواتب سنوي","التغطية":"عالمي"},
+                        ])
+                        sources.to_excel(w, sheet_name='Sources', index=False)
+
+                    st.download_button("📥 تحميل التقرير", data=ox.getvalue(),
+                        file_name=f"Salary_Intelligence_{st.session_state.get('_salary_job','')}_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        type="primary", use_container_width=True)
 
         elif page == "📊 متابعة التوظيف":
             hdr("📊 متابعة عمليات التوظيف", "تتبع مراحل التوظيف والتكاليف والوقت المستغرق")
@@ -6393,7 +6488,6 @@ def main():
                     "التقدم %": round((STAGES.index(tr_stage) + 1) / len(STAGES) * 100)
                 })
                 st.success(f"✅ تمت إضافة {tr_title}")
-                st.rerun()
 
             if st.session_state.recruit_tracking:
                 st.markdown("---")
@@ -6423,7 +6517,6 @@ def main():
 
                 if st.button("🗑️ مسح المتابعة", key="trclr"):
                     st.session_state.recruit_tracking = []
-                    st.rerun()
 
 
 
@@ -7277,7 +7370,6 @@ def main():
                 }
                 st.session_state.ats_candidates.append(candidate)
                 st.success(f"✅ تم إضافة {cand_name} (درجة AI: {ai_score}/100)")
-                st.rerun()
 
             # Display candidates
             if st.session_state.ats_candidates:
@@ -7305,7 +7397,6 @@ def main():
                             new_stage = st.selectbox("المرحلة:", STAGES, index=STAGES.index(row['المرحلة']) if row['المرحلة'] in STAGES else 0, key=f"stg_{i}")
                             if new_stage != row['المرحلة']:
                                 st.session_state.ats_candidates[i]['المرحلة'] = new_stage
-                                st.rerun()
 
                 # Charts
                 ch1, ch2 = st.columns(2)
@@ -7330,7 +7421,7 @@ def main():
                 export_widget(cand_df, "ATS_المتقدمين", "ats1")
 
                 if st.button("🗑️ مسح كل المتقدمين", key="ats_clear"):
-                    st.session_state.ats_candidates = []; st.rerun()
+                    st.session_state.ats_candidates = []
 
         elif page == "📥 تصدير التوظيف":
             hdr("📥 تصدير بيانات التوظيف")
@@ -7550,7 +7641,6 @@ def main():
                         if ok: st.success(f"📧 تم إرسال رسالة ترحيب إلى {ob_email}")
 
                     st.success(f"✅ تم إنشاء خطة Onboarding لـ {ob_name}")
-                    st.rerun()
                 else:
                     st.error("يرجى إدخال الاسم والمسمى الوظيفي")
 
@@ -7787,7 +7877,6 @@ def main():
                             conn.close()
                         except: pass
                         st.success("✅ تم حفظ التقييم بنجاح")
-                        st.rerun()
 
             # ===== Survey Results =====
             if surveys:
@@ -8220,7 +8309,6 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                     with open(template_path, 'wb') as f:
                         f.write(uploaded_tmpl.getvalue())
                     st.success("✅ تم حفظ القالب")
-                    st.rerun()
                 else:
                     return
 
@@ -8762,7 +8850,6 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                         _upsert_config(c, "saved_contracts", "[]")
                         conn.commit(); conn.close()
                     except: pass
-                    st.rerun()
 
 
 
@@ -8909,19 +8996,6 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
         def get_learned_context(query, model_type, top_k=3):
             return st.session_state._learning_system.get_relevant_history(query, model_type, top_k)
 
-        def call_ai_api(system_prompt, user_message, chat_history=None, model_type="general", provider=None):
-            try:
-                if '_orchestrator' not in st.session_state:
-                    st.session_state._orchestrator = _init_orchestrator()
-                    st.session_state._knowledge_engine = _init_knowledge()
-                    st.session_state._learning_system = _init_learning()
-                return st.session_state._orchestrator.call(system_prompt, user_message, chat_history, model_type)
-            except Exception as e:
-                return None, f"⚠️ يرجى المحاولة مرة أخرى"
-
-        def call_claude_api(system_prompt, user_message, chat_history=None, model_type="general"):
-            return call_ai_api(system_prompt, user_message, chat_history, model_type)
-
         # API Keys check + auto-load (single check per session)
         if '_ai_keys_loaded' not in st.session_state:
             st.session_state._ai_keys_loaded = True
@@ -8968,26 +9042,26 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
                 gm_input = st.text_input("🔑 Gemini API Key:", type="password", key="gm_key_input",
                     help="مجاني من https://aistudio.google.com/apikey")
                 if gm_input:
-                    st.session_state.gemini_api_key = gm_input; st.rerun()
+                    st.session_state.gemini_api_key = gm_input
                 st.caption("Gemini 2.0 Flash مجاني 60 طلب/دقيقة")
             with kc2:
                 st.markdown("### 🟠 OpenRouter (مجاني)")
                 or_input = st.text_input("🔑 OpenRouter Key:", type="password", key="or_key_input",
                     help="مجاني من https://openrouter.ai/")
                 if or_input:
-                    st.session_state.openrouter_api_key = or_input; st.rerun()
+                    st.session_state.openrouter_api_key = or_input
                 st.caption("Llama 3.3 70B مجاني")
             with st.expander("🔧 مزودين إضافيين"):
                 ec1, ec2, ec3 = st.columns(3)
                 with ec1:
                     groq_input = st.text_input("🟢 Groq:", type="password", key="groq_key_input")
-                    if groq_input: st.session_state.groq_api_key = groq_input; st.rerun()
+                    if groq_input: st.session_state.groq_api_key = groq_input
                 with ec2:
                     hf_input = st.text_input("🤗 HuggingFace:", type="password", key="hf_key_input")
-                    if hf_input: st.session_state.huggingface_api_key = hf_input; st.rerun()
+                    if hf_input: st.session_state.huggingface_api_key = hf_input
                 with ec3:
                     claude_input = st.text_input("🔵 Claude:", type="password", key="claude_key_input")
-                    if claude_input: st.session_state.claude_api_key = claude_input; st.rerun()
+                    if claude_input: st.session_state.claude_api_key = claude_input
             st.info("💡 أسهل طريقة: احصل على مفتاح Gemini مجاناً من **aistudio.google.com/apikey**\n\nثم أضف في Secrets:\n```\n[gemini]\napi_key = \"AIza...\"\n```")
             return
 
@@ -9055,7 +9129,6 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
                 with [qc1, qc2, qc3][i % 3]:
                     if st.button(q, key=f"lq_{i}", use_container_width=True):
                         st.session_state.labor_chat = [{"role":"user","content":q},{"role":"assistant","content":INSTANT_ANSWERS[q]}]
-                        st.rerun()
 
             # Input for custom questions
             with st.form("labor_form", clear_on_submit=True):
@@ -9069,12 +9142,10 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
                     response = get_best_kb_answer(labor_q, LABOR_LAW_SYSTEM_PROMPT)
                     auto_learn_from_answer(labor_q, response, "legal")
                     st.session_state.labor_chat = [{"role":"user","content":labor_q},{"role":"assistant","content":response}]
-                    st.rerun()
 
             # Clear chat
             if st.session_state.labor_chat and st.button("🗑️ مسح المحادثة", key="labor_clear"):
                 st.session_state.labor_chat = []
-                st.rerun()
 
         # ===== MODEL 2: HR Expert =====
         elif page == "📚 مستشار الموارد البشرية":
@@ -9126,7 +9197,6 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
                 with [tc1, tc2, tc3][i % 3]:
                     if st.button(t, key=f"ht_{i}", use_container_width=True):
                         st.session_state.hr_chat = [{"role":"user","content":t},{"role":"assistant","content":HR_INSTANT[t]}]
-                        st.rerun()
 
             with st.form("hr_form", clear_on_submit=True):
                 hr_q = st.text_area("اكتب سؤالك:", height=80, key="hr_q_input",
@@ -9139,11 +9209,9 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
                     response = get_best_kb_answer(hr_q, HR_EXPERT_SYSTEM_PROMPT)
                     auto_learn_from_answer(hr_q, response, "hr")
                     st.session_state.hr_chat = [{"role":"user","content":hr_q},{"role":"assistant","content":response}]
-                    st.rerun()
 
             if st.session_state.hr_chat and st.button("🗑️ مسح المحادثة", key="hr_clear"):
                 st.session_state.hr_chat = []
-                st.rerun()
 
         # ===== Legal Documents Management =====
         elif page == "🧠 قاعدة المعرفة RAG":
@@ -9249,7 +9317,7 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
                             c = conn.cursor()
                             _upsert_config(c, "rag_chunks", "[]")
                             conn.commit(); conn.close()
-                            st.success("✅ تم مسح القاعدة"); st.rerun()
+                            st.success("✅ تم مسح القاعدة")
                 else:
                     st.info("📚 القاعدة المعرفية فارغة. ارفع مستندات أو أضف معرفة يدوياً.")
             except: st.info("📚 القاعدة المعرفية فارغة")
@@ -9355,7 +9423,6 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
                             _upsert_config(c, "rag_learned", json.dumps(clean, ensure_ascii=False))
                             conn.commit(); conn.close()
                             st.success(f"✅ تم حذف {removed} إجابة سيئة")
-                            st.rerun()
             except: pass
 
             st.markdown("---")
@@ -10364,7 +10431,7 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
                         conn = get_conn(); c = conn.cursor()
                         _upsert_config(c, "audit_log", "[]")
                         conn.commit(); conn.close()
-                        st.success("✅ تم مسح السجل"); st.rerun()
+                        st.success("✅ تم مسح السجل")
                     except: pass
             else:
                 st.info("📋 سجل التدقيق فارغ. سيتم تسجيل العمليات تلقائياً.")
@@ -11366,7 +11433,6 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                         except Exception as e:
                             st.warning(f"⚠️ لم يتم الإرسال إلى Basecamp: {e}")
 
-                    st.rerun()
                 else:
                     st.error("يرجى إدخال الاسم")
 
@@ -11388,7 +11454,6 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
             if st.button("➕ إضافة سؤال", key="cs_addq"):
                 if new_q:
                     st.session_state.custom_q_list.append({"q": new_q, "cat": new_cat or "عام"})
-                    st.rerun()
 
             if st.session_state.custom_q_list:
                 st.markdown("### 📋 الأسئلة المضافة")
@@ -11402,11 +11467,9 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                         }
                         st.session_state.custom_q_list = []
                         st.success(f"✅ تم حفظ الاستبيان: {cs_name}")
-                        st.rerun()
 
                 if st.button("🗑️ مسح الأسئلة", key="cs_clear"):
                     st.session_state.custom_q_list = []
-                    st.rerun()
 
             # Show saved custom surveys
             if st.session_state.custom_surveys:
@@ -11471,7 +11534,6 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
 
                 if st.button("🗑️ مسح جميع الاستجابات", key="sv_clr"):
                     st.session_state.survey_responses = []
-                    st.rerun()
             else:
                 ibox("لا توجد استجابات بعد. اذهب لصفحة القوالب الجاهزة واملأ استبيان.", "warning")
 
@@ -12134,7 +12196,6 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                                 st.session_state.smtp_config = new_cfg
                                 save_smtp_config(new_cfg)
                                 st.success("✅ تم تفعيل البريد بنجاح!")
-                                st.rerun()
                             else:
                                 st.error("أدخل البريد وكلمة المرور")
                 else:
@@ -12173,7 +12234,6 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                                     st.warning(f"⚠️ لم يتم الإرسال: {msg}")
                             elif send_email_flag and not assign_email:
                                 st.warning("⚠️ لم يتم إدخال بريد إلكتروني")
-                            st.rerun()
                         else:
                             st.error("يرجى إدخال اسم الموظف واختيار اختبار واحد على الأقل")
 
@@ -12212,7 +12272,6 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                         if st.button("🗑️ مسح التعيينات (مدير فقط)", key="assign_clr"):
                             db_delete_assignments()
                             st.session_state.test_assignments = []
-                            st.rerun()
                     else:
                         st.caption("⚠️ حذف التعيينات متاح لمدير النظام فقط")
 
@@ -12479,7 +12538,6 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                                 db_delete_result(int(del_id))
                                 st.session_state.personality_results = db_load_results()
                                 st.success(f"✅ تم حذف السجل #{del_id}")
-                                st.rerun()
                             else:
                                 st.error("يرجى كتابة 'تأكيد الحذف' للمتابعة")
 
@@ -12491,7 +12549,6 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                                 db_delete_all_results()
                                 st.session_state.personality_results = []
                                 st.success("✅ تم حذف جميع السجلات")
-                                st.rerun()
                             else:
                                 st.error("يرجى كتابة 'حذف جميع البيانات' للمتابعة")
                 else:
