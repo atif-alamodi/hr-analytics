@@ -6132,22 +6132,23 @@ def main():
                 "النفط والطاقة": {0:6000,2:9000,5:15000,10:23000,15:32000,20:42000},
             }
 
+            # Title-level multipliers: (name, weight) - weight adjusts salary relative to department base
             BM_TITLES = {
-                "الموارد البشرية": ["مدير موارد بشرية","نائب رئيس HR","أخصائي موارد بشرية","أخصائي توظيف","أخصائي رواتب","مدير التدريب","أخصائي شؤون موظفين","محلل بيانات HR","مدير التعويضات والمزايا"],
-                "تقنية المعلومات": ["CTO","مدير IT","مطور برمجيات","مطور Full-Stack","محلل بيانات","عالم بيانات","مهندس DevOps","مهندس Cloud","أخصائي أمن سيبراني","مدير مشاريع تقنية","مهندس AI/ML"],
-                "المالية والمحاسبة": ["CFO","مدير مالي","محاسب عام","محاسب تكاليف","مدقق داخلي","محلل مالي","أخصائي ضريبة","مدير خزينة"],
-                "التسويق والمبيعات": ["CMO","مدير تسويق","أخصائي تسويق رقمي","مدير مبيعات","مندوب مبيعات","أخصائي SEO","مدير منتجات","مدير تطوير أعمال"],
-                "العمليات والإدارة": ["COO","مدير عمليات","مدير إداري","سكرتير تنفيذي","أخصائي مشتريات","مدير سلسلة إمداد","مدير جودة"],
-                "القانون والامتثال": ["مستشار قانوني أول","مستشار قانوني","أخصائي امتثال","مدير حوكمة","أخصائي عقود","مدير مخاطر"],
-                "التصميم والإبداع": ["مصمم جرافيك","مصمم UX/UI","مدير إبداعي","مصمم موشن"],
-                "الهندسة": ["مدير هندسة","مهندس مدني","مهندس كهربائي","مهندس ميكانيكي","مهندس معماري"],
-                "الطب والصحة": ["طبيب عام","طبيب أخصائي","طبيب استشاري","صيدلي","ممرض","مدير مستشفى"],
-                "التعليم والتدريب": ["مدير تعليمي","معلم","أستاذ جامعي","مدرب مهني","مصمم تعليمي"],
-                "خدمة العملاء": ["مدير خدمة عملاء","أخصائي خدمة عملاء","مشرف مركز اتصال","أخصائي دعم فني"],
-                "الإعلام والاتصال": ["مدير اتصال","أخصائي علاقات عامة","مدير وسائل تواصل"],
-                "السياحة والضيافة": ["مدير فندق","مدير مطعم","شيف رئيسي","مدير فعاليات"],
-                "العقارات": ["مدير عقارات","وسيط عقاري","مثمن عقاري","مدير تطوير عقاري"],
-                "النفط والطاقة": ["مهندس بترول","مهندس طاقة","مدير عمليات نفطية","مهندس طاقة متجددة"],
+                "الموارد البشرية": [("نائب رئيس HR",1.80),("مدير موارد بشرية",1.45),("مدير التعويضات والمزايا",1.35),("مدير التدريب",1.25),("أخصائي توظيف",0.85),("أخصائي رواتب",0.80),("أخصائي موارد بشرية",0.75),("أخصائي شؤون موظفين",0.70),("محلل بيانات HR",0.90),("منسق موارد بشرية",0.60)],
+                "تقنية المعلومات": [("CTO",2.20),("مدير IT",1.55),("مدير مشاريع تقنية",1.40),("مهندس AI/ML",1.50),("عالم بيانات",1.35),("أخصائي أمن سيبراني",1.30),("مهندس Cloud",1.25),("مهندس DevOps",1.20),("مطور Full-Stack",1.10),("مطور برمجيات",1.00),("محلل بيانات",0.90),("مطور واجهات أمامية",0.95),("مطور خلفية",1.00),("مطور تطبيقات موبايل",1.05),("مهندس شبكات",0.90),("مسؤول أنظمة",0.80),("مهندس QA",0.85),("فني دعم تقني",0.55)],
+                "المالية والمحاسبة": [("CFO",2.20),("مدير مالي",1.55),("مدير خزينة",1.35),("مدقق داخلي",1.10),("محلل مالي",1.05),("أخصائي ضريبة",0.95),("محاسب تكاليف",0.85),("محاسب عام",0.75),("محاسب رواتب",0.70),("مراقب مالي",1.20)],
+                "التسويق والمبيعات": [("CMO",2.10),("مدير تسويق",1.45),("مدير مبيعات",1.40),("مدير منتجات",1.35),("مدير تطوير أعمال",1.30),("مدير علاقات عملاء",1.10),("أخصائي تسويق رقمي",0.85),("أخصائي SEO",0.80),("أخصائي محتوى",0.75),("مندوب مبيعات",0.65),("مدير العلامة التجارية",1.25)],
+                "العمليات والإدارة": [("COO",2.20),("مدير عمليات",1.50),("مدير سلسلة إمداد",1.35),("مدير جودة",1.20),("مدير إداري",1.10),("أخصائي مشتريات",0.85),("سكرتير تنفيذي",0.75),("مساعد إداري",0.55),("مدير منشآت",1.05),("أخصائي لوجستيات",0.80),("موظف استقبال",0.40)],
+                "القانون والامتثال": [("مستشار قانوني أول",1.60),("مدير حوكمة",1.45),("مدير مخاطر",1.40),("مستشار قانوني",1.20),("أخصائي امتثال",0.90),("أخصائي عقود",0.80),("أخصائي حماية بيانات",0.95)],
+                "التصميم والإبداع": [("مدير إبداعي",1.55),("مصمم UX/UI",1.10),("مصمم جرافيك",0.80),("مصمم موشن",0.90),("مدير إنتاج",1.30),("مصور فيديو",0.70),("كاتب محتوى إبداعي",0.75)],
+                "الهندسة": [("مدير هندسة",1.65),("مهندس معماري",1.20),("مهندس مدني",1.00),("مهندس كهربائي",1.05),("مهندس ميكانيكي",1.00),("مهندس صناعي",0.95),("مهندس بيئي",0.90),("فني صيانة",0.50)],
+                "الطب والصحة": [("طبيب استشاري",2.00),("مدير مستشفى",1.80),("طبيب أخصائي",1.50),("طبيب عام",1.00),("صيدلي",0.85),("أخصائي أشعة",0.90),("ممرض",0.55),("فني مختبر",0.50),("أخصائي تأمين صحي",0.70)],
+                "التعليم والتدريب": [("مدير أكاديمية",1.55),("مدير تعليمي",1.35),("أستاذ جامعي",1.25),("مصمم تعليمي",1.00),("مدرب مهني",0.90),("معلم",0.70),("أخصائي تطوير مهني",0.85)],
+                "خدمة العملاء": [("مدير خدمة عملاء",1.45),("مدير تجربة العملاء",1.35),("مشرف مركز اتصال",0.90),("أخصائي دعم فني",0.75),("أخصائي خدمة عملاء",0.60)],
+                "الإعلام والاتصال": [("مدير اتصال مؤسسي",1.50),("مدير وسائل تواصل",1.15),("أخصائي علاقات عامة",0.85),("صحفي",0.80),("محرر",0.75)],
+                "السياحة والضيافة": [("مدير فندق",1.55),("مدير فعاليات",1.20),("شيف رئيسي",1.10),("مدير مطعم",1.00),("مرشد سياحي",0.60),("أخصائي حجوزات",0.50)],
+                "العقارات": [("مدير تطوير عقاري",1.55),("مدير عقارات",1.30),("مثمن عقاري",1.05),("وسيط عقاري",0.80),("مدير إدارة أملاك",1.15)],
+                "النفط والطاقة": [("مدير عمليات نفطية",1.70),("مهندس بترول",1.30),("مهندس طاقة متجددة",1.15),("مهندس طاقة",1.10),("أخصائي بيئة وسلامة",0.90),("فني حفر",0.65)],
             }
 
             # Interface
@@ -6157,23 +6158,31 @@ def main():
             with bm2:
                 bm_dept = st.selectbox("📌 التخصص:", list(BM_JOBS.keys()), key="bm_dept2")
             with bm3:
-                bm_title = st.selectbox("💼 المسمى:", BM_TITLES.get(bm_dept, ["عام"]), key="bm_title2")
+                title_list = BM_TITLES.get(bm_dept, [("عام",1.0)])
+                bm_title = st.selectbox("💼 المسمى:", [t[0] for t in title_list], key="bm_title2")
 
             bm_exp = st.slider("📅 سنوات الخبرة:", 0, 25, 5, key="bm_exp2")
 
             cur, to_sar, mult = BM_COUNTRIES[bm_country]
             country_name = bm_country.split(' ',1)[1]
 
-            # Calculate salary
+            # Get title weight
+            title_weight = 1.0
+            for t_name, t_w in title_list:
+                if t_name == bm_title:
+                    title_weight = t_w
+                    break
+
+            # Calculate salary (base * country_mult * title_weight)
             base_map = BM_JOBS[bm_dept]
             ek = sorted(base_map.keys())
             lo = max([k for k in ek if k <= bm_exp])
             hi = min([k for k in ek if k >= bm_exp]) if bm_exp <= max(ek) else max(ek)
             base_sar = round(base_map[lo] + (bm_exp-lo)/max(hi-lo,1) * (base_map[hi]-base_map[lo])) if lo != hi else base_map[lo]
 
-            mid_sar = round(base_sar * mult)
-            min_sar = round(mid_sar * 0.75)
-            max_sar = round(mid_sar * 1.35)
+            mid_sar = round(base_sar * mult * title_weight)
+            min_sar = round(mid_sar * 0.80)
+            max_sar = round(mid_sar * 1.30)
             tl = 1.0 / to_sar if to_sar > 0 else 1
             min_l = round(min_sar * tl)
             mid_l = round(mid_sar * tl)
@@ -6202,25 +6211,34 @@ def main():
                     font=dict(family="Noto Sans Arabic"), yaxis_tickformat=',')
                 st.plotly_chart(fig, use_container_width=True)
             with ch2:
-                # Experience curve
+                # Experience curve for THIS title
                 exp_data = []
                 for e in range(0, 26, 2):
                     l2 = max([k for k in ek if k <= e])
                     h2 = min([k for k in ek if k >= e]) if e <= max(ek) else max(ek)
                     b = round(base_map[l2] + (e-l2)/max(h2-l2,1) * (base_map[h2]-base_map[l2])) if l2 != h2 else base_map[l2]
-                    exp_data.append({"سنوات":e, "الراتب (SAR)": round(b * mult)})
+                    exp_data.append({"سنوات":e, "الراتب (SAR)": round(b * mult * title_weight)})
                 fig = px.line(pd.DataFrame(exp_data), x='سنوات', y='الراتب (SAR)',
                     markers=True, title='منحنى النمو بالخبرة (SAR)')
                 fig.update_layout(height=380, font=dict(family="Noto Sans Arabic"), yaxis_tickformat=',')
                 fig.add_hline(y=mid_sar, line_dash="dash", line_color="red", annotation_text=f"أنت هنا: {mid_sar:,}")
                 st.plotly_chart(fig, use_container_width=True)
 
-            # All titles in this department
+            # All titles in this department with DIFFERENT salaries
             st.markdown("### 📋 جميع المسميات في هذا التخصص")
             dept_rows = []
-            for t in BM_TITLES.get(bm_dept, []):
-                dept_rows.append({"المسمى":t, f"الأدنى ({cur})":f"{min_l:,}", f"المتوسط ({cur})":f"{mid_l:,}",
-                    f"الأعلى ({cur})":f"{max_l:,}", "المتوسط (SAR)":f"{mid_sar:,}"})
+            for t_name, t_w in title_list:
+                t_mid_sar = round(base_sar * mult * t_w)
+                t_min_sar = round(t_mid_sar * 0.80)
+                t_max_sar = round(t_mid_sar * 1.30)
+                t_min_l = round(t_min_sar * tl)
+                t_mid_l = round(t_mid_sar * tl)
+                t_max_l = round(t_max_sar * tl)
+                level = "🔴 تنفيذي" if t_w >= 1.5 else ("🟠 إداري" if t_w >= 1.1 else ("🟡 أخصائي" if t_w >= 0.7 else "🟢 مبتدئ"))
+                marker = " ◀️" if t_name == bm_title else ""
+                dept_rows.append({"المسمى":f"{t_name}{marker}", "المستوى":level,
+                    f"الأدنى ({cur})":f"{t_min_l:,}", f"المتوسط ({cur})":f"{t_mid_l:,}",
+                    f"الأعلى ({cur})":f"{t_max_l:,}", "المتوسط (SAR)":f"{t_mid_sar:,}"})
             st.dataframe(pd.DataFrame(dept_rows), use_container_width=True, hide_index=True)
 
             # Cost calculator
@@ -6462,6 +6480,18 @@ def main():
                 "النفط والطاقة": {0:6000,2:9000,5:15000,10:23000,15:32000,20:42000},
             }
 
+            # Title weight mapping (auto-detect level from name)
+            def _get_title_weight(title):
+                t = title.lower()
+                if any(x in t for x in ['cto','cfo','cmo','coo','نائب رئيس','استشاري','vice']): return 2.0
+                if any(x in t for x in ['مدير أول','مدير عام','رئيس']): return 1.7
+                if any(x in t for x in ['مدير','director','manager','رئيسي']): return 1.35
+                if any(x in t for x in ['مشرف','مهندس','عالم','محلل مالي','مدقق','مستشار','طبيب أخصائي']): return 1.10
+                if any(x in t for x in ['أخصائي','محلل','مطور','مصمم','محاسب','صيدلي']): return 0.85
+                if any(x in t for x in ['منسق','فني','مندوب','معلم','ممرض','سكرتير']): return 0.65
+                if any(x in t for x in ['مساعد','موظف استقبال','مرشد','حجوزات']): return 0.45
+                return 0.85
+
             # === Interface ===
             st.markdown("### 🔍 اختر الدول والوظيفة")
             countries_list = list(COUNTRIES.keys())
@@ -6513,11 +6543,12 @@ def main():
                     base_sar = round(base_s[lo] + (exp_years-lo)/(max(hi-lo,1)) * (base_s[hi]-base_s[lo])) if lo != hi else base_s[lo]
 
                     results = []
+                    tw = _get_title_weight(job_title)
                     for country in selected_countries:
                         ci = COUNTRIES[country]
                         m = CMULT.get(country, 0.5)
-                        mid_sar = round(base_sar * m)
-                        min_sar, max_sar = round(mid_sar*0.75), round(mid_sar*1.35)
+                        mid_sar = round(base_sar * m * tw)
+                        min_sar, max_sar = round(mid_sar*0.80), round(mid_sar*1.30)
                         tl = 1.0/ci['to_sar'] if ci['to_sar'] > 0 else 1
                         results.append({'country':country,'name':country.split(' ',1)[1],'currency':ci['currency'],
                             'region':ci['region'],'min_l':round(min_sar*tl),'mid_l':round(mid_sar*tl),'max_l':round(max_sar*tl),
@@ -12806,4 +12837,3 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
 
 if __name__ == "__main__":
     main()
-
