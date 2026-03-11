@@ -1046,201 +1046,24 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;500;600;700;800&display=swap');
 *{font-family:'Noto Sans Arabic',sans-serif}
-
-/* === LAYOUT === */
 .main .block-container{padding-top:.8rem;max-width:1400px}
-
-/* === SIDEBAR === */
-[data-testid="stSidebar"]{
-    background:linear-gradient(180deg,#0a3640 0%,#0F4C5C 40%,#1A1A2E 100%) !important;
-    border-left:1px solid rgba(255,255,255,.06)
-}
+[data-testid="stSidebar"]{background:linear-gradient(180deg,#0F4C5C 0%,#1A1A2E 100%)}
 [data-testid="stSidebar"] *{color:white !important}
-[data-testid="stSidebar"] .stRadio > div{gap:2px}
-[data-testid="stSidebar"] .stRadio label{
-    border-radius:10px;padding:6px 12px;transition:all .25s ease;
-    border:1px solid transparent;margin:1px 0
-}
-[data-testid="stSidebar"] .stRadio label:hover{
-    background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.06)
-}
-[data-testid="stSidebar"] .stRadio label[data-checked="true"],
-[data-testid="stSidebar"] .stRadio [aria-checked="true"]{
-    background:rgba(227,100,20,.15) !important;border-color:rgba(227,100,20,.3) !important
-}
-[data-testid="stSidebar"] hr{border-color:rgba(255,255,255,.08) !important;margin:12px 0}
-[data-testid="stSidebar"] .stButton > button{
-    background:rgba(255,255,255,.08) !important;border:1px solid rgba(255,255,255,.1) !important;
-    border-radius:10px;transition:all .25s ease;backdrop-filter:blur(8px)
-}
-[data-testid="stSidebar"] .stButton > button:hover{
-    background:rgba(227,100,20,.2) !important;border-color:rgba(227,100,20,.3) !important;
-    transform:translateX(-2px)
-}
-
-/* === METRICS === */
-[data-testid="stMetric"]{
-    background:white;border-radius:14px;padding:16px 20px;
-    box-shadow:0 1px 3px rgba(0,0,0,.04),0 4px 12px rgba(0,0,0,.03);
-    border:1px solid #E2E8F0;transition:all .3s ease;
-    position:relative;overflow:hidden
-}
-[data-testid="stMetric"]::after{
-    content:'';position:absolute;bottom:0;left:0;right:0;height:3px;
-    background:linear-gradient(90deg,#0F4C5C,#2A9D8F,#E9C46A);opacity:0;transition:opacity .3s ease
-}
-[data-testid="stMetric"]:hover{
-    box-shadow:0 4px 16px rgba(15,76,92,.1);transform:translateY(-2px);border-color:#0F4C5C30
-}
-[data-testid="stMetric"]:hover::after{opacity:1}
-[data-testid="stMetric"] label{font-size:11px !important;color:#64748B !important;letter-spacing:.3px;text-transform:uppercase}
-[data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:22px !important;font-weight:800 !important;letter-spacing:-.5px}
-[data-testid="stMetric"] [data-testid="stMetricDelta"]{font-size:12px !important;font-weight:600 !important}
-
-/* === HEADINGS === */
-h1{color:#0F4C5C !important;font-weight:800 !important;letter-spacing:-.5px}
-h2{color:#1A1A2E !important;font-weight:700 !important}
-h3{color:#264653 !important;font-weight:600 !important}
-
-/* === HEADER CARD === */
-.hdr{
-    background:linear-gradient(135deg,#0a3640,#0F4C5C 40%,#1A1A2E);
-    padding:24px 32px;border-radius:16px;margin-bottom:24px;color:white;
-    position:relative;overflow:hidden;
-    box-shadow:0 4px 20px rgba(15,76,92,.2)
-}
-.hdr::before{
-    content:'';position:absolute;top:-50%;right:-20%;width:300px;height:300px;
-    background:radial-gradient(circle,rgba(227,100,20,.08),transparent 70%);pointer-events:none
-}
-.hdr::after{
-    content:'';position:absolute;bottom:0;left:0;right:0;height:3px;
-    background:linear-gradient(90deg,#E36414,#E9C46A,#2A9D8F)
-}
-.hdr h1{color:white !important;margin:0;font-size:26px;position:relative;z-index:1}
-.hdr p{color:rgba(255,255,255,.65);margin:6px 0 0;font-size:13px;position:relative;z-index:1}
-
-/* === INFO BOXES === */
-.ibox{
-    background:#EFF6FF;border-radius:12px;padding:14px 18px;border-right:4px solid #3B82F6;
-    margin-bottom:10px;font-size:13px;line-height:1.8;
-    transition:all .25s ease;position:relative;overflow:hidden
-}
-.ibox::before{
-    content:'';position:absolute;top:0;right:0;bottom:0;width:40px;
-    background:linear-gradient(90deg,transparent,rgba(59,130,246,.04));pointer-events:none
-}
-.ibox:hover{transform:translateX(-3px);box-shadow:0 2px 8px rgba(59,130,246,.08)}
+[data-testid="stMetric"]{background:white;border-radius:12px;padding:14px 18px;box-shadow:0 1px 3px rgba(0,0,0,.06);border:1px solid #E2E8F0}
+[data-testid="stMetric"] label{font-size:12px !important;color:#64748B !important}
+[data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:20px !important;font-weight:700 !important}
+h1{color:#0F4C5C !important;font-weight:800 !important}
+.hdr{background:linear-gradient(135deg,#0F4C5C,#1A1A2E);padding:20px 28px;border-radius:14px;margin-bottom:20px;color:white}
+.hdr h1{color:white !important;margin:0;font-size:24px}
+.hdr p{color:rgba(255,255,255,.7);margin:4px 0 0;font-size:13px}
+.ibox{background:#EFF6FF;border-radius:10px;padding:12px 16px;border-right:4px solid #3B82F6;margin-bottom:8px;font-size:13px;line-height:1.7}
 .ibox.warn{background:#FFF7ED;border-right-color:#F97316}
-.ibox.warn::before{background:linear-gradient(90deg,transparent,rgba(249,115,22,.04))}
 .ibox.ok{background:#F0FDF4;border-right-color:#22C55E}
-.ibox.ok::before{background:linear-gradient(90deg,transparent,rgba(34,197,94,.04))}
 .ibox.bad{background:#FEF2F2;border-right-color:#EF4444}
-.ibox.bad::before{background:linear-gradient(90deg,transparent,rgba(239,68,68,.04))}
-
-/* === KPI CARDS === */
-.kpi{
-    background:linear-gradient(135deg,#0a3640,#0F4C5C);color:white;
-    border-radius:14px;padding:20px;text-align:center;margin-bottom:12px;
-    position:relative;overflow:hidden;transition:all .3s ease;
-    box-shadow:0 2px 12px rgba(15,76,92,.15)
-}
-.kpi::before{
-    content:'';position:absolute;top:-30%;left:-30%;width:100px;height:100px;
-    background:radial-gradient(circle,rgba(233,196,106,.1),transparent 70%);pointer-events:none
-}
-.kpi::after{
-    content:'';position:absolute;bottom:0;left:0;right:0;height:3px;
-    background:linear-gradient(90deg,#E36414,#E9C46A);opacity:0;transition:opacity .3s ease
-}
-.kpi:hover{transform:translateY(-3px);box-shadow:0 6px 20px rgba(15,76,92,.25)}
-.kpi:hover::after{opacity:1}
-.kpi h3{font-size:26px;margin:8px 0 2px;font-weight:800;letter-spacing:-.5px}
-.kpi p{font-size:11px;opacity:.65;margin:0;letter-spacing:.3px}
-
-/* === BUTTONS === */
-.stButton > button{
-    border-radius:10px !important;font-weight:600 !important;
-    transition:all .25s ease !important;letter-spacing:.2px
-}
-.stButton > button:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.1)}
-.stButton > button:active{transform:translateY(0);box-shadow:none}
-.stButton > button[kind="primary"]{
-    background:linear-gradient(135deg,#0F4C5C,#1A6B7C) !important;
-    border:none !important;box-shadow:0 2px 8px rgba(15,76,92,.2)
-}
-.stButton > button[kind="primary"]:hover{
-    background:linear-gradient(135deg,#0a3640,#0F4C5C) !important;
-    box-shadow:0 4px 16px rgba(15,76,92,.3)
-}
-
-/* === TABS === */
-.stTabs [data-baseweb="tab-list"]{gap:4px;border-bottom:2px solid #E2E8F0}
-.stTabs [data-baseweb="tab"]{
-    border-radius:10px 10px 0 0;padding:8px 20px;font-weight:600;
-    transition:all .25s ease;border:1px solid transparent;border-bottom:none
-}
-.stTabs [data-baseweb="tab"]:hover{background:rgba(15,76,92,.05)}
-.stTabs [data-baseweb="tab"][aria-selected="true"]{
-    background:white;border-color:#E2E8F0;
-    box-shadow:0 -2px 8px rgba(0,0,0,.03)
-}
-
-/* === FORMS & INPUTS === */
-[data-testid="stForm"]{
-    border:1px solid #E2E8F0 !important;border-radius:14px !important;
-    padding:24px !important;box-shadow:0 1px 3px rgba(0,0,0,.03)
-}
-.stTextInput > div > div{border-radius:10px !important;transition:all .25s ease}
-.stTextInput > div > div:focus-within{
-    border-color:#0F4C5C !important;box-shadow:0 0 0 3px rgba(15,76,92,.1) !important
-}
-.stSelectbox > div > div{border-radius:10px !important}
-
-/* === EXPANDER === */
-[data-testid="stExpander"]{
-    border:1px solid #E2E8F0;border-radius:12px !important;
-    overflow:hidden;transition:all .25s ease
-}
-[data-testid="stExpander"]:hover{border-color:#0F4C5C30;box-shadow:0 2px 8px rgba(0,0,0,.04)}
-
-/* === DATAFRAMES === */
-[data-testid="stDataFrame"]{border-radius:12px;overflow:hidden;border:1px solid #E2E8F0}
-[data-testid="stDataFrame"] th{background:#0F4C5C !important;color:white !important}
-
-/* === CHAT BUBBLES === */
-.chat-user{
-    background:linear-gradient(135deg,#0F4C5C,#1A1A2E);color:white;
-    padding:14px 18px;border-radius:14px 14px 4px 14px;margin:10px 0;
-    box-shadow:0 2px 8px rgba(15,76,92,.15);line-height:1.7
-}
-.chat-bot{
-    background:linear-gradient(135deg,#f8fafc,#f0f4f8);color:#333;
-    padding:14px 18px;border-radius:14px 14px 14px 4px;margin:10px 0;
-    border-right:4px solid #0F4C5C;box-shadow:0 1px 4px rgba(0,0,0,.04);line-height:1.7
-}
-.chat-bot-hr{
-    background:linear-gradient(135deg,#f0fdf4,#f0faf5);color:#333;
-    padding:14px 18px;border-radius:14px 14px 14px 4px;margin:10px 0;
-    border-right:4px solid #2A9D8F;box-shadow:0 1px 4px rgba(0,0,0,.04);line-height:1.7
-}
-
-/* === ANIMATIONS === */
-@keyframes fadeSlideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
-@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
-@keyframes pulse-glow{0%,100%{box-shadow:0 0 0 0 rgba(15,76,92,.15)}50%{box-shadow:0 0 0 8px rgba(15,76,92,0)}}
-[data-testid="stMetric"],[data-testid="stExpander"],.kpi,.ibox,.hdr{animation:fadeSlideUp .4s ease-out}
-
-/* === SCROLLBAR === */
-::-webkit-scrollbar{width:6px;height:6px}
-::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:#CBD5E1;border-radius:3px}
-::-webkit-scrollbar-thumb:hover{background:#94A3B8}
-
-/* === MISC === */
-::selection{background:rgba(15,76,92,.15);color:#0F4C5C}
+.kpi{background:linear-gradient(135deg,#0F4C5C,#1B4D5C);color:white;border-radius:12px;padding:16px;text-align:center;margin-bottom:10px}
+.kpi h3{font-size:24px;margin:6px 0 2px;font-weight:800}
+.kpi p{font-size:11px;opacity:.7;margin:0}
 #MainMenu,footer{visibility:hidden}
-[data-testid="stHeader"]{background:rgba(255,255,255,.85);backdrop-filter:blur(12px);border-bottom:1px solid rgba(0,0,0,.04)}
 </style>
 """, unsafe_allow_html=True)
 
@@ -2665,7 +2488,7 @@ def _restore_login():
     return False
 
 def login_page():
-    st.markdown("<div style='text-align:center;padding:48px 0 32px;'><div style='background:linear-gradient(135deg,#E36414,#d4890a,#E9C46A);width:96px;height:96px;border-radius:24px;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:38px;font-weight:800;color:white;box-shadow:0 8px 32px rgba(227,100,20,.25);position:relative;overflow:hidden;'><span style='position:relative;z-index:1'>HR</span></div><h1 style='color:#1A1A2E;font-size:32px;font-weight:800;letter-spacing:-.5px;margin-bottom:4px;'>منصة تحليلات الموارد البشرية</h1><p style='color:#64748B;font-size:14px;letter-spacing:.3px;'>رسال الود لتقنية المعلومات</p></div>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align:center;padding:40px 0;'><div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:80px;height:80px;border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:32px;font-weight:800;color:white;'>HR</div><h1 style='color:#1A1A2E;'>منصة تحليلات الموارد البشرية</h1><p style='color:#64748B;'>رسال الود لتقنية المعلومات</p></div>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
         login_tab, forgot_tab = st.tabs(["🔐 تسجيل الدخول", "🔑 استرجاع كلمة السر"])
@@ -3316,7 +3139,7 @@ def main():
 
     # Sidebar
     with st.sidebar:
-        st.markdown(f"<div style='text-align:center;padding:24px 0 16px;'><div style='background:linear-gradient(135deg,#E36414,#d4890a,#E9C46A);width:64px;height:64px;border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:24px;font-weight:800;color:white;box-shadow:0 4px 16px rgba(227,100,20,.3);position:relative;overflow:hidden;'><span style='position:relative;z-index:1'>HR</span></div><h2 style='margin:0;font-size:17px;font-weight:700;letter-spacing:-.3px;'>تحليلات الموارد البشرية</h2><p style='opacity:.5;font-size:11px;margin-top:2px;letter-spacing:.5px;'>رسال الود لتقنية المعلومات v5</p><div style='background:rgba(255,255,255,.06);border-radius:10px;padding:8px 12px;margin-top:10px;font-size:11px;border:1px solid rgba(255,255,255,.06);backdrop-filter:blur(4px);'>👤 {st.session_state.user_name} <span style='opacity:.5;'>| {st.session_state.user_role}</span></div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align:center;padding:20px 0;'><div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:56px;height:56px;border-radius:12px;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:22px;font-weight:800;color:white;'>HR</div><h2 style='margin:0;font-size:16px;'>تحليلات الموارد البشرية</h2><p style='opacity:.6;font-size:11px;'>رسال الود لتقنية المعلومات v5</p><div style='background:rgba(255,255,255,.1);border-radius:6px;padding:6px 10px;margin-top:8px;font-size:11px'>👤 {st.session_state.user_name} <span style='opacity:.6'>| {st.session_state.user_role}</span></div></div>", unsafe_allow_html=True)
         st.markdown("---")
 
         # Filter sections by access
@@ -3403,7 +3226,6 @@ def main():
             except: pass
             st.success(f"✅ {file.name}")
         elif 'uploaded_file_name' in st.session_state:
-            audit_log("رفع ملف", f"{file.name}")
             st.info(f"📂 {st.session_state['uploaded_file_name']}")
             if st.button("🗑️ إزالة الملف", use_container_width=True):
                 for k in ['uploaded_file_name','uploaded_file_bytes','_parsed_cache_key','_parsed_emp','_parsed_sal','_parsed_sheets']:
@@ -6309,22 +6131,23 @@ def main():
                 "النفط والطاقة": {0:6000,2:9000,5:15000,10:23000,15:32000,20:42000},
             }
 
+            # Title-level multipliers: (name, weight) - weight adjusts salary relative to department base
             BM_TITLES = {
-                "الموارد البشرية": ["مدير موارد بشرية","نائب رئيس HR","أخصائي موارد بشرية","أخصائي توظيف","أخصائي رواتب","مدير التدريب","أخصائي شؤون موظفين","محلل بيانات HR","مدير التعويضات والمزايا"],
-                "تقنية المعلومات": ["CTO","مدير IT","مطور برمجيات","مطور Full-Stack","محلل بيانات","عالم بيانات","مهندس DevOps","مهندس Cloud","أخصائي أمن سيبراني","مدير مشاريع تقنية","مهندس AI/ML"],
-                "المالية والمحاسبة": ["CFO","مدير مالي","محاسب عام","محاسب تكاليف","مدقق داخلي","محلل مالي","أخصائي ضريبة","مدير خزينة"],
-                "التسويق والمبيعات": ["CMO","مدير تسويق","أخصائي تسويق رقمي","مدير مبيعات","مندوب مبيعات","أخصائي SEO","مدير منتجات","مدير تطوير أعمال"],
-                "العمليات والإدارة": ["COO","مدير عمليات","مدير إداري","سكرتير تنفيذي","أخصائي مشتريات","مدير سلسلة إمداد","مدير جودة"],
-                "القانون والامتثال": ["مستشار قانوني أول","مستشار قانوني","أخصائي امتثال","مدير حوكمة","أخصائي عقود","مدير مخاطر"],
-                "التصميم والإبداع": ["مصمم جرافيك","مصمم UX/UI","مدير إبداعي","مصمم موشن"],
-                "الهندسة": ["مدير هندسة","مهندس مدني","مهندس كهربائي","مهندس ميكانيكي","مهندس معماري"],
-                "الطب والصحة": ["طبيب عام","طبيب أخصائي","طبيب استشاري","صيدلي","ممرض","مدير مستشفى"],
-                "التعليم والتدريب": ["مدير تعليمي","معلم","أستاذ جامعي","مدرب مهني","مصمم تعليمي"],
-                "خدمة العملاء": ["مدير خدمة عملاء","أخصائي خدمة عملاء","مشرف مركز اتصال","أخصائي دعم فني"],
-                "الإعلام والاتصال": ["مدير اتصال","أخصائي علاقات عامة","مدير وسائل تواصل"],
-                "السياحة والضيافة": ["مدير فندق","مدير مطعم","شيف رئيسي","مدير فعاليات"],
-                "العقارات": ["مدير عقارات","وسيط عقاري","مثمن عقاري","مدير تطوير عقاري"],
-                "النفط والطاقة": ["مهندس بترول","مهندس طاقة","مدير عمليات نفطية","مهندس طاقة متجددة"],
+                "الموارد البشرية": [("نائب رئيس HR",1.80),("مدير موارد بشرية",1.45),("مدير التعويضات والمزايا",1.35),("مدير التدريب",1.25),("أخصائي توظيف",0.85),("أخصائي رواتب",0.80),("أخصائي موارد بشرية",0.75),("أخصائي شؤون موظفين",0.70),("محلل بيانات HR",0.90),("منسق موارد بشرية",0.60)],
+                "تقنية المعلومات": [("CTO",2.20),("مدير IT",1.55),("مدير مشاريع تقنية",1.40),("مهندس AI/ML",1.50),("عالم بيانات",1.35),("أخصائي أمن سيبراني",1.30),("مهندس Cloud",1.25),("مهندس DevOps",1.20),("مطور Full-Stack",1.10),("مطور برمجيات",1.00),("محلل بيانات",0.90),("مطور واجهات أمامية",0.95),("مطور خلفية",1.00),("مطور تطبيقات موبايل",1.05),("مهندس شبكات",0.90),("مسؤول أنظمة",0.80),("مهندس QA",0.85),("فني دعم تقني",0.55)],
+                "المالية والمحاسبة": [("CFO",2.20),("مدير مالي",1.55),("مدير خزينة",1.35),("مدقق داخلي",1.10),("محلل مالي",1.05),("أخصائي ضريبة",0.95),("محاسب تكاليف",0.85),("محاسب عام",0.75),("محاسب رواتب",0.70),("مراقب مالي",1.20)],
+                "التسويق والمبيعات": [("CMO",2.10),("مدير تسويق",1.45),("مدير مبيعات",1.40),("مدير منتجات",1.35),("مدير تطوير أعمال",1.30),("مدير علاقات عملاء",1.10),("أخصائي تسويق رقمي",0.85),("أخصائي SEO",0.80),("أخصائي محتوى",0.75),("مندوب مبيعات",0.65),("مدير العلامة التجارية",1.25)],
+                "العمليات والإدارة": [("COO",2.20),("مدير عمليات",1.50),("مدير سلسلة إمداد",1.35),("مدير جودة",1.20),("مدير إداري",1.10),("أخصائي مشتريات",0.85),("سكرتير تنفيذي",0.75),("مساعد إداري",0.55),("مدير منشآت",1.05),("أخصائي لوجستيات",0.80),("موظف استقبال",0.40)],
+                "القانون والامتثال": [("مستشار قانوني أول",1.60),("مدير حوكمة",1.45),("مدير مخاطر",1.40),("مستشار قانوني",1.20),("أخصائي امتثال",0.90),("أخصائي عقود",0.80),("أخصائي حماية بيانات",0.95)],
+                "التصميم والإبداع": [("مدير إبداعي",1.55),("مصمم UX/UI",1.10),("مصمم جرافيك",0.80),("مصمم موشن",0.90),("مدير إنتاج",1.30),("مصور فيديو",0.70),("كاتب محتوى إبداعي",0.75)],
+                "الهندسة": [("مدير هندسة",1.65),("مهندس معماري",1.20),("مهندس مدني",1.00),("مهندس كهربائي",1.05),("مهندس ميكانيكي",1.00),("مهندس صناعي",0.95),("مهندس بيئي",0.90),("فني صيانة",0.50)],
+                "الطب والصحة": [("طبيب استشاري",2.00),("مدير مستشفى",1.80),("طبيب أخصائي",1.50),("طبيب عام",1.00),("صيدلي",0.85),("أخصائي أشعة",0.90),("ممرض",0.55),("فني مختبر",0.50),("أخصائي تأمين صحي",0.70)],
+                "التعليم والتدريب": [("مدير أكاديمية",1.55),("مدير تعليمي",1.35),("أستاذ جامعي",1.25),("مصمم تعليمي",1.00),("مدرب مهني",0.90),("معلم",0.70),("أخصائي تطوير مهني",0.85)],
+                "خدمة العملاء": [("مدير خدمة عملاء",1.45),("مدير تجربة العملاء",1.35),("مشرف مركز اتصال",0.90),("أخصائي دعم فني",0.75),("أخصائي خدمة عملاء",0.60)],
+                "الإعلام والاتصال": [("مدير اتصال مؤسسي",1.50),("مدير وسائل تواصل",1.15),("أخصائي علاقات عامة",0.85),("صحفي",0.80),("محرر",0.75)],
+                "السياحة والضيافة": [("مدير فندق",1.55),("مدير فعاليات",1.20),("شيف رئيسي",1.10),("مدير مطعم",1.00),("مرشد سياحي",0.60),("أخصائي حجوزات",0.50)],
+                "العقارات": [("مدير تطوير عقاري",1.55),("مدير عقارات",1.30),("مثمن عقاري",1.05),("وسيط عقاري",0.80),("مدير إدارة أملاك",1.15)],
+                "النفط والطاقة": [("مدير عمليات نفطية",1.70),("مهندس بترول",1.30),("مهندس طاقة متجددة",1.15),("مهندس طاقة",1.10),("أخصائي بيئة وسلامة",0.90),("فني حفر",0.65)],
             }
 
             # Interface
@@ -6334,23 +6157,31 @@ def main():
             with bm2:
                 bm_dept = st.selectbox("📌 التخصص:", list(BM_JOBS.keys()), key="bm_dept2")
             with bm3:
-                bm_title = st.selectbox("💼 المسمى:", BM_TITLES.get(bm_dept, ["عام"]), key="bm_title2")
+                title_list = BM_TITLES.get(bm_dept, [("عام",1.0)])
+                bm_title = st.selectbox("💼 المسمى:", [t[0] for t in title_list], key="bm_title2")
 
             bm_exp = st.slider("📅 سنوات الخبرة:", 0, 25, 5, key="bm_exp2")
 
             cur, to_sar, mult = BM_COUNTRIES[bm_country]
             country_name = bm_country.split(' ',1)[1]
 
-            # Calculate salary
+            # Get title weight
+            title_weight = 1.0
+            for t_name, t_w in title_list:
+                if t_name == bm_title:
+                    title_weight = t_w
+                    break
+
+            # Calculate salary (base * country_mult * title_weight)
             base_map = BM_JOBS[bm_dept]
             ek = sorted(base_map.keys())
             lo = max([k for k in ek if k <= bm_exp])
             hi = min([k for k in ek if k >= bm_exp]) if bm_exp <= max(ek) else max(ek)
             base_sar = round(base_map[lo] + (bm_exp-lo)/max(hi-lo,1) * (base_map[hi]-base_map[lo])) if lo != hi else base_map[lo]
 
-            mid_sar = round(base_sar * mult)
-            min_sar = round(mid_sar * 0.75)
-            max_sar = round(mid_sar * 1.35)
+            mid_sar = round(base_sar * mult * title_weight)
+            min_sar = round(mid_sar * 0.80)
+            max_sar = round(mid_sar * 1.30)
             tl = 1.0 / to_sar if to_sar > 0 else 1
             min_l = round(min_sar * tl)
             mid_l = round(mid_sar * tl)
@@ -6379,25 +6210,34 @@ def main():
                     font=dict(family="Noto Sans Arabic"), yaxis_tickformat=',')
                 st.plotly_chart(fig, use_container_width=True)
             with ch2:
-                # Experience curve
+                # Experience curve for THIS title
                 exp_data = []
                 for e in range(0, 26, 2):
                     l2 = max([k for k in ek if k <= e])
                     h2 = min([k for k in ek if k >= e]) if e <= max(ek) else max(ek)
                     b = round(base_map[l2] + (e-l2)/max(h2-l2,1) * (base_map[h2]-base_map[l2])) if l2 != h2 else base_map[l2]
-                    exp_data.append({"سنوات":e, "الراتب (SAR)": round(b * mult)})
+                    exp_data.append({"سنوات":e, "الراتب (SAR)": round(b * mult * title_weight)})
                 fig = px.line(pd.DataFrame(exp_data), x='سنوات', y='الراتب (SAR)',
                     markers=True, title='منحنى النمو بالخبرة (SAR)')
                 fig.update_layout(height=380, font=dict(family="Noto Sans Arabic"), yaxis_tickformat=',')
                 fig.add_hline(y=mid_sar, line_dash="dash", line_color="red", annotation_text=f"أنت هنا: {mid_sar:,}")
                 st.plotly_chart(fig, use_container_width=True)
 
-            # All titles in this department
+            # All titles in this department with DIFFERENT salaries
             st.markdown("### 📋 جميع المسميات في هذا التخصص")
             dept_rows = []
-            for t in BM_TITLES.get(bm_dept, []):
-                dept_rows.append({"المسمى":t, f"الأدنى ({cur})":f"{min_l:,}", f"المتوسط ({cur})":f"{mid_l:,}",
-                    f"الأعلى ({cur})":f"{max_l:,}", "المتوسط (SAR)":f"{mid_sar:,}"})
+            for t_name, t_w in title_list:
+                t_mid_sar = round(base_sar * mult * t_w)
+                t_min_sar = round(t_mid_sar * 0.80)
+                t_max_sar = round(t_mid_sar * 1.30)
+                t_min_l = round(t_min_sar * tl)
+                t_mid_l = round(t_mid_sar * tl)
+                t_max_l = round(t_max_sar * tl)
+                level = "🔴 تنفيذي" if t_w >= 1.5 else ("🟠 إداري" if t_w >= 1.1 else ("🟡 أخصائي" if t_w >= 0.7 else "🟢 مبتدئ"))
+                marker = " ◀️" if t_name == bm_title else ""
+                dept_rows.append({"المسمى":f"{t_name}{marker}", "المستوى":level,
+                    f"الأدنى ({cur})":f"{t_min_l:,}", f"المتوسط ({cur})":f"{t_mid_l:,}",
+                    f"الأعلى ({cur})":f"{t_max_l:,}", "المتوسط (SAR)":f"{t_mid_sar:,}"})
             st.dataframe(pd.DataFrame(dept_rows), use_container_width=True, hide_index=True)
 
             # Cost calculator
@@ -6639,6 +6479,18 @@ def main():
                 "النفط والطاقة": {0:6000,2:9000,5:15000,10:23000,15:32000,20:42000},
             }
 
+            # Title weight mapping (auto-detect level from name)
+            def _get_title_weight(title):
+                t = title.lower()
+                if any(x in t for x in ['cto','cfo','cmo','coo','نائب رئيس','استشاري','vice']): return 2.0
+                if any(x in t for x in ['مدير أول','مدير عام','رئيس']): return 1.7
+                if any(x in t for x in ['مدير','director','manager','رئيسي']): return 1.35
+                if any(x in t for x in ['مشرف','مهندس','عالم','محلل مالي','مدقق','مستشار','طبيب أخصائي']): return 1.10
+                if any(x in t for x in ['أخصائي','محلل','مطور','مصمم','محاسب','صيدلي']): return 0.85
+                if any(x in t for x in ['منسق','فني','مندوب','معلم','ممرض','سكرتير']): return 0.65
+                if any(x in t for x in ['مساعد','موظف استقبال','مرشد','حجوزات']): return 0.45
+                return 0.85
+
             # === Interface ===
             st.markdown("### 🔍 اختر الدول والوظيفة")
             countries_list = list(COUNTRIES.keys())
@@ -6690,11 +6542,12 @@ def main():
                     base_sar = round(base_s[lo] + (exp_years-lo)/(max(hi-lo,1)) * (base_s[hi]-base_s[lo])) if lo != hi else base_s[lo]
 
                     results = []
+                    tw = _get_title_weight(job_title)
                     for country in selected_countries:
                         ci = COUNTRIES[country]
                         m = CMULT.get(country, 0.5)
-                        mid_sar = round(base_sar * m)
-                        min_sar, max_sar = round(mid_sar*0.75), round(mid_sar*1.35)
+                        mid_sar = round(base_sar * m * tw)
+                        min_sar, max_sar = round(mid_sar*0.80), round(mid_sar*1.30)
                         tl = 1.0/ci['to_sar'] if ci['to_sar'] > 0 else 1
                         results.append({'country':country,'name':country.split(' ',1)[1],'currency':ci['currency'],
                             'region':ci['region'],'min_l':round(min_sar*tl),'mid_l':round(mid_sar*tl),'max_l':round(max_sar*tl),
@@ -9425,9 +9278,9 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
             # Display chat history with feedback
             for idx, msg in enumerate(st.session_state.labor_chat):
                 if msg['role'] == 'user':
-                    st.markdown(f"<div class='chat-user'>👤 {msg['content']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='background:#1e3a5f;color:white;padding:12px;border-radius:10px;margin:8px 0'>👤 {msg['content']}</div>", unsafe_allow_html=True)
                 else:
-                    st.markdown(f"<div class='chat-bot'>⚖️ {msg['content']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='background:#f0f4f8;color:#333;padding:12px;border-radius:10px;margin:8px 0;border-right:4px solid #0F4C5C'>⚖️ {msg['content']}</div>", unsafe_allow_html=True)
                     fc1, fc2, fc3 = st.columns([1,1,8])
                     q_text = st.session_state.labor_chat[idx-1]['content'] if idx > 0 else ""
                     q_hash = hashlib.md5(q_text.encode()).hexdigest()[:10] if q_text else ""
@@ -9493,9 +9346,9 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
 
             for idx, msg in enumerate(st.session_state.hr_chat):
                 if msg['role'] == 'user':
-                    st.markdown(f"<div class='chat-user'>👤 {msg['content']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='background:#1e3a5f;color:white;padding:12px;border-radius:10px;margin:8px 0'>👤 {msg['content']}</div>", unsafe_allow_html=True)
                 else:
-                    st.markdown(f"<div class='chat-bot-hr'>📚 {msg['content']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='background:#f0faf5;color:#333;padding:12px;border-radius:10px;margin:8px 0;border-right:4px solid #2A9D8F'>📚 {msg['content']}</div>", unsafe_allow_html=True)
                     fc1, fc2, fc3 = st.columns([1,1,8])
                     q_text = st.session_state.hr_chat[idx-1]['content'] if idx > 0 else ""
                     q_hash = hashlib.md5(q_text.encode()).hexdigest()[:10] if q_text else ""
@@ -12983,4 +12836,3 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
 
 if __name__ == "__main__":
     main()
-
