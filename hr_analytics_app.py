@@ -3156,7 +3156,7 @@ def main():
         elif section == "🎁 Total Rewards":
             page = st.radio("📌", ["🎁 لوحة Total Rewards","💰 لوحة الرواتب","📈 تحليل شهري/ربعي","🏷️ تحليل حسب الفئات","📊 سلم الرواتب","💰 هيكل الرواتب","🏥 المزايا والتأمينات","📊 تحليل التنافسية","📥 تصدير TR"], label_visibility="collapsed", key="_nav_p_tr")
         elif section == "👥 Headcount":
-            page = st.radio("📌", ["👥 Headcount Report","📊 تحليل الأداء","📋 بيانات الموظفين","📥 تصدير Headcount"], label_visibility="collapsed", key="_nav_p_hc")
+            page = st.radio("📌", ["👥 Headcount Report","📊 تحليل الأداء","🚪 تحليل المغادرين","📋 بيانات الموظفين","📥 تصدير Headcount"], label_visibility="collapsed", key="_nav_p_hc")
         elif section == "⚖️ حاسبة المستحقات":
             page = "⚖️ حاسبة المستحقات"
         elif section == "🎯 التوظيف":
@@ -4452,6 +4452,311 @@ def main():
 
 
             export_widget({"Headcount": data} if len(data)>0 else None, "Headcount", "hc1")
+
+        # ===== EXIT ANALYSIS =====
+        elif page == "🚪 تحليل المغادرين":
+            hdr("🚪 تحليل الموظفين المغادرين","تحليل شامل لأسباب إنهاء العقود وفق نظام العمل السعودي")
+
+            # Exit reasons based on Saudi Labor Law
+            EXIT_ARTICLES = {
+                "المادة 74 - انتهاء العقد بالاتفاق": {"article":"74","type":"طبيعي","color":"#27AE60","desc":"انتهاء مدة العقد، اتفاق الطرفين، إغلاق المنشأة، قوة قاهرة"},
+                "المادة 75 - الاستقالة بإشعار": {"article":"75","type":"استقالة","color":"#3498DB","desc":"استقالة العامل مع إشعار 30 يوم مسبق"},
+                "المادة 77 - إنهاء غير مشروع (تعويض)": {"article":"77","type":"فصل","color":"#E74C3C","desc":"إنهاء بدون سبب مشروع - يستحق تعويض 15 يوم/سنة أو المدة الباقية"},
+                "المادة 80 - فصل بدون مكافأة": {"article":"80","type":"فصل تأديبي","color":"#C0392B","desc":"اعتداء، إخلال جسيم، غياب 30 يوم متفرقة أو 15 متصلة، تزوير"},
+                "المادة 81 - ترك العمل بدون إشعار": {"article":"81","type":"استقالة فورية","color":"#F39C12","desc":"حق العامل بالترك: إخلال صاحب العمل، غش، عمل خطر، اعتداء"},
+                "المادة 76 - تعويض فترة الإشعار": {"article":"76","type":"إنهاء مبكر","color":"#9B59B6","desc":"إنهاء بدون إشعار مسبق - يدفع تعويض مدة الإشعار"},
+                "تقاعد": {"article":"74/6","type":"تقاعد","color":"#1ABC9C","desc":"بلوغ سن التقاعد (60 للرجال، 55 للنساء)"},
+                "وفاة": {"article":"74/7","type":"وفاة","color":"#7F8C8D","desc":"وفاة العامل"},
+                "نقل خدمات": {"article":"-","type":"نقل","color":"#2980B9","desc":"انتقال لصاحب عمل آخر عبر منصة قوى"},
+                "عدم تجديد العقد": {"article":"55","type":"طبيعي","color":"#16A085","desc":"انتهاء العقد محدد المدة بدون تجديد"},
+                "فترة التجربة": {"article":"53","type":"إنهاء","color":"#D35400","desc":"إنهاء خلال فترة التجربة (180 يوم) من أي طرف"},
+                "اتفاقية إنهاء ودي": {"article":"74/1","type":"ودي","color":"#8E44AD","desc":"اتفاق متبادل بين الطرفين على إنهاء العلاقة التعاقدية"},
+            }
+
+            # Initialize exit records
+            if 'exit_records' not in st.session_state:
+                st.session_state.exit_records = []
+
+            # === Tab 1: Add Exit Record ===
+            tab1, tab2, tab3 = st.tabs(["➕ تسجيل مغادرة","📊 التحليل والرسوم","📋 السجل الكامل"])
+
+            with tab1:
+                st.markdown("### ➕ تسجيل موظف مغادر")
+                ec1, ec2, ec3 = st.columns(3)
+                with ec1:
+                    ex_name = st.text_input("اسم الموظف:", key="ex_name")
+                    ex_id = st.text_input("الرقم الوظيفي:", key="ex_id")
+                    ex_dept = st.text_input("القسم:", key="ex_dept")
+                    ex_title = st.text_input("المسمى الوظيفي:", key="ex_title")
+                with ec2:
+                    ex_nationality = st.selectbox("الجنسية:", ["سعودي","غير سعودي"], key="ex_nat")
+                    ex_join = st.date_input("تاريخ التعيين:", key="ex_join")
+                    ex_exit = st.date_input("تاريخ المغادرة:", key="ex_exit")
+                    ex_salary = st.number_input("آخر راتب أساسي:", 0, 200000, 5000, key="ex_sal")
+                with ec3:
+                    ex_reason = st.selectbox("سبب المغادرة (المادة):", list(EXIT_ARTICLES.keys()), key="ex_reason")
+                    ex_detail = st.text_area("تفاصيل إضافية:", height=80, key="ex_detail",
+                        placeholder="سبب الاستقالة، ملاحظات، رقم الإنذار...")
+                    ex_eos_paid = st.radio("هل تم صرف مكافأة نهاية الخدمة؟", ["نعم","لا","جزئياً"], horizontal=True, key="ex_eos")
+
+                # Show article details
+                article_info = EXIT_ARTICLES[ex_reason]
+                st.info(f"📜 **{ex_reason}**\n\n{article_info['desc']}")
+
+                # Calculate service period
+                from dateutil.relativedelta import relativedelta
+                service = relativedelta(ex_exit, ex_join)
+                service_years = service.years + service.months / 12
+                service_text = f"{service.years} سنة و {service.months} شهر"
+
+                st.caption(f"📅 مدة الخدمة: **{service_text}** ({service_years:.1f} سنة)")
+
+                if st.button("💾 حفظ سجل المغادرة", type="primary", use_container_width=True, key="ex_save"):
+                    if ex_name:
+                        record = {
+                            "الاسم": ex_name, "الرقم الوظيفي": ex_id, "القسم": ex_dept,
+                            "المسمى": ex_title, "الجنسية": ex_nationality,
+                            "تاريخ التعيين": str(ex_join), "تاريخ المغادرة": str(ex_exit),
+                            "الراتب": ex_salary, "سبب المغادرة": ex_reason,
+                            "المادة": article_info['article'], "نوع الإنهاء": article_info['type'],
+                            "التفاصيل": ex_detail, "مكافأة نهاية الخدمة": ex_eos,
+                            "مدة الخدمة (سنوات)": round(service_years, 1),
+                            "مدة الخدمة": service_text,
+                        }
+                        st.session_state.exit_records.append(record)
+                        # Save to DB
+                        try:
+                            conn = get_conn()
+                            c = conn.cursor()
+                            _upsert_config(c, "exit_records", json.dumps(st.session_state.exit_records, ensure_ascii=False, default=str))
+                            conn.commit(); conn.close()
+                        except: pass
+                        st.success(f"✅ تم تسجيل مغادرة {ex_name}")
+                    else:
+                        st.error("❌ أدخل اسم الموظف")
+
+                # Load from DB if empty
+                if not st.session_state.exit_records:
+                    try:
+                        conn = get_conn()
+                        c = conn.cursor()
+                        c.execute(f"SELECT value FROM app_config WHERE key = {_ph()}", ("exit_records",))
+                        row = c.fetchone()
+                        if row:
+                            st.session_state.exit_records = json.loads(row[0])
+                        conn.close()
+                    except: pass
+
+            with tab2:
+                records = st.session_state.exit_records
+                if not records:
+                    st.info("📭 لا توجد سجلات مغادرة. سجّل موظفين مغادرين في التبويب الأول.")
+                else:
+                    df = pd.DataFrame(records)
+                    total = len(df)
+
+                    st.markdown(f"### 📊 تحليل {total} موظف مغادر")
+
+                    # KPIs
+                    k1,k2,k3,k4,k5 = st.columns(5)
+                    with k1: kpi("📊 إجمالي المغادرين", str(total))
+                    resignation_count = len(df[df['نوع الإنهاء'].isin(['استقالة','استقالة فورية'])])
+                    with k2: kpi("📝 الاستقالات", f"{resignation_count} ({round(resignation_count/total*100)}%)")
+                    fired_count = len(df[df['نوع الإنهاء'].isin(['فصل','فصل تأديبي'])])
+                    with k3: kpi("🔴 الفصل", f"{fired_count} ({round(fired_count/total*100)}%)")
+                    natural_count = len(df[df['نوع الإنهاء'].isin(['طبيعي','تقاعد','وفاة'])])
+                    with k4: kpi("🟢 طبيعي", f"{natural_count}")
+                    if 'الراتب' in df.columns:
+                        avg_sal = df['الراتب'].mean()
+                        with k5: kpi("💰 متوسط آخر راتب", f"{avg_sal:,.0f}")
+
+                    # === Chart 1: Exit reasons distribution ===
+                    st.markdown("### 📊 توزيع أسباب المغادرة")
+                    ch1, ch2 = st.columns(2)
+                    with ch1:
+                        reason_counts = df['سبب المغادرة'].value_counts().reset_index()
+                        reason_counts.columns = ['السبب', 'العدد']
+                        colors = [EXIT_ARTICLES.get(r, {}).get('color', '#999') for r in reason_counts['السبب']]
+                        fig = go.Figure(data=[go.Pie(labels=reason_counts['السبب'].str[:25], values=reason_counts['العدد'],
+                            hole=0.4, marker_colors=colors)])
+                        fig.update_layout(title='توزيع أسباب المغادرة', height=420, font=dict(family="Noto Sans Arabic"))
+                        st.plotly_chart(fig, use_container_width=True)
+
+                    with ch2:
+                        fig = px.bar(reason_counts, y='السبب', x='العدد', orientation='h',
+                            color='العدد', color_continuous_scale='Reds', text='العدد')
+                        fig.update_layout(title='عدد المغادرين حسب السبب', height=420,
+                            font=dict(family="Noto Sans Arabic"), coloraxis_showscale=False,
+                            yaxis={'categoryorder':'total ascending'})
+                        fig.update_traces(textposition='outside')
+                        st.plotly_chart(fig, use_container_width=True)
+
+                    # === Chart 2: Exit type breakdown ===
+                    st.markdown("### 📊 تحليل نوع الإنهاء")
+                    ch3, ch4 = st.columns(2)
+                    with ch3:
+                        type_counts = df['نوع الإنهاء'].value_counts().reset_index()
+                        type_counts.columns = ['النوع', 'العدد']
+                        type_colors = {'استقالة':'#3498DB','استقالة فورية':'#F39C12','فصل':'#E74C3C',
+                            'فصل تأديبي':'#C0392B','طبيعي':'#27AE60','تقاعد':'#1ABC9C',
+                            'وفاة':'#7F8C8D','نقل':'#2980B9','إنهاء':'#D35400','ودي':'#8E44AD','إنهاء مبكر':'#9B59B6'}
+                        fig = px.bar(type_counts, x='النوع', y='العدد', color='النوع',
+                            color_discrete_map=type_colors, text='العدد')
+                        fig.update_layout(title='المغادرون حسب نوع الإنهاء', height=380,
+                            font=dict(family="Noto Sans Arabic"), showlegend=False)
+                        fig.update_traces(textposition='outside')
+                        st.plotly_chart(fig, use_container_width=True)
+
+                    with ch4:
+                        # Nationality breakdown
+                        if 'الجنسية' in df.columns:
+                            nat_exit = df.groupby(['الجنسية','نوع الإنهاء']).size().reset_index(name='العدد')
+                            fig = px.bar(nat_exit, x='الجنسية', y='العدد', color='نوع الإنهاء',
+                                barmode='group', text='العدد', color_discrete_map=type_colors)
+                            fig.update_layout(title='المغادرون حسب الجنسية ونوع الإنهاء', height=380,
+                                font=dict(family="Noto Sans Arabic"))
+                            fig.update_traces(textposition='outside')
+                            st.plotly_chart(fig, use_container_width=True)
+
+                    # === Chart 3: Department analysis ===
+                    if 'القسم' in df.columns and df['القسم'].nunique() > 0:
+                        st.markdown("### 📊 التحليل حسب القسم")
+                        ch5, ch6 = st.columns(2)
+                        with ch5:
+                            dept_counts = df['القسم'].value_counts().reset_index()
+                            dept_counts.columns = ['القسم', 'العدد']
+                            fig = px.bar(dept_counts, x='القسم', y='العدد', color='العدد',
+                                color_continuous_scale='OrRd', text='العدد')
+                            fig.update_layout(title='عدد المغادرين حسب القسم', height=380,
+                                font=dict(family="Noto Sans Arabic"), coloraxis_showscale=False)
+                            fig.update_traces(textposition='outside')
+                            st.plotly_chart(fig, use_container_width=True)
+
+                        with ch6:
+                            dept_reason = df.groupby(['القسم','نوع الإنهاء']).size().reset_index(name='العدد')
+                            fig = px.bar(dept_reason, x='القسم', y='العدد', color='نوع الإنهاء',
+                                barmode='stack', color_discrete_map=type_colors)
+                            fig.update_layout(title='سبب المغادرة حسب القسم', height=380,
+                                font=dict(family="Noto Sans Arabic"))
+                            st.plotly_chart(fig, use_container_width=True)
+
+                    # === Chart 4: Service period analysis ===
+                    if 'مدة الخدمة (سنوات)' in df.columns:
+                        st.markdown("### 📊 تحليل مدة الخدمة")
+                        ch7, ch8 = st.columns(2)
+                        with ch7:
+                            fig = px.histogram(df, x='مدة الخدمة (سنوات)', nbins=10,
+                                color_discrete_sequence=['#E36414'], title='توزيع مدة الخدمة للمغادرين')
+                            fig.update_layout(height=380, font=dict(family="Noto Sans Arabic"),
+                                xaxis_title='سنوات الخدمة', yaxis_title='عدد الموظفين')
+                            st.plotly_chart(fig, use_container_width=True)
+
+                        with ch8:
+                            # Service years by exit type
+                            fig = px.box(df, x='نوع الإنهاء', y='مدة الخدمة (سنوات)',
+                                color='نوع الإنهاء', color_discrete_map=type_colors,
+                                title='مدة الخدمة حسب نوع الإنهاء')
+                            fig.update_layout(height=380, font=dict(family="Noto Sans Arabic"), showlegend=False)
+                            st.plotly_chart(fig, use_container_width=True)
+
+                    # === Timeline ===
+                    if 'تاريخ المغادرة' in df.columns:
+                        st.markdown("### 📈 الجدول الزمني للمغادرات")
+                        df_copy = df.copy()
+                        df_copy['شهر المغادرة'] = pd.to_datetime(df_copy['تاريخ المغادرة']).dt.to_period('M').astype(str)
+                        monthly = df_copy.groupby('شهر المغادرة').size().reset_index(name='العدد')
+                        fig = px.line(monthly, x='شهر المغادرة', y='العدد', markers=True,
+                            title='عدد المغادرين شهرياً', line_shape='spline')
+                        fig.update_layout(height=350, font=dict(family="Noto Sans Arabic"))
+                        fig.update_traces(line_color='#E74C3C', line_width=3)
+                        st.plotly_chart(fig, use_container_width=True)
+
+                    # === Insights ===
+                    st.markdown("### 💡 رؤى ذكية")
+                    # Most common reason
+                    top_reason = df['سبب المغادرة'].mode()[0]
+                    top_pct = round(len(df[df['سبب المغادرة']==top_reason]) / total * 100)
+                    st.info(f"📊 **السبب الأكثر شيوعاً:** {top_reason} ({top_pct}% من المغادرين)")
+
+                    # Avg service
+                    if 'مدة الخدمة (سنوات)' in df.columns:
+                        avg_service = df['مدة الخدمة (سنوات)'].mean()
+                        if avg_service < 2:
+                            st.warning(f"⚠️ متوسط مدة الخدمة قصير ({avg_service:.1f} سنة). قد تحتاج لمراجعة بيئة العمل وسياسات الاحتفاظ.")
+                        else:
+                            st.success(f"✅ متوسط مدة الخدمة: {avg_service:.1f} سنة")
+
+                    # Voluntary vs Involuntary
+                    voluntary = len(df[df['نوع الإنهاء'].isin(['استقالة','استقالة فورية','نقل'])])
+                    involuntary = len(df[df['نوع الإنهاء'].isin(['فصل','فصل تأديبي'])])
+                    if voluntary > 0 or involuntary > 0:
+                        vol_pct = round(voluntary / total * 100)
+                        inv_pct = round(involuntary / total * 100)
+                        st.info(f"📊 **الطوعي (استقالات):** {voluntary} ({vol_pct}%) | **القسري (فصل):** {involuntary} ({inv_pct}%)")
+                        if inv_pct > 30:
+                            st.warning("⚠️ نسبة الفصل مرتفعة. راجع سياسات التوظيف والأداء.")
+
+                    # Department with most exits
+                    if 'القسم' in df.columns and df['القسم'].nunique() > 0:
+                        top_dept = df['القسم'].mode()[0]
+                        top_dept_n = len(df[df['القسم']==top_dept])
+                        st.info(f"🏢 **القسم الأكثر مغادرة:** {top_dept} ({top_dept_n} موظف)")
+
+                    # Export
+                    st.markdown("---")
+                    if st.button("📥 تصدير تقرير المغادرين Excel", key="ex_export"):
+                        ox = io.BytesIO()
+                        with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
+                            df.to_excel(w, sheet_name='سجل المغادرين', index=False)
+                            # Summary sheet
+                            summary = []
+                            for reason, info in EXIT_ARTICLES.items():
+                                count = len(df[df['سبب المغادرة']==reason])
+                                pct = round(count/max(total,1)*100, 1)
+                                summary.append({"السبب":reason,"المادة":info['article'],"النوع":info['type'],
+                                    "العدد":count,"النسبة":f"{pct}%","الوصف":info['desc']})
+                            pd.DataFrame(summary).to_excel(w, sheet_name='ملخص الأسباب', index=False)
+                            # Department breakdown
+                            if 'القسم' in df.columns:
+                                dept_sum = df.groupby(['القسم','سبب المغادرة']).size().reset_index(name='العدد')
+                                dept_sum.to_excel(w, sheet_name='التحليل حسب القسم', index=False)
+                        st.download_button("📥 تحميل", data=ox.getvalue(),
+                            file_name=f"Exit_Analysis_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+            with tab3:
+                records = st.session_state.exit_records
+                if not records:
+                    st.info("📭 لا توجد سجلات")
+                else:
+                    st.markdown(f"### 📋 السجل الكامل ({len(records)} موظف)")
+                    df = pd.DataFrame(records)
+                    # Color-code by type
+                    st.dataframe(df, use_container_width=True, hide_index=True)
+
+                    # Delete individual records
+                    if len(records) > 0:
+                        del_idx = st.number_input("حذف سجل رقم:", 1, len(records), 1, key="ex_del_idx")
+                        if st.button("🗑️ حذف السجل", key="ex_del_btn"):
+                            st.session_state.exit_records.pop(del_idx - 1)
+                            try:
+                                conn = get_conn()
+                                c = conn.cursor()
+                                _upsert_config(c, "exit_records", json.dumps(st.session_state.exit_records, ensure_ascii=False, default=str))
+                                conn.commit(); conn.close()
+                            except: pass
+                            st.success(f"✅ تم حذف السجل #{del_idx}")
+
+                    if st.button("🗑️ مسح جميع السجلات", key="ex_clear"):
+                        st.session_state.exit_records = []
+                        try:
+                            conn = get_conn()
+                            c = conn.cursor()
+                            _upsert_config(c, "exit_records", "[]")
+                            conn.commit(); conn.close()
+                        except: pass
+                        st.success("✅ تم مسح جميع السجلات")
+
         elif page == "📋 بيانات الموظفين":
             hdr("📋 سجل بيانات الموظفين","Employee Data Registry - عرض وتصفية")
             data = sal_snapshot if len(sal_snapshot)>0 else emp
