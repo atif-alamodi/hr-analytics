@@ -1259,6 +1259,59 @@ st.markdown("""
 [data-testid="stSidebar"] .stRadio > div > label:hover{background:rgba(255,255,255,0.1)}
 /* Fix expander in dark sidebar */
 [data-testid="stSidebar"] .streamlit-expanderHeader{color:white !important}
+
+/* ===== RESPONSIVE DESIGN ===== */
+/* Tablet */
+@media (max-width: 1024px) {
+    .main .block-container{padding:0.5rem 1rem;max-width:100%}
+    .hdr{padding:14px 18px;border-radius:10px}
+    .hdr h1{font-size:18px !important}
+    .hdr p{font-size:11px}
+    .kpi{padding:10px;border-radius:10px}
+    .kpi h3{font-size:18px}
+    .kpi p{font-size:10px}
+    [data-testid="stMetric"]{padding:10px 12px}
+    [data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:16px !important}
+}
+/* Mobile */
+@media (max-width: 768px) {
+    .main .block-container{padding:0.3rem 0.5rem;max-width:100%}
+    .hdr{padding:12px 14px;border-radius:8px;margin-bottom:12px}
+    .hdr h1{font-size:16px !important}
+    .hdr p{font-size:10px}
+    .kpi{padding:8px;border-radius:8px;margin-bottom:6px}
+    .kpi h3{font-size:16px}
+    .kpi p{font-size:9px}
+    .ibox{padding:8px 10px;font-size:12px;border-radius:8px}
+    [data-testid="stMetric"]{padding:8px 10px;border-radius:8px}
+    [data-testid="stMetric"] label{font-size:10px !important}
+    [data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:14px !important}
+    .main h1{font-size:1.2em !important}
+    /* Make columns stack on mobile */
+    [data-testid="column"]{min-width:100% !important;width:100% !important}
+    /* Sidebar auto-collapse on mobile */
+    [data-testid="stSidebar"]{min-width:0 !important}
+    /* Smaller tables */
+    [data-testid="stDataFrame"]{font-size:11px}
+    /* Tabs smaller */
+    .stTabs [data-baseweb="tab"]{padding:6px 10px;font-size:11px}
+    .stTabs [data-baseweb="tab-list"]{gap:2px;overflow-x:auto}
+    /* Charts full width */
+    .js-plotly-plot{width:100% !important}
+    .js-plotly-plot .plotly{width:100% !important}
+    /* Forms compact */
+    .stTextInput, .stSelectbox, .stNumberInput{margin-bottom:4px}
+    /* Buttons full width */
+    .stButton > button{font-size:13px;padding:8px 12px}
+}
+/* Small mobile */
+@media (max-width: 480px) {
+    .hdr h1{font-size:14px !important}
+    .kpi h3{font-size:14px}
+    .kpi{padding:6px}
+    [data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:12px !important}
+    .stTabs [data-baseweb="tab"]{padding:4px 8px;font-size:10px}
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -2777,12 +2830,12 @@ def _restore_login():
     return False
 
 def login_page():
-    st.markdown("""<div style='text-align:center;padding:50px 0 30px;'>
-        <div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:80px;height:80px;border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:32px;font-weight:800;color:white;'>HR</div>
-        <h2 style='color:#0F4C5C;margin-bottom:4px;font-weight:700;'>منصة تحليلات الموارد البشرية</h2>
-        <p style='color:#64748B;font-size:14px;'>رسال الود لتقنية المعلومات - الإصدار v5</p>
+    st.markdown("""<div style='text-align:center;padding:30px 10px 20px;'>
+        <div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:70px;height:70px;border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:28px;font-weight:800;color:white;'>HR</div>
+        <h2 style='color:#0F4C5C;margin-bottom:4px;font-weight:700;font-size:clamp(1.1rem,3vw,1.6rem);'>منصة تحليلات الموارد البشرية</h2>
+        <p style='color:#64748B;font-size:clamp(11px,2vw,14px);'>رسال الود لتقنية المعلومات - الإصدار v5</p>
     </div>""", unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1,2,1])
+    col1, col2, col3 = st.columns([0.5,3,0.5])
     with col2:
         login_tab, forgot_tab = st.tabs(["تسجيل الدخول", "استرجاع كلمة المرور"])
 
