@@ -2004,6 +2004,83 @@ def verify_and_correct_response(response, consultant_type="legal"):
 
     return response
 
+def smart_retrieve_and_answer(question, kb_dict, consultant_type="legal"):
+    """Retrieval-first: understand question → find KB facts → AI formats only.
+    Returns (answer, used_ai) tuple."""
+
+    q = question.lower().strip()
+
+    # === Step 1: UNDERSTAND the question (attention) ===
+    # Detect topic keywords with weighted scoring
+    TOPIC_MAP = {
+        "تجربة|فترة تجربة|probation|تحت التجربة|اختبار": ["فترة التجربة|تجربة|probation"],
+        "فصل|طرد|إنهاء|termination|فسخ|إقالة|فصلني|فصلوني": ["فصل|إنهاء|طرد|termination"],
+        "استقالة|أستقيل|resignation|ترك العمل|أترك": ["استقالة|أستقيل|resignation"],
+        "مكافأة|نهاية الخدمة|end of service|eos|مكافاة": ["مكافأة|نهاية الخدمة|end of service"],
+        "مستحقات|تسوية|صرف|حقوقي المالية|متى يجب": ["مستحقات|تسوية|صرف|متى يجب"],
+        "إجازة|إجازات|سنوية|مرضية|annual|leave|عطلة": ["إجازة|إجازات|سنوية|مرضية|annual|leave"],
+        "ساعات|دوام|عمل اضافي|overtime|وقت العمل": ["ساعات|دوام|عمل اضافي|أوفرتايم|overtime"],
+        "تأمينات|تأمين|gosi|اشتراك|خصم|نسبة|تقاعد": ["تأمينات|تأمين اجتماعي|gosi|اشتراك"],
+        "ساند|تعطل|بطالة|unemployment": ["ساند|استحقاق ساند|تعطل|بطالة"],
+        "تأمين طبي|تأمين صحي|ضمان صحي|medical|insurance": ["تأمين طبي|تأمين صحي|ضمان صحي"],
+        "عقد|عقود|contract|محدد|غير محدد|تجديد": ["عقد|عقود|contract|أنواع العقود"],
+        "نطاقات|سعودة|توطين|nitaqat": ["نطاقات|سعودة|توطين|nitaqat"],
+        "حقوق العامل|حقوق الموظف|حقوقي": ["حقوق العامل|حقوق الموظف|حق العامل"],
+        "حقوق المرأة|حامل|وضع|رضاعة|أمومة|maternity": ["حقوق المرأة|المرأة|امرأة|حامل"],
+        "راتب|رواتب|أجر|أجور|بدل|salary": ["راتب|رواتب|أجر|أجور|بدل|salary"],
+        "شكوى|نزاع|خلاف|محكمة|مكتب العمل": ["شكوى|نزاع|خلاف|محكمة عمالية"],
+        "نقل كفالة|نقل خدمات|تحويل|كفيل|sponsor": ["نقل كفالة|نقل خدمات|تحويل|كفيل"],
+        "إصابة عمل|إصابة مهنية|حادث عمل|سلامة": ["إصابة عمل|إصابة مهنية|حادث عمل"],
+        "تدريب|تطوير|training|تأهيل|دورة": ["تدريب|تطوير|training|أطور|تأهيل"],
+        "توظيف|recruitment|استقطاب|مقابلة|تعيين": ["استقطاب|توظيف|recruitment|hiring"],
+        "واجبات صاحب العمل|التزامات صاحب|مسؤوليات": ["واجبات صاحب العمل|التزامات صاحب"],
+        "واجبات العامل|التزامات الموظف": ["واجبات العامل|التزامات الموظف"],
+        "أداء|تقييم|performance|kpi": ["أداء|تقييم|performance|kpi"],
+        "بحار|بحري|سفن|ملاحة": ["بحار|بحاره|بحري|سفن"],
+        "عمالة منزلية|خادم|سائق|domestic": ["عمالة منزلية|خادم|سائق|عامل منزلي"],
+        "خدمة|سنوات الخدمة|أقدمية": ["خدمة|سنوات الخدمة|أقدمية"],
+        "المادة 77|مادة 77|تعويض الفصل|فصل تعسفي": ["فصل|إنهاء|طرد|termination"],
+        "المادة 80|مادة 80|فصل بدون|فسخ بدون": ["فصل|إنهاء|طرد|termination"],
+        "المادة 84|مادة 84": ["مكافأة|نهاية الخدمة|end of service"],
+        "المادة 53|مادة 53": ["فترة التجربة|تجربة|probation"],
+    }
+
+    # === Step 2: MATCH question to KB entries (reasoning) ===
+    matched_entries = []
+    for topic_kws, kb_keys_list in TOPIC_MAP.items():
+        topic_words = topic_kws.split("|")
+        if any(tw in q for tw in topic_words):
+            # Find matching KB entry
+            for kb_pattern, kb_answer in kb_dict.items():
+                kb_words = kb_pattern.split("|")
+                if any(kw in kb_keys_list[0] for kw in kb_words[:3]):
+                    matched_entries.append(kb_answer)
+                    break
+
+    # Also do direct KB keyword matching as fallback
+    if not matched_entries:
+        for kb_pattern, kb_answer in kb_dict.items():
+            pattern_words = kb_pattern.split("|")
+            matches = sum(1 for pw in pattern_words if pw in q)
+            if matches >= 1:
+                matched_entries.append(kb_answer)
+
+    # === Step 3: DECIDE response strategy ===
+    if matched_entries:
+        # KB has the answer - AI only reformats
+        kb_text = "\n\n".join(matched_entries[:3])  # Max 3 entries
+        ai_prompt = f"""المعلومات المرجعية الصحيحة (لا تضف أي معلومة غير موجودة هنا):
+{kb_text}
+
+أعد صياغة المعلومات أعلاه للإجابة على السؤال التالي بشكل موجز ومنظم.
+لا تضف أي معلومة أو رقم أو مادة قانونية غير موجودة في المرجع.
+إذا المرجع لا يغطي جزءاً من السؤال اكتب: "هذا الجزء يحتاج مراجعة النص الرسمي."
+اختم بـ: ملاحظة: استشارة أولية. يُنصح بمراجعة متخصص."""
+        return ai_prompt, f"السؤال: {question}", True
+    else:
+        # No KB match - use minimal AI
+        return None, None, False
+
 def auto_learn_from_answer(question, answer, consultant_type="legal"):
     """Save good AI answers and improve them over time."""
     if not answer or len(answer) < 50: return
@@ -10504,12 +10581,20 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
             if '_pending_labor_q' in st.session_state:
                 pending_q = st.session_state.pop('_pending_labor_q')
                 with st.spinner("جاري التحليل القانوني..."):
-                    sys_p = """أنت مستشار قانوني خبير في نظام العمل السعودي المعدّل (م/44، 2025).
-المواد: م53 تجربة 180 يوم (التمديد محظور). م55 تحول العقد بعد 3 تجديدات/4 سنوات. م74 انتهاء العقد. م75 إشعار 60/30 يوم. م77 ★إذا العقد فيه تعويض محدد يُطبق أولاً، وإلا: غير محدد=15يوم/سنة، محدد=المدة الباقية، أدنى شهرين. م80 فصل بلا مكافأة (غياب >30 متفرقة/>15 متصلة، إنذار عند 20/10). م81 ترك بدون إشعار. م84 مكافأة: نصف شهر×5 سنوات أولى + شهر×بعدها. م85 استقالة: <2سنة=0، 2-5=ثلث، 5-10=ثلثين، >10=كاملة. م88 تسوية أسبوع. م98 ساعات 8/يوم 6 رمضان. م109 إجازة 21 يوم/30 بعد 5 سنوات. م113 أبوة 3 أيام. م116 مرضية 30+60+30. م151 أمومة 12 أسبوع.
-GOSI قديم(قبل 3/7/2024): موظف 9.75% شركة 11.75%. جديد(بعد 3/7/2024): تدريجي حتى 11%+11% بـ2028، حالياً 9.5%+9.5%=موظف 10.25% شركة 12.25%. تقاعد جديد 65 سنة.
-أجب بدقة مع الشروط والاستثناءات. لا تختلق مواد. اذكر الأرقام. في النهاية: ملاحظة: استشارة أولية يُنصح بمراجعة محامٍ."""
                     try:
-                        response, error = call_ai_api(sys_p, f"السؤال: {pending_q}", model_type="labor_law")
+                        # === RETRIEVAL-FIRST: KB facts → AI formats ===
+                        kb_prompt, kb_user, kb_found = smart_retrieve_and_answer(pending_q, LABOR_KB, "legal")
+
+                        if kb_found:
+                            # KB has verified facts - AI only reformats (no hallucination)
+                            response, error = call_ai_api(kb_prompt, kb_user, model_type="labor_law")
+                        else:
+                            # No KB match - minimal AI with grounding
+                            sys_p = """أنت مستشار قانوني في نظام العمل السعودي المعدّل 2025.
+م53 تجربة 180 يوم (محظور التمديد). م77 ★العقد فيه تعويض=يُطبق أولاً، وإلا: 15يوم/سنة أو المدة الباقية، أدنى شهرين. م80 فصل بلا مكافأة (غياب >30/>15 يوم). م84 مكافأة: نصف شهر×5 سنوات + شهر×بعدها. م85 استقالة: <2=0، 2-5=ثلث، 5-10=ثلثين، >10=كاملة.
+أجب بإيجاز ودقة. لا تختلق. إذا لم تتأكد اكتب "يحتاج مراجعة النص الرسمي"."""
+                            response, error = call_ai_api(sys_p, f"السؤال: {pending_q}", model_type="labor_law")
+
                         if response and len(response) > 20:
                             response = verify_and_correct_response(response, "legal")
                             auto_learn_from_answer(pending_q, response, "legal")
@@ -10591,18 +10676,23 @@ GOSI قديم(قبل 3/7/2024): موظف 9.75% شركة 11.75%. جديد(بعد 
             if '_pending_hr_q' in st.session_state:
                 pending_q = st.session_state.pop('_pending_hr_q')
                 with st.spinner("جاري التحليل المهني..."):
-                    rag_ctx = ""
                     try:
-                        if '_knowledge_engine' in st.session_state:
-                            rag_ctx = st.session_state._knowledge_engine.search(pending_q, advisor_type="hr")
-                    except: pass
+                        # === RETRIEVAL-FIRST: KB facts → AI formats ===
+                        kb_prompt, kb_user, kb_found = smart_retrieve_and_answer(pending_q, HR_KB, "hr")
 
-                    sys_p = f"""أنت مستشار موارد بشرية خبير معتمد في PHRi وSPHRi وSHRM-SCP وCIPD Level 7 وAPTD.
-أجب بتفصيل مع ذكر الإطار المنهجي المرجعي (PHRi/SHRM/CIPD/APTD). أعطِ خطوات عملية وأمثلة واقعية وأرقام ومعايير. طبّق على بيئة سعودية/خليجية. لا تذكر مواد قانونية. لا تختلق مصطلحات.
-{f'معلومات مرجعية:{chr(10)}{rag_ctx[:2000]}' if rag_ctx else ''}"""
+                        if kb_found:
+                            response, error = call_ai_api(kb_prompt, kb_user, model_type="hr")
+                        else:
+                            rag_ctx = ""
+                            try:
+                                if '_knowledge_engine' in st.session_state:
+                                    rag_ctx = st.session_state._knowledge_engine.search(pending_q, advisor_type="hr")
+                            except: pass
+                            sys_p = f"""أنت مستشار موارد بشرية خبير (PHRi/SPHRi/SHRM/CIPD/APTD).
+أجب بإيجاز مع ذكر الإطار المنهجي. لا تذكر مواد قانونية. لا تختلق مصطلحات.
+{f'مرجع:{chr(10)}{rag_ctx[:1500]}' if rag_ctx else ''}"""
+                            response, error = call_ai_api(sys_p, f"السؤال: {pending_q}", model_type="hr")
 
-                    try:
-                        response, error = call_ai_api(sys_p, f"السؤال: {pending_q}", model_type="hr")
                         if response and len(response) > 20:
                             auto_learn_from_answer(pending_q, response, "hr")
                             st.session_state.hr_chat = [{"role":"user","content":pending_q},{"role":"assistant","content":response}]
