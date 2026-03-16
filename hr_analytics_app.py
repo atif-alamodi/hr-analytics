@@ -3714,13 +3714,24 @@ def main():
     # =========================================
     if section == "📊 التحليلات العامة":
         if page == "🏠 نظرة عامة":
-            hdr("📊 لوحة التحليلات الشاملة","تحليل متقدم وشامل لبيانات القوى العاملة")
+            hdr("📊 لوحة التحليلات الشاملة","تحليل متقدم وشامل لبيانات القوى العاملة - Power BI Style")
             if n==0 and len(sal_df)==0:
-                st.info("📁 ارفع ملف بيانات الموظفين أو ملف الرواتب من القائمة الجانبية")
-                return
-
-            data = sal_snapshot if len(sal_snapshot)>0 else emp
-            total = len(data)
+                # Try to load from employee database
+                try:
+                    db_emp = db_load_employees()
+                    if len(db_emp) > 0:
+                        data = db_emp
+                        total = len(data)
+                        st.caption(f"📊 البيانات من قاعدة بيانات الموظفين ({total} موظف)")
+                    else:
+                        st.info("📁 ارفع ملف بيانات الموظفين من القائمة الجانبية، أو أضف موظفين في قاعدة البيانات (Headcount > قاعدة بيانات الموظفين)")
+                        return
+                except:
+                    st.info("📁 ارفع ملف بيانات الموظفين أو ملف الرواتب من القائمة الجانبية")
+                    return
+            else:
+                data = sal_snapshot if len(sal_snapshot)>0 else emp
+                total = len(data)
 
             # Auto-detect columns
             dept_col = next((c for c in data.columns if any(x in c.lower() for x in ['dept','department','قسم','القطاع'])), None)
@@ -3931,6 +3942,105 @@ def main():
                     fig.update_layout(font=dict(family="Noto Sans Arabic"), height=420,
                         xaxis_title="% من العدد", yaxis_title="% من التكلفة")
                     st.plotly_chart(fig, use_container_width=True)
+
+            # ===== ROW 9: AI INSIGHTS PANEL =====
+            st.markdown("---")
+            st.markdown("### 💡 رؤى وتحليلات ذكية")
+
+            insights = []
+            warnings = []
+
+            # 1. Headcount insight
+            insights.append(f"إجمالي القوى العاملة: **{total:,}** موظف")
+            if status_col:
+                active_count = len(data[data[status_col].isin(['Active','نشط','active'])])
+                inactive = total - active_count
+                if inactive > 0:
+                    turnover_est = round(inactive / max(total, 1) * 100, 1)
+                    insights.append(f"الموظفون النشطون: **{active_count:,}** | غير النشطين: **{inactive}** (نسبة الخروج التقديرية: {turnover_est}%)")
+                    if turnover_est > 20:
+                        warnings.append(f"نسبة الخروج مرتفعة ({turnover_est}%). المعيار العالمي: أقل من 15%. راجع سياسات الاحتفاظ بالموظفين.")
+
+            # 2. Saudization insight
+            if nat_col:
+                sa_count = len(data[data[nat_col].isin(['Saudi','سعودي','Saudi Arabian','سعودية'])])
+                sa_pct = round(sa_count / max(total, 1) * 100, 1)
+                insights.append(f"نسبة السعودة: **{sa_pct}%** ({sa_count} سعودي من {total})")
+                if sa_pct < 30:
+                    warnings.append(f"نسبة السعودة ({sa_pct}%) منخفضة جداً. النطاق الأخضر يتطلب 30%+ حسب نطاقات.")
+                elif sa_pct < 50:
+                    insights.append(f"نسبة السعودة في النطاق المقبول. لتحسين نطاقات: استهدف {sa_pct+10}%")
+                top_nat = data[nat_col].value_counts().head(3)
+                insights.append(f"أكبر 3 جنسيات: {', '.join([f'{n} ({c})' for n, c in top_nat.items()])}")
+
+            # 3. Salary insights
+            if sal_col and can_see_salaries():
+                avg_sal = data[sal_col].mean()
+                med_sal = data[sal_col].median()
+                total_payroll = data[sal_col].sum()
+                insights.append(f"إجمالي الرواتب الشهرية: **{total_payroll:,.0f}** | السنوية: **{total_payroll*12:,.0f}**")
+                skew = round((avg_sal - med_sal) / max(med_sal, 1) * 100, 1)
+                if skew > 15:
+                    warnings.append(f"انحراف الرواتب مرتفع ({skew}%). المتوسط ({avg_sal:,.0f}) أعلى بكثير من الوسيط ({med_sal:,.0f}). قد يوجد تفاوت كبير في الأجور.")
+                elif skew < -5:
+                    insights.append(f"الرواتب موزعة بشكل جيد (الوسيط {med_sal:,.0f} قريب من المتوسط {avg_sal:,.0f})")
+
+                # Highest/lowest paid departments
+                if dept_col:
+                    dept_avg = data.groupby(dept_col)[sal_col].mean().sort_values(ascending=False)
+                    if len(dept_avg) >= 2:
+                        insights.append(f"أعلى قسم أجوراً: **{dept_avg.index[0]}** ({dept_avg.iloc[0]:,.0f}) | الأقل: **{dept_avg.index[-1]}** ({dept_avg.iloc[-1]:,.0f})")
+                        ratio = dept_avg.iloc[0] / max(dept_avg.iloc[-1], 1)
+                        if ratio > 3:
+                            warnings.append(f"فجوة كبيرة بين الأقسام: {dept_avg.index[0]} يتقاضى {ratio:.1f}x أكثر من {dept_avg.index[-1]}")
+
+            # 4. Department concentration
+            if dept_col:
+                dept_counts = data[dept_col].value_counts()
+                largest = dept_counts.iloc[0]
+                largest_name = dept_counts.index[0]
+                largest_pct = round(largest / max(total, 1) * 100, 1)
+                insights.append(f"أكبر قسم: **{largest_name}** ({largest} موظف, {largest_pct}%)")
+                if largest_pct > 40:
+                    warnings.append(f"تركّز عالي: {largest_name} يضم {largest_pct}% من الموظفين. يُنصح بالتنويع.")
+
+            # 5. Hiring trend
+            if join_col:
+                try:
+                    data['_temp_join'] = pd.to_datetime(data[join_col], errors='coerce')
+                    recent = data[data['_temp_join'] >= pd.Timestamp.now() - pd.DateOffset(months=6)]
+                    if len(recent) > 0:
+                        insights.append(f"التوظيف في آخر 6 أشهر: **{len(recent)}** موظف جديد ({round(len(recent)/max(total,1)*100,1)}%)")
+                    data.drop(columns=['_temp_join'], inplace=True, errors='ignore')
+                except: pass
+
+            # Display insights
+            ic1, ic2 = st.columns(2)
+            with ic1:
+                st.markdown("#### 📊 الرؤى الرئيسية")
+                for ins in insights:
+                    ibox(ins, "success")
+            with ic2:
+                st.markdown("#### ⚠️ تنبيهات وتوصيات")
+                if warnings:
+                    for w in warnings:
+                        ibox(w, "warning")
+                else:
+                    ibox("لا توجد تنبيهات. المؤشرات ضمن النطاق الطبيعي.", "success")
+
+            # Quick stats summary table
+            st.markdown("### 📋 ملخص سريع")
+            summary_data = []
+            if dept_col: summary_data.append({"المؤشر":"عدد الأقسام","القيمة":str(data[dept_col].nunique()),"الحالة":"📊"})
+            if nat_col: summary_data.append({"المؤشر":"عدد الجنسيات","القيمة":str(data[nat_col].nunique()),"الحالة":"🌍"})
+            if sal_col and can_see_salaries():
+                summary_data.append({"المؤشر":"أعلى راتب","القيمة":f"{data[sal_col].max():,.0f}","الحالة":"📈"})
+                summary_data.append({"المؤشر":"أقل راتب","القيمة":f"{data[sal_col].min():,.0f}","الحالة":"📉"})
+                summary_data.append({"المؤشر":"الانحراف المعياري","القيمة":f"{data[sal_col].std():,.0f}","الحالة":"📐"})
+            if loc_col: summary_data.append({"المؤشر":"عدد المواقع","القيمة":str(data[loc_col].nunique()),"الحالة":"📍"})
+            if gender_col: summary_data.append({"المؤشر":"نسبة الذكور","القيمة":f"{round(len(data[data[gender_col].isin(['Male','ذكر'])])/max(total,1)*100)}%","الحالة":"👨"})
+            if summary_data:
+                st.dataframe(pd.DataFrame(summary_data), use_container_width=True, hide_index=True)
 
 
 
