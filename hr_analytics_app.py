@@ -93,9 +93,20 @@ class ModelOrchestrator:
         return None
 
     def build_context(self, system_prompt, user_message, model_type='general', provider='claude'):
-        """Assemble context with STRICT advisor_type separation."""
+        """Assemble context with STRICT advisor_type separation + anti-hallucination."""
         max_ctx = self.CONTEXT_LIMITS.get(provider, 8000)
-        enhanced = system_prompt[:max_ctx // 2]
+
+        # ANTI-HALLUCINATION PREFIX (always prepended)
+        ANTI_HALLUCINATION = """[تعليمات صارمة]
+- أجب فقط بمعلومات تعرفها بيقين. إذا لم تكن متأكداً اكتب "غير متأكد" أو "يحتاج تحقق".
+- لا تختلق أرقاماً أو إحصائيات أو أسماء أو مراجع غير حقيقية.
+- لا تنسب معلومات لمصادر لم تتحقق منها.
+- إذا سُئلت عن رقم محدد (راتب، نسبة، تاريخ) وأنت غير متأكد، أعط نطاقاً تقريبياً واذكر أنه تقديري.
+- في المسائل القانونية: اذكر رقم المادة بدقة أو اكتب "يُرجع للنظام".
+- في الرواتب: وضّح أن الأرقام تقديرية وتختلف حسب الشركة والخبرة والمؤهلات.
+- لا تعطِ نصائح طبية أو قانونية نهائية. دائماً أوصِ بالرجوع لمتخصص.
+"""
+        enhanced = ANTI_HALLUCINATION + system_prompt[:max_ctx // 2]
 
         # Determine advisor_type from system prompt
         advisor_type = "legal" if 'المستشار القانوني' in system_prompt else "hr"
@@ -202,7 +213,7 @@ class ModelOrchestrator:
                 resp = req_lib.post(url, json={
                     "contents": gemini_contents,
                     "systemInstruction": {"parts":[{"text":system_prompt[:4000]}]},
-                    "generationConfig": {"maxOutputTokens": config['max_tokens'], "temperature": 0.3}
+                    "generationConfig": {"maxOutputTokens": config['max_tokens'], "temperature": 0.1}
                 }, timeout=30)
                 if resp.status_code == 200:
                     text = resp.json().get('candidates',[{}])[0].get('content',{}).get('parts',[{}])[0].get('text','')
@@ -219,7 +230,7 @@ class ModelOrchestrator:
                 models_to_try = self.OR_MODELS if provider == 'openrouter' else [config['model']]
                 for model_name in models_to_try:
                     try:
-                        payload = json.dumps({"model":model_name,"max_tokens":config['max_tokens'],"messages":[{"role":"system","content":system_prompt}]+messages,"temperature":0.3})
+                        payload = json.dumps({"model":model_name,"max_tokens":config['max_tokens'],"messages":[{"role":"system","content":system_prompt}]+messages,"temperature":0.1})
                         headers = {'Content-Type':'application/json','Authorization':f'Bearer {api_key}'}
                         req = _ur.Request(config['url'], data=payload.encode('utf-8'), headers=headers, method='POST')
                         with _ur.urlopen(req, timeout=30) as resp:
@@ -237,7 +248,7 @@ class ModelOrchestrator:
                     resp = req_lib.post(config['url'],
                         json={"model":model_name,"max_tokens":config['max_tokens'],
                             "messages":[{"role":"system","content":system_prompt}]+messages,
-                            "temperature":0.3},
+                            "temperature":0.1},
                         headers=headers, timeout=30)
                     if resp.status_code == 200:
                         text = resp.json().get('choices',[{}])[0].get('message',{}).get('content','')
@@ -1591,12 +1602,12 @@ def _call_llm(question, reasoning_prompt, req_lib):
                 resp = req_lib.post("https://api.groq.com/openai/v1/chat/completions",
                     json={"model":"llama-3.3-70b-versatile","messages":[
                         {"role":"system","content":reasoning_prompt[:3500]},
-                        {"role":"user","content":question}],"max_tokens":2500,"temperature":0.3},
+                        {"role":"user","content":question}],"max_tokens":2500,"temperature":0.1},
                     headers={'Authorization':f'Bearer {api_key}'},timeout=30)
             elif prov == 'gemini':
                 resp = req_lib.post(f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}",
                     json={"contents":[{"parts":[{"text":f"{reasoning_prompt[:3000]}\n\nالسؤال: {question}"}]}],
-                        "generationConfig":{"maxOutputTokens":2000,"temperature":0.3}},timeout=30)
+                        "generationConfig":{"maxOutputTokens":2000,"temperature":0.1}},timeout=30)
             else:
                 resp = req_lib.post("https://openrouter.ai/api/v1/chat/completions",
                     json={"model":"meta-llama/llama-3.3-70b-instruct:free",
@@ -7485,6 +7496,12 @@ def main():
                         if has_jd:
                             prompt = f"""أنت CHRO (Chief HR Officer) بخبرة 25 سنة في التوظيف بشركات Fortune 500. مهمتك: تقييم هذا المرشح مقابل الوصف الوظيفي بدقة متناهية. كن صارماً وموضوعياً.
 
+⚠️ تعليمات صارمة:
+- حلل فقط ما هو مكتوب في السيرة الذاتية. لا تفترض مهارات أو خبرات غير مذكورة.
+- إذا لم تجد معلومة، اكتب "غير مذكور في السيرة" وليس تخميناً.
+- الدرجات يجب أن تكون واقعية: لا تعطِ 90/100 إلا لمرشح استثنائي فعلاً.
+- إذا كانت السيرة ضعيفة، قل ذلك بوضوح.
+
 **السيرة الذاتية:**
 {cv_text[:4500]}
 
@@ -7536,6 +7553,12 @@ def main():
 
                         else:
                             prompt = f"""أنت خبير تقييم مواهب (Talent Assessment Expert) بخبرة 25 سنة مع McKinsey وKorn Ferry. حلل هذا المرشح بعمق وموضوعية.
+
+⚠️ تعليمات صارمة:
+- حلل فقط ما هو مكتوب في السيرة الذاتية. لا تختلق خبرات أو مهارات غير موجودة.
+- الرواتب المقترحة تقديرية وتختلف حسب الشركة والموقع. وضّح ذلك.
+- إذا لم تجد معلومة كافية، اكتب "غير واضح من السيرة".
+- كن صريحاً في نقاط الضعف ولا تجامل.
 
 **السيرة الذاتية:**
 {cv_text[:4500]}
@@ -7700,7 +7723,12 @@ def main():
                 with st.spinner("جاري التحليل الذكي..."):
                     cv_ref = f"\n\n**تحليل السيرة الذاتية السابق:**\n{st.session_state.get('_last_cv_analysis','')[:1500]}" if has_cv else ""
 
-                    prompt = f"""حلل المقابلة الشخصية التالية وقدم تقريراً مفصلاً بالعربية:
+                    prompt = f"""حلل المقابلة الشخصية التالية وقدم تقريراً مفصلاً بالعربية.
+
+⚠️ تعليمات صارمة:
+- قيّم فقط بناءً على الإجابات المكتوبة. لا تفترض نوايا أو قدرات غير مذكورة.
+- إذا كانت الإجابة غامضة، قل "الإجابة تحتاج توضيح" وليس تخميناً.
+- كن موضوعياً: إجابة ضعيفة = درجة منخفضة بدون مجاملة.
 
 **الأسئلة:**
 {questions_text[:2000]}
@@ -9262,6 +9290,12 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                         extracted_txt = "\n".join([f"- {k}: {v}" for k,v in extracted.items()])
 
                         ct_ai_prompt = f"""أنت محامي متخصص في نظام العمل السعودي المعدل (المرسوم الملكي م/44، نافذ 19/2/2025).
+
+⚠️ تعليمات صارمة:
+- اذكر فقط المواد التي تعرفها بيقين. لا تختلق أرقام مواد.
+- إذا لم تكن متأكداً من مادة معينة، اكتب "يُرجع لنظام العمل".
+- هذا تحليل أولي وليس استشارة قانونية. أوصِ بمراجعة محامٍ متخصص.
+- المواد المعدلة الرئيسية: 53 (تجربة 180 يوم)، 77 (تعويض)، 84-85 (مكافأة)، 98 (ساعات)، 109 (إجازة)، 113 (أبوة)، 151 (أمومة 12 أسبوع).
 
 حلل العقد التالي وقدم تقريراً قانونياً شاملاً:
 
@@ -12533,6 +12567,11 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                         if last_r.get('dominant'): extra = f"\nالنمط السائد: {last_r['dominant']}"
 
                         ai_prompt = f"""أنت خبير في علم النفس التنظيمي وتحليل الشخصيات المهنية.
+
+⚠️ تعليمات صارمة:
+- حلل فقط بناءً على الدرجات المعطاة. لا تفترض سمات غير مدعومة بالأرقام.
+- النتائج تقديرية وليست تشخيصاً نفسياً. وضّح ذلك.
+- التوصيات المهنية عامة وتحتاج تأكيد بمقابلة شخصية.
 
 اختبار: {test_name}
 الموظف: {emp_name}
