@@ -3424,7 +3424,7 @@ def main():
         elif section == "🎁 Total Rewards":
             page = st.radio("📌", ["🎁 لوحة Total Rewards","💰 لوحة الرواتب","📈 تحليل شهري/ربعي","🏷️ تحليل حسب الفئات","📊 سلم الرواتب","💰 هيكل الرواتب","🏥 المزايا والتأمينات","📊 تحليل التنافسية","📥 تصدير TR"], label_visibility="collapsed", key="_nav_p_tr")
         elif section == "👥 Headcount":
-            page = st.radio("📌", ["👥 Headcount Report","📊 تحليل الأداء","🚪 تحليل المغادرين","🗄️ سجل الموظفين HRIS","📋 بيانات الموظفين","📥 تصدير Headcount"], label_visibility="collapsed", key="_nav_p_hc")
+            page = st.radio("📌", ["👥 Headcount Report","📊 تحليل الأداء","🚪 تحليل المغادرين","🗄️ قاعدة بيانات الموظفين","📋 بيانات الموظفين","📥 تصدير Headcount"], label_visibility="collapsed", key="_nav_p_hc")
         elif section == "⚖️ حاسبة المستحقات":
             page = "⚖️ حاسبة المستحقات"
         elif section == "🎯 التوظيف":
@@ -5026,8 +5026,8 @@ def main():
                         st.success("✅ تم مسح جميع السجلات")
 
         # ===== HRIS EMPLOYEE DATABASE =====
-        elif page == "🗄️ سجل الموظفين HRIS":
-            hdr("🗄️ نظام إدارة الموارد البشرية HRIS","قاعدة بيانات الموظفين - إضافة، تعديل، استيراد، تحليل")
+        elif page == "🗄️ قاعدة بيانات الموظفين":
+            hdr("🗄️ قاعدة بيانات الموظفين للتحليل","بيانات الموظفين المركزية لتغذية التحليلات والتقارير")
 
             tab1, tab2, tab3, tab4 = st.tabs(["➕ إضافة موظف","📥 استيراد من Excel","📋 عرض وتعديل","📊 لوحة المعلومات"])
 
