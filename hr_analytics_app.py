@@ -10582,19 +10582,36 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                 pending_q = st.session_state.pop('_pending_labor_q')
                 with st.spinner("جاري التحليل القانوني..."):
                     try:
-                        # === RETRIEVAL-FIRST: KB facts → AI formats ===
-                        kb_prompt, kb_user, kb_found = smart_retrieve_and_answer(pending_q, LABOR_KB, "legal")
+                        sys_p = """أنت مستشار قانوني سعودي. قبل أن تجيب، فكّر بهذا الترتيب:
 
-                        if kb_found:
-                            # KB has verified facts - AI only reformats (no hallucination)
-                            response, error = call_ai_api(kb_prompt, kb_user, model_type="labor_law")
-                        else:
-                            # No KB match - minimal AI with grounding
-                            sys_p = """أنت مستشار قانوني في نظام العمل السعودي المعدّل 2025.
-م53 تجربة 180 يوم (محظور التمديد). م77 ★العقد فيه تعويض=يُطبق أولاً، وإلا: 15يوم/سنة أو المدة الباقية، أدنى شهرين. م80 فصل بلا مكافأة (غياب >30/>15 يوم). م84 مكافأة: نصف شهر×5 سنوات + شهر×بعدها. م85 استقالة: <2=0، 2-5=ثلث، 5-10=ثلثين، >10=كاملة.
-أجب بإيجاز ودقة. لا تختلق. إذا لم تتأكد اكتب "يحتاج مراجعة النص الرسمي"."""
-                            response, error = call_ai_api(sys_p, f"السؤال: {pending_q}", model_type="labor_law")
+الخطوة 1 - مَن يسأل؟ (عامل يشتكي؟ صاحب عمل يسأل؟ سؤال عام؟)
+الخطوة 2 - ماذا حصل له تحديداً؟ (تعدي عليه؟ فُصل؟ يريد يستقيل؟ يسأل عن حق؟)
+الخطوة 3 - ما المادة الصحيحة؟
 
+تنبيه مهم: فرّق بين:
+- التعدي على العامل (من صاحب العمل) = المادة 81: يحق للعامل ترك العمل بدون إشعار مع كل حقوقه
+- التعدي من العامل (على صاحب العمل) = المادة 80: يحق فصله بدون مكافأة
+- الفصل بدون سبب = المادة 77: تعويض
+- الاستقالة = المادة 85: مكافأة حسب المدة
+
+المواد الأساسية:
+م53: تجربة 180 يوم، التمديد محظور
+م55: العقد يتحول لغير محدد بعد 3 تجديدات أو 4 سنوات
+م75: إشعار 60 يوم من صاحب العمل، 30 من العامل
+م77: إذا العقد فيه تعويض محدد يُطبق أولاً. وإلا: غير محدد=15 يوم/سنة، محدد=المدة الباقية، أدنى شهرين
+م80: فصل بدون مكافأة: اعتداء من العامل، إخلال جوهري، غياب >30 متفرقة أو >15 متصلة (إنذار عند 20/10)، تزوير، إفشاء أسرار
+م81: للعامل ترك العمل بدون إشعار مع كل حقوقه إذا: تعدى عليه صاحب العمل أو أهانه، لم يفِ بالتزاماته، غش في الشروط، كلّفه بعمل مختلف جوهرياً، خطر على سلامته
+م84: مكافأة: نصف شهر عن أول 5 سنوات + شهر عن كل سنة بعدها
+م85: عند الاستقالة: <2 سنة=لا شيء، 2-5=ثلث، 5-10=ثلثين، >10=كاملة
+م88: التسوية خلال أسبوع
+م98: 8 ساعات/يوم، 6 في رمضان
+م109: إجازة 21 يوم، 30 بعد 5 سنوات
+م113: أبوة 3 أيام. م116: مرضية 30+60+30. م151: أمومة 12 أسبوع
+GOSI: قديم (قبل 3/7/2024) موظف 9.75% شركة 11.75%. جديد (بعد 3/7/2024) حالياً 9.5%+9.5% تدريجي حتى 11%+11% بـ2028. تقاعد جديد 65 سنة.
+
+أجب بإيجاز. لا تختلق. إذا لم تتأكد اكتب "يحتاج مراجعة النص الرسمي"."""
+
+                        response, error = call_ai_api(sys_p, f"السؤال: {pending_q}", model_type="labor_law")
                         if response and len(response) > 20:
                             response = verify_and_correct_response(response, "legal")
                             auto_learn_from_answer(pending_q, response, "legal")
@@ -10677,22 +10694,22 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                 pending_q = st.session_state.pop('_pending_hr_q')
                 with st.spinner("جاري التحليل المهني..."):
                     try:
-                        # === RETRIEVAL-FIRST: KB facts → AI formats ===
-                        kb_prompt, kb_user, kb_found = smart_retrieve_and_answer(pending_q, HR_KB, "hr")
+                        rag_ctx = ""
+                        try:
+                            if '_knowledge_engine' in st.session_state:
+                                rag_ctx = st.session_state._knowledge_engine.search(pending_q, advisor_type="hr")
+                        except: pass
 
-                        if kb_found:
-                            response, error = call_ai_api(kb_prompt, kb_user, model_type="hr")
-                        else:
-                            rag_ctx = ""
-                            try:
-                                if '_knowledge_engine' in st.session_state:
-                                    rag_ctx = st.session_state._knowledge_engine.search(pending_q, advisor_type="hr")
-                            except: pass
-                            sys_p = f"""أنت مستشار موارد بشرية خبير (PHRi/SPHRi/SHRM/CIPD/APTD).
-أجب بإيجاز مع ذكر الإطار المنهجي. لا تذكر مواد قانونية. لا تختلق مصطلحات.
+                        sys_p = f"""أنت مستشار موارد بشرية خبير. قبل أن تجيب، فكّر:
+
+الخطوة 1 - ماذا يسأل؟ (مفهوم نظري؟ تطبيق عملي؟ حل مشكلة؟)
+الخطوة 2 - أي إطار منهجي يُجيب؟ (PHRi/SPHRi/SHRM/CIPD/APTD)
+الخطوة 3 - أجب بإيجاز مع خطوات عملية
+
+لا تذكر مواد قانونية. لا تختلق مصطلحات. اذكر المنهج المرجعي.
 {f'مرجع:{chr(10)}{rag_ctx[:1500]}' if rag_ctx else ''}"""
-                            response, error = call_ai_api(sys_p, f"السؤال: {pending_q}", model_type="hr")
 
+                        response, error = call_ai_api(sys_p, f"السؤال: {pending_q}", model_type="hr")
                         if response and len(response) > 20:
                             auto_learn_from_answer(pending_q, response, "hr")
                             st.session_state.hr_chat = [{"role":"user","content":pending_q},{"role":"assistant","content":response}]
