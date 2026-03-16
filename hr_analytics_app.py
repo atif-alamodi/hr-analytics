@@ -1214,26 +1214,128 @@ init_db()
 # ===== STYLES =====
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;500;600;700;800&display=swap');
-*{font-family:'Noto Sans Arabic',sans-serif}
-.main .block-container{padding-top:.8rem;max-width:1400px}
-[data-testid="stSidebar"]{background:linear-gradient(180deg,#0F4C5C 0%,#1A1A2E 100%)}
-[data-testid="stSidebar"] *{color:white !important}
-[data-testid="stMetric"]{background:white;border-radius:12px;padding:14px 18px;box-shadow:0 1px 3px rgba(0,0,0,.06);border:1px solid #E2E8F0}
-[data-testid="stMetric"] label{font-size:12px !important;color:#64748B !important}
-[data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:20px !important;font-weight:700 !important}
-h1{color:#0F4C5C !important;font-weight:800 !important}
-.hdr{background:linear-gradient(135deg,#0F4C5C,#1A1A2E);padding:20px 28px;border-radius:14px;margin-bottom:20px;color:white}
-.hdr h1{color:white !important;margin:0;font-size:24px}
-.hdr p{color:rgba(255,255,255,.7);margin:4px 0 0;font-size:13px}
-.ibox{background:#EFF6FF;border-radius:10px;padding:12px 16px;border-right:4px solid #3B82F6;margin-bottom:8px;font-size:13px;line-height:1.7}
-.ibox.warn{background:#FFF7ED;border-right-color:#F97316}
-.ibox.ok{background:#F0FDF4;border-right-color:#22C55E}
-.ibox.bad{background:#FEF2F2;border-right-color:#EF4444}
-.kpi{background:linear-gradient(135deg,#0F4C5C,#1B4D5C);color:white;border-radius:12px;padding:16px;text-align:center;margin-bottom:10px}
-.kpi h3{font-size:24px;margin:6px 0 2px;font-weight:800}
-.kpi p{font-size:11px;opacity:.7;margin:0}
-#MainMenu,footer{visibility:hidden}
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+
+/* ===== Global Reset & Typography ===== */
+*{font-family:'IBM Plex Sans Arabic',sans-serif !important;box-sizing:border-box}
+.main .block-container{padding-top:1rem;max-width:1400px}
+.stApp{background:#F8FAFB !important;background-image:radial-gradient(at 40% 20%,rgba(15,76,92,0.04) 0px,transparent 50%),radial-gradient(at 80% 0%,rgba(227,100,20,0.03) 0px,transparent 50%),radial-gradient(at 0% 50%,rgba(42,157,143,0.03) 0px,transparent 50%) !important}
+
+/* ===== Scrollbar ===== */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(15,76,92,0.2);border-radius:10px}
+::-webkit-scrollbar-thumb:hover{background:rgba(15,76,92,0.4)}
+
+/* ===== Sidebar ===== */
+[data-testid="stSidebar"]{background:linear-gradient(180deg,#FFFFFF 0%,#F1F5F9 100%) !important;border-left:1px solid rgba(15,76,92,0.08) !important}
+[data-testid="stSidebar"] *{color:#1A1A2E !important}
+[data-testid="stSidebar"] hr{border-color:rgba(15,76,92,0.08) !important}
+[data-testid="stSidebar"] .stRadio label{font-size:13px !important;padding:8px 12px !important;border-radius:10px !important;transition:all 0.25s cubic-bezier(0.4,0,0.2,1) !important;margin-bottom:2px !important}
+[data-testid="stSidebar"] .stRadio label:hover{background:rgba(15,76,92,0.04) !important;transform:translateX(-3px)}
+[data-testid="stSidebar"] .stRadio label[data-checked="true"],[data-testid="stSidebar"] .stRadio [aria-checked="true"]+label{background:linear-gradient(135deg,rgba(227,100,20,0.1),rgba(42,157,143,0.06)) !important;border-right:3px solid #E36414 !important;font-weight:600 !important}
+[data-testid="stSidebar"] .stButton button{background:linear-gradient(135deg,#0F4C5C,#1A1A2E) !important;color:white !important;border:none !important;border-radius:10px !important;padding:10px 16px !important;font-weight:600 !important;transition:all 0.3s !important}
+[data-testid="stSidebar"] .stButton button:hover{transform:translateY(-2px) !important;box-shadow:0 4px 15px rgba(15,76,92,0.2) !important}
+[data-testid="stSidebar"] .stFileUploader{border:2px dashed rgba(15,76,92,0.15) !important;border-radius:12px !important;background:rgba(15,76,92,0.02) !important}
+
+/* ===== KPI Metric Cards ===== */
+[data-testid="stMetric"]{background:rgba(255,255,255,0.88) !important;backdrop-filter:blur(24px) saturate(200%) !important;-webkit-backdrop-filter:blur(24px) saturate(200%) !important;border-radius:14px !important;padding:18px 20px !important;box-shadow:0 1px 3px rgba(15,76,92,0.04),0 4px 12px rgba(15,76,92,0.02) !important;border:1px solid rgba(255,255,255,0.6) !important;transition:all 0.3s cubic-bezier(0.4,0,0.2,1) !important;position:relative !important;overflow:hidden !important}
+[data-testid="stMetric"]:hover{transform:translateY(-3px) !important;box-shadow:0 8px 30px rgba(15,76,92,0.08) !important}
+[data-testid="stMetric"]::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#2A9D8F,#E36414);opacity:0;transition:opacity 0.3s}
+[data-testid="stMetric"]:hover::after{opacity:1}
+[data-testid="stMetric"] label{font-size:12px !important;color:#64748B !important;font-weight:500 !important}
+[data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:22px !important;font-weight:700 !important;color:#0F4C5C !important;font-family:'Space Mono','IBM Plex Sans Arabic',monospace !important}
+[data-testid="stMetric"] [data-testid="stMetricDelta"]{font-family:'Space Mono',monospace !important}
+
+/* ===== Typography ===== */
+h1{color:#0F4C5C !important;font-weight:700 !important;letter-spacing:-0.02em !important}
+h2{color:#0F4C5C !important;font-weight:600 !important}
+h3{color:#1A1A2E !important;font-weight:600 !important}
+
+/* ===== Header Component ===== */
+.hdr{background:linear-gradient(135deg,#0F4C5C,#1A1A2E) !important;padding:22px 28px !important;border-radius:16px !important;margin-bottom:24px !important;color:white !important;position:relative !important;overflow:hidden !important;box-shadow:0 4px 20px rgba(15,76,92,0.15) !important}
+.hdr::before{content:'';position:absolute;top:-50%;right:-50%;width:100%;height:100%;background:radial-gradient(circle,rgba(42,157,143,0.15) 0%,transparent 70%);pointer-events:none}
+.hdr h1{color:white !important;margin:0 !important;font-size:24px !important;font-weight:700 !important}
+.hdr p{color:rgba(255,255,255,.7) !important;margin:4px 0 0 !important;font-size:13px !important}
+
+/* ===== Info Boxes ===== */
+.ibox{background:rgba(255,255,255,0.88) !important;backdrop-filter:blur(16px) !important;border-radius:12px !important;padding:14px 18px !important;border-right:4px solid #2A9D8F !important;margin-bottom:10px !important;font-size:13px !important;line-height:1.8 !important;box-shadow:0 1px 3px rgba(0,0,0,0.03) !important;transition:all 0.3s !important}
+.ibox:hover{transform:translateX(-3px) !important;box-shadow:0 4px 12px rgba(0,0,0,0.04) !important}
+.ibox.warn{background:rgba(255,247,237,0.9) !important;border-right-color:#E36414 !important}
+.ibox.ok{background:rgba(240,253,244,0.9) !important;border-right-color:#2A9D8F !important}
+.ibox.bad{background:rgba(254,242,242,0.9) !important;border-right-color:#DC2626 !important}
+
+/* ===== KPI Cards (Custom) ===== */
+.kpi{background:rgba(255,255,255,0.88) !important;backdrop-filter:blur(24px) !important;color:#1A1A2E !important;border-radius:14px !important;padding:18px !important;text-align:center !important;margin-bottom:12px !important;border:1px solid rgba(255,255,255,0.6) !important;box-shadow:0 1px 3px rgba(15,76,92,0.04),0 4px 12px rgba(15,76,92,0.02) !important;transition:all 0.3s cubic-bezier(0.4,0,0.2,1) !important;position:relative !important;overflow:hidden !important}
+.kpi:hover{transform:translateY(-3px) !important;box-shadow:0 8px 30px rgba(15,76,92,0.08) !important}
+.kpi::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#2A9D8F,#E36414);opacity:0;transition:opacity 0.3s}
+.kpi:hover::after{opacity:1}
+.kpi h3{font-size:26px !important;margin:6px 0 2px !important;font-weight:800 !important;color:#0F4C5C !important;font-family:'Space Mono','IBM Plex Sans Arabic',monospace !important}
+.kpi p{font-size:11px !important;color:#64748B !important;margin:0 !important;font-weight:500 !important}
+
+/* ===== Tabs ===== */
+.stTabs [data-baseweb="tab-list"]{gap:4px !important;background:rgba(255,255,255,0.6) !important;border-radius:12px !important;padding:4px !important}
+.stTabs [data-baseweb="tab"]{border-radius:10px !important;padding:8px 16px !important;font-weight:500 !important;color:#64748B !important;transition:all 0.3s !important}
+.stTabs [data-baseweb="tab"][aria-selected="true"]{background:white !important;color:#0F4C5C !important;font-weight:600 !important;box-shadow:0 1px 3px rgba(0,0,0,0.06) !important}
+
+/* ===== Buttons ===== */
+.stButton button{border-radius:10px !important;font-weight:600 !important;padding:8px 20px !important;transition:all 0.3s cubic-bezier(0.4,0,0.2,1) !important;border:none !important}
+.stButton button:hover{transform:translateY(-2px) !important;box-shadow:0 4px 15px rgba(15,76,92,0.15) !important}
+.stButton button[kind="primary"],.stButton button[data-testid="stFormSubmitButton"]{background:linear-gradient(135deg,#E36414,#E9C46A) !important;color:white !important}
+.stDownloadButton button{background:linear-gradient(135deg,#0F4C5C,#2A9D8F) !important;color:white !important;border-radius:10px !important}
+.stDownloadButton button:hover{transform:translateY(-2px) !important;box-shadow:0 4px 15px rgba(15,76,92,0.2) !important}
+
+/* ===== Expanders ===== */
+.streamlit-expanderHeader{background:rgba(255,255,255,0.88) !important;border-radius:12px !important;border:1px solid rgba(15,76,92,0.06) !important;font-weight:600 !important;color:#0F4C5C !important;transition:all 0.3s !important}
+.streamlit-expanderHeader:hover{box-shadow:0 4px 12px rgba(15,76,92,0.06) !important}
+.streamlit-expanderContent{background:rgba(255,255,255,0.6) !important;border-radius:0 0 12px 12px !important}
+
+/* ===== DataFrames/Tables ===== */
+[data-testid="stDataFrame"]{border-radius:14px !important;overflow:hidden !important;border:1px solid rgba(15,76,92,0.06) !important;box-shadow:0 1px 3px rgba(0,0,0,0.03) !important}
+
+/* ===== Selectbox / Input ===== */
+.stSelectbox [data-baseweb="select"],.stMultiSelect [data-baseweb="select"]{border-radius:10px !important;border:1px solid rgba(15,76,92,0.12) !important;transition:all 0.3s !important}
+.stSelectbox [data-baseweb="select"]:focus-within,.stMultiSelect [data-baseweb="select"]:focus-within{box-shadow:0 0 0 3px rgba(42,157,143,0.12),0 0 0 1px rgba(42,157,143,0.25) !important;border-color:#2A9D8F !important}
+.stTextInput input,.stTextArea textarea{border-radius:10px !important;border:1px solid rgba(15,76,92,0.12) !important;transition:all 0.3s !important}
+.stTextInput input:focus,.stTextArea textarea:focus{box-shadow:0 0 0 3px rgba(42,157,143,0.12),0 0 0 1px rgba(42,157,143,0.25) !important;border-color:#2A9D8F !important}
+
+/* ===== Alerts ===== */
+.stAlert{border-radius:12px !important;border:none !important;backdrop-filter:blur(16px) !important}
+
+/* ===== Plotly Charts Container ===== */
+.js-plotly-plot{border-radius:14px !important;overflow:hidden !important}
+
+/* ===== Chat Messages ===== */
+[data-testid="stChatMessage"]{background:rgba(255,255,255,0.88) !important;border-radius:14px !important;border:1px solid rgba(15,76,92,0.04) !important;backdrop-filter:blur(16px) !important;margin-bottom:8px !important}
+
+/* ===== Progress Bars ===== */
+.stProgress > div > div{background:linear-gradient(90deg,#2A9D8F,#E36414) !important;border-radius:10px !important}
+
+/* ===== Hide Streamlit Branding ===== */
+#MainMenu,footer,[data-testid="stToolbar"]{visibility:hidden !important}
+
+/* ===== Animations ===== */
+@keyframes fadeInUp{from{opacity:0;transform:translateY(15px)}to{opacity:1;transform:translateY(0)}}
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+.main .block-container > div{animation:fadeInUp 0.5s ease-out}
+
+/* ===== Card Glass Effect for containers ===== */
+[data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"]{background:rgba(255,255,255,0.65);backdrop-filter:blur(16px) saturate(180%);-webkit-backdrop-filter:blur(16px) saturate(180%);border:1px solid rgba(255,255,255,0.4);border-radius:16px;padding:4px;margin-bottom:8px}
+
+/* ===== Success/Warning/Error/Info ===== */
+.stSuccess{background:rgba(42,157,143,0.06) !important;border-left:4px solid #2A9D8F !important;border-radius:10px !important}
+.stWarning{background:rgba(227,100,20,0.06) !important;border-left:4px solid #E36414 !important;border-radius:10px !important}
+.stError{background:rgba(220,38,38,0.06) !important;border-left:4px solid #DC2626 !important;border-radius:10px !important}
+.stInfo{background:rgba(15,76,92,0.06) !important;border-left:4px solid #0F4C5C !important;border-radius:10px !important}
+
+/* ===== Login Page Enhancements ===== */
+[data-testid="stForm"]{background:rgba(255,255,255,0.88) !important;backdrop-filter:blur(24px) !important;border-radius:16px !important;padding:24px !important;border:1px solid rgba(255,255,255,0.6) !important;box-shadow:0 4px 20px rgba(15,76,92,0.06) !important}
+
+/* ===== Columns Gap ===== */
+[data-testid="stHorizontalBlock"]{gap:16px !important}
+
+/* ===== Number Styling ===== */
+[data-testid="stMetricValue"],[class*="font-mono"]{font-family:'Space Mono','IBM Plex Sans Arabic',monospace !important}
 </style>
 """, unsafe_allow_html=True)
 
@@ -2532,14 +2634,14 @@ def send_test_email(to_email, emp_name, tests, deadline, assigned_by, app_url=""
 
         # Professional HTML email template
         app_link = app_url or smtp_cfg.get('app_url', '')
-        btn_html = f'<div style="text-align:center;margin:20px 0;"><a href="{app_link}" style="display:inline-block;background:linear-gradient(135deg,#E36414,#E9C46A);color:white;padding:14px 40px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;">الدخول إلى المنصة وبدء الاختبارات</a></div>' if app_link else ''
+        btn_html = f'<div style="text-align:center;margin:20px 0;"><a href="{app_link}" style="display:inline-block;background:linear-gradient(135deg,#E36414,#E9C46A);color:white;padding:14px 40px;border-radius:8px;box-shadow:0 4px 15px rgba(227,100,20,0.2);text-decoration:none;font-weight:bold;font-size:15px;">الدخول إلى المنصة وبدء الاختبارات</a></div>' if app_link else ''
 
         html_body = f"""<!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head><meta charset="UTF-8"></head>
 <body style="font-family:'Segoe UI',Arial,sans-serif;direction:rtl;text-align:right;margin:0;padding:0;background:#f4f4f4;">
 <div style="max-width:600px;margin:20px auto;background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.1);">
-    <div style="background:linear-gradient(135deg,#0F4C5C,#1A1A2E);color:white;padding:24px;text-align:center;">
+    <div style="background:linear-gradient(135deg,#0F4C5C,#1A1A2E);color:white;padding:24px;text-align:center;box-shadow:0 4px 20px rgba(15,76,92,0.15);">
         <div style="background:rgba(255,255,255,0.15);width:60px;height:60px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;margin-bottom:10px;">HR</div>
         <h2 style="margin:8px 0 0;color:white;font-size:20px;">منصة تحليلات الموارد البشرية</h2>
         <p style="margin:4px 0 0;opacity:0.7;font-size:13px;">رسال الود لتقنية المعلومات</p>
@@ -2752,7 +2854,7 @@ def _restore_login():
     return False
 
 def login_page():
-    st.markdown("<div style='text-align:center;padding:40px 0;'><div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:80px;height:80px;border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:32px;font-weight:800;color:white;'>HR</div><h1 style='color:#1A1A2E;'>منصة تحليلات الموارد البشرية</h1><p style='color:#64748B;'>رسال الود لتقنية المعلومات</p></div>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align:center;padding:60px 0 40px;'><div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:88px;height:88px;border-radius:20px;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:36px;font-weight:800;color:white;box-shadow:0 8px 30px rgba(227,100,20,0.25);'>HR</div><h1 style='color:#0F4C5C;font-weight:700;font-size:28px;margin-bottom:4px;'>منصة تحليلات الموارد البشرية</h1><p style='color:#64748B;font-size:14px;'>رسال الود لتقنية المعلومات</p></div>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
         login_tab, forgot_tab = st.tabs(["🔐 تسجيل الدخول", "🔑 استرجاع كلمة السر"])
@@ -3407,7 +3509,7 @@ def main():
 
     # Sidebar
     with st.sidebar:
-        st.markdown(f"<div style='text-align:center;padding:20px 0;'><div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:56px;height:56px;border-radius:12px;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:22px;font-weight:800;color:white;'>HR</div><h2 style='margin:0;font-size:16px;'>تحليلات الموارد البشرية</h2><p style='opacity:.6;font-size:11px;'>رسال الود لتقنية المعلومات v5</p><div style='background:rgba(255,255,255,.1);border-radius:6px;padding:6px 10px;margin-top:8px;font-size:11px'>👤 {st.session_state.user_name} <span style='opacity:.6'>| {st.session_state.user_role}</span></div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align:center;padding:24px 0 16px;'><div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:60px;height:60px;border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:24px;font-weight:800;color:white;box-shadow:0 4px 15px rgba(227,100,20,0.25);'>HR</div><h2 style='margin:0;font-size:16px;color:#0F4C5C !important;font-weight:700;'>رسال الود</h2><p style='color:#64748B !important;font-size:11px;margin-top:2px;'>تحليلات الموارد البشرية v5</p><div style='background:linear-gradient(135deg,rgba(15,76,92,0.06),rgba(42,157,143,0.04));border-radius:10px;padding:8px 12px;margin-top:10px;font-size:11px;border:1px solid rgba(15,76,92,0.06);color:#0F4C5C !important;'>👤 {st.session_state.user_name} <span style='color:#64748B !important;'>| {st.session_state.user_role}</span></div></div>", unsafe_allow_html=True)
         st.markdown("---")
 
         # Filter sections by access
@@ -8975,7 +9077,7 @@ def main():
                 vals_html = ""
                 colors = ['#E36414','#264653','#2A9D8F','#E9C46A','#F4A261']
                 for i, v in enumerate(ci.get('values',[])):
-                    vals_html += f"<div style='background:white;border-radius:12px;padding:20px;border-top:4px solid {colors[i%5]};text-align:center'><h3 style='color:{colors[i%5]};margin:0'>{v['name_ar']}</h3><p style='font-size:0.85em;color:#0F4C5C;font-weight:600;margin:5px 0'>{v['name']}</p><p style='color:#555;font-size:0.85em;margin:0'>{v['desc']}</p></div>"
+                    vals_html += f"<div style='background:rgba(255,255,255,0.88);backdrop-filter:blur(16px);border-radius:14px;padding:20px;border-top:4px solid {colors[i%5]};box-shadow:0 1px 3px rgba(0,0,0,0.03);text-align:center'><h3 style='color:{colors[i%5]};margin:0'>{v['name_ar']}</h3><p style='font-size:0.85em;color:#0F4C5C;font-weight:600;margin:5px 0'>{v['name']}</p><p style='color:#555;font-size:0.85em;margin:0'>{v['desc']}</p></div>"
 
                 # Build products HTML
                 prods_html = ""
@@ -10076,9 +10178,9 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
             # Display chat history with feedback
             for idx, msg in enumerate(st.session_state.labor_chat):
                 if msg['role'] == 'user':
-                    st.markdown(f"<div style='background:#1e3a5f;color:white;padding:12px;border-radius:10px;margin:8px 0'>👤 {msg['content']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='background:linear-gradient(135deg,#0F4C5C,#1A1A2E);color:white;backdrop-filter:blur(16px);padding:12px;border-radius:10px;margin:8px 0'>👤 {msg['content']}</div>", unsafe_allow_html=True)
                 else:
-                    st.markdown(f"<div style='background:#f0f4f8;color:#333;padding:12px;border-radius:10px;margin:8px 0;border-right:4px solid #0F4C5C'>⚖️ {msg['content']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='background:rgba(255,255,255,0.88);color:#1A1A2E;padding:12px;border-radius:10px;margin:8px 0;border-right:4px solid #2A9D8F;box-shadow:0 1px 3px rgba(0,0,0,0.03)'>⚖️ {msg['content']}</div>", unsafe_allow_html=True)
                     fc1, fc2, fc3 = st.columns([1,1,8])
                     q_text = st.session_state.labor_chat[idx-1]['content'] if idx > 0 else ""
                     q_hash = hashlib.md5(q_text.encode()).hexdigest()[:10] if q_text else ""
@@ -10144,9 +10246,9 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
 
             for idx, msg in enumerate(st.session_state.hr_chat):
                 if msg['role'] == 'user':
-                    st.markdown(f"<div style='background:#1e3a5f;color:white;padding:12px;border-radius:10px;margin:8px 0'>👤 {msg['content']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='background:linear-gradient(135deg,#0F4C5C,#1A1A2E);color:white;backdrop-filter:blur(16px);padding:12px;border-radius:10px;margin:8px 0'>👤 {msg['content']}</div>", unsafe_allow_html=True)
                 else:
-                    st.markdown(f"<div style='background:#f0faf5;color:#333;padding:12px;border-radius:10px;margin:8px 0;border-right:4px solid #2A9D8F'>📚 {msg['content']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='background:rgba(255,255,255,0.88);color:#1A1A2E;padding:12px;border-radius:10px;margin:8px 0;border-right:4px solid #2A9D8F;box-shadow:0 1px 3px rgba(0,0,0,0.03)'>📚 {msg['content']}</div>", unsafe_allow_html=True)
                     fc1, fc2, fc3 = st.columns([1,1,8])
                     q_text = st.session_state.hr_chat[idx-1]['content'] if idx > 0 else ""
                     q_hash = hashlib.md5(q_text.encode()).hexdigest()[:10] if q_text else ""
@@ -12862,7 +12964,7 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                     save_test_result(result)
                     st.markdown("---")
                     type_info = MBTI_TYPES.get(mbti_type, {"name": mbti_type, "desc": "", "strengths": "", "careers": ""})
-                    st.markdown(f"<div style='text-align:center;padding:20px;background:linear-gradient(135deg,#0F4C5C,#1A1A2E);border-radius:14px;color:white;margin-bottom:20px'><h1 style='color:white;font-size:48px;margin:0'>{mbti_type}</h1><h3 style='color:#E9C46A;margin:8px 0'>{type_info['name']}</h3><p style='opacity:.8;margin:0'>{type_info['desc']}</p></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='text-align:center;padding:20px;background:linear-gradient(135deg,#0F4C5C,#1A1A2E);border-radius:14px;box-shadow:0 4px 20px rgba(15,76,92,0.15);color:white;margin-bottom:20px'><h1 style='color:white;font-size:48px;margin:0'>{mbti_type}</h1><h3 style='color:#E9C46A;margin:8px 0'>{type_info['name']}</h3><p style='opacity:.8;margin:0'>{type_info['desc']}</p></div>", unsafe_allow_html=True)
                     # Dimension bars
                     for dim_pair in ["EI","SN","TF","JP"]:
                         a, b = dim_pair[0], dim_pair[1]
