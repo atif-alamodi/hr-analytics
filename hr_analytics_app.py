@@ -3715,35 +3715,76 @@ def main():
     if section == "📊 التحليلات العامة":
         if page == "🏠 نظرة عامة":
             hdr("📊 لوحة التحليلات الشاملة","تحليل متقدم وشامل لبيانات القوى العاملة - Power BI Style")
-            if n==0 and len(sal_df)==0:
-                # Try to load from employee database
+
+            # === DATA SOURCE: Real file > Employee DB > Demo ===
+            data_source = ""
+            data = pd.DataFrame()
+
+            if n > 0 or len(sal_df) > 0:
+                data = sal_snapshot if len(sal_snapshot)>0 else emp
+                data_source = "📂 الملف المرفوع"
+            else:
+                # Try employee database
                 try:
                     db_emp = db_load_employees()
                     if len(db_emp) > 0:
                         data = db_emp
-                        total = len(data)
-                        st.caption(f"📊 البيانات من قاعدة بيانات الموظفين ({total} موظف)")
-                    else:
-                        st.info("📁 ارفع ملف بيانات الموظفين من القائمة الجانبية، أو أضف موظفين في قاعدة البيانات (Headcount > قاعدة بيانات الموظفين)")
-                        return
-                except:
-                    st.info("📁 ارفع ملف بيانات الموظفين أو ملف الرواتب من القائمة الجانبية")
-                    return
-            else:
-                data = sal_snapshot if len(sal_snapshot)>0 else emp
-                total = len(data)
+                        data_source = "🗄️ قاعدة بيانات الموظفين"
+                except: pass
 
-            # Auto-detect columns
-            dept_col = next((c for c in data.columns if any(x in c.lower() for x in ['dept','department','قسم','القطاع'])), None)
-            nat_col = next((c for c in data.columns if any(x in c.lower() for x in ['nat','جنسية','nationality'])), None)
-            sal_col = next((c for c in data.select_dtypes('number').columns if any(x in c.lower() for x in ['gross','salary','net','راتب','إجمالي'])), None)
-            status_col = next((c for c in data.columns if any(x in c.lower() for x in ['status','حالة'])), None)
-            loc_col = next((c for c in data.columns if any(x in c.lower() for x in ['location','موقع','مدينة','city'])), None)
-            gender_col = next((c for c in data.columns if any(x in c.lower() for x in ['gender','جنس'])), None)
-            type_col = next((c for c in data.columns if any(x in c.lower() for x in ['employment type','نوع التوظيف','type'])), None)
-            level_col = next((c for c in data.columns if any(x in c.lower() for x in ['level','مستوى','grade','درجة'])), None)
-            age_col = next((c for c in data.columns if any(x in c.lower() for x in ['age','عمر','age group'])), None)
-            join_col = next((c for c in data.columns if any(x in c.lower() for x in ['join','hiring','التحاق','مباشرة'])), None)
+            # If still no data, show demo
+            if len(data) == 0:
+                import random
+                random.seed(42)
+                depts = ['تقنية المعلومات','الموارد البشرية','المالية','التسويق','المبيعات','العمليات','الإدارة','القانوني','خدمة العملاء','الجودة']
+                nats = ['سعودي']*55 + ['مصري']*12 + ['هندي']*10 + ['باكستاني']*8 + ['أردني']*5 + ['فلبيني']*5 + ['أخرى']*5
+                cities = ['جدة']*50 + ['الرياض']*30 + ['الدمام']*12 + ['مكة']*5 + ['المدينة']*3
+                levels = ['تنفيذي']*5 + ['مدير']*15 + ['أخصائي']*40 + ['فني']*25 + ['مبتدئ']*15
+                genders = ['ذكر']*72 + ['أنثى']*28
+                demo_rows = []
+                for i in range(150):
+                    dept = random.choice(depts)
+                    sal_base = {'تقنية المعلومات':12000,'الموارد البشرية':10000,'المالية':11000,'التسويق':9500,
+                        'المبيعات':8500,'العمليات':9000,'الإدارة':10500,'القانوني':13000,'خدمة العملاء':7500,'الجودة':9500}
+                    base = sal_base.get(dept,9000) + random.randint(-3000,5000)
+                    demo_rows.append({
+                        'القسم':dept, 'الجنسية':random.choice(nats), 'المدينة':random.choice(cities),
+                        'المستوى':random.choice(levels), 'الجنس':random.choice(genders),
+                        'الراتب الإجمالي':base, 'الحالة':random.choice(['نشط']*90+['غادر']*10),
+                        'تاريخ المباشرة':f"202{random.randint(0,5)}-{random.randint(1,12):02d}-{random.randint(1,28):02d}",
+                    })
+                data = pd.DataFrame(demo_rows)
+                data_source = "📊 بيانات تجريبية (ارفع ملفك لعرض بياناتك الفعلية)"
+
+            total = len(data)
+            st.caption(f"{data_source} | {total} سجل")
+
+            # === COLUMN DETECTION (comprehensive) ===
+            cols_lower = {c: c.lower() for c in data.columns}
+            def find_col(*keywords):
+                for c, cl in cols_lower.items():
+                    if any(k in cl for k in keywords): return c
+                return None
+
+            dept_col = find_col('dept','department','قسم','القطاع','الإدارة','section','division')
+            nat_col = find_col('nat','جنسية','nationality','الجنسية')
+            sal_col = None
+            for c in data.select_dtypes('number').columns:
+                if any(x in c.lower() for x in ['gross','salary','net','راتب','إجمالي','أجر','basic_salary','الراتب']):
+                    sal_col = c; break
+            if sal_col is None:
+                num_cols = data.select_dtypes('number').columns
+                if len(num_cols) > 0:
+                    # Pick the numeric column with highest mean (likely salary)
+                    means = {c: data[c].mean() for c in num_cols if data[c].mean() > 1000}
+                    if means: sal_col = max(means, key=means.get)
+            status_col = find_col('status','حالة','الحالة')
+            loc_col = find_col('location','موقع','مدينة','city','المدينة','المقر')
+            gender_col = find_col('gender','جنس','الجنس')
+            type_col = find_col('employment type','نوع التوظيف','نوع العقد','contract','type')
+            level_col = find_col('level','مستوى','grade','درجة','المستوى','الدرجة')
+            age_col = find_col('age','عمر','العمر','age group')
+            join_col = find_col('join','hiring','التحاق','مباشرة','hire','تاريخ التعيين','تاريخ المباشرة')
 
             # ===== ROW 1: KPIs =====
             sa_count = 0; sa_pct = 0; active_count = total
