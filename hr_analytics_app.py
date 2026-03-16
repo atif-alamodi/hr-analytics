@@ -737,6 +737,23 @@ def init_db():
         password_hash TEXT, role TEXT, name TEXT,
         email TEXT, dept TEXT, sections TEXT
     )''')
+    # === HRIS Employee Master Table ===
+    c.execute(f'''CREATE TABLE IF NOT EXISTS employees (
+        id {serial},
+        emp_id TEXT UNIQUE,
+        name_ar TEXT, name_en TEXT,
+        nationality TEXT, gender TEXT,
+        dept TEXT, job_title TEXT, job_level TEXT,
+        hire_date TEXT, contract_type TEXT, contract_end TEXT,
+        status TEXT DEFAULT 'نشط',
+        basic_salary REAL, housing REAL, transport REAL, other_allowances REAL,
+        phone TEXT, email TEXT, iban TEXT,
+        manager TEXT, location TEXT,
+        education TEXT, major TEXT,
+        exit_date TEXT, exit_reason TEXT, exit_article TEXT,
+        notes TEXT,
+        created_at TEXT, updated_at TEXT, created_by TEXT
+    )''')
     conn.commit()
     conn.close()
 
@@ -862,6 +879,132 @@ def db_count_results():
     c.execute("SELECT COUNT(*) FROM test_results")
     count = c.fetchone()[0]
     conn.close()
+    return count
+
+# ===== HRIS EMPLOYEE DATABASE =====
+def db_save_employee(emp):
+    """Save or update employee record."""
+    conn = get_conn(); c = conn.cursor(); p = _ph()
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    try:
+        if _is_cloud_db():
+            c.execute(f"""INSERT INTO employees (emp_id,name_ar,name_en,nationality,gender,dept,job_title,job_level,
+                hire_date,contract_type,contract_end,status,basic_salary,housing,transport,other_allowances,
+                phone,email,iban,manager,location,education,major,exit_date,exit_reason,exit_article,notes,created_at,updated_at,created_by)
+                VALUES ({','.join([p]*30)})
+                ON CONFLICT (emp_id) DO UPDATE SET
+                name_ar=EXCLUDED.name_ar,name_en=EXCLUDED.name_en,nationality=EXCLUDED.nationality,gender=EXCLUDED.gender,
+                dept=EXCLUDED.dept,job_title=EXCLUDED.job_title,job_level=EXCLUDED.job_level,
+                hire_date=EXCLUDED.hire_date,contract_type=EXCLUDED.contract_type,contract_end=EXCLUDED.contract_end,
+                status=EXCLUDED.status,basic_salary=EXCLUDED.basic_salary,housing=EXCLUDED.housing,
+                transport=EXCLUDED.transport,other_allowances=EXCLUDED.other_allowances,
+                phone=EXCLUDED.phone,email=EXCLUDED.email,iban=EXCLUDED.iban,
+                manager=EXCLUDED.manager,location=EXCLUDED.location,education=EXCLUDED.education,major=EXCLUDED.major,
+                exit_date=EXCLUDED.exit_date,exit_reason=EXCLUDED.exit_reason,exit_article=EXCLUDED.exit_article,
+                notes=EXCLUDED.notes,updated_at=EXCLUDED.updated_at""",
+                (emp.get('emp_id',''),emp.get('name_ar',''),emp.get('name_en',''),emp.get('nationality',''),
+                emp.get('gender',''),emp.get('dept',''),emp.get('job_title',''),emp.get('job_level',''),
+                emp.get('hire_date',''),emp.get('contract_type',''),emp.get('contract_end',''),
+                emp.get('status','نشط'),emp.get('basic_salary',0),emp.get('housing',0),
+                emp.get('transport',0),emp.get('other_allowances',0),
+                emp.get('phone',''),emp.get('email',''),emp.get('iban',''),
+                emp.get('manager',''),emp.get('location',''),emp.get('education',''),emp.get('major',''),
+                emp.get('exit_date',''),emp.get('exit_reason',''),emp.get('exit_article',''),
+                emp.get('notes',''),now,now,st.session_state.get('user_name','')))
+        else:
+            c.execute(f"""INSERT OR REPLACE INTO employees (emp_id,name_ar,name_en,nationality,gender,dept,job_title,job_level,
+                hire_date,contract_type,contract_end,status,basic_salary,housing,transport,other_allowances,
+                phone,email,iban,manager,location,education,major,exit_date,exit_reason,exit_article,notes,created_at,updated_at,created_by)
+                VALUES ({','.join([p]*30)})""",
+                (emp.get('emp_id',''),emp.get('name_ar',''),emp.get('name_en',''),emp.get('nationality',''),
+                emp.get('gender',''),emp.get('dept',''),emp.get('job_title',''),emp.get('job_level',''),
+                emp.get('hire_date',''),emp.get('contract_type',''),emp.get('contract_end',''),
+                emp.get('status','نشط'),emp.get('basic_salary',0),emp.get('housing',0),
+                emp.get('transport',0),emp.get('other_allowances',0),
+                emp.get('phone',''),emp.get('email',''),emp.get('iban',''),
+                emp.get('manager',''),emp.get('location',''),emp.get('education',''),emp.get('major',''),
+                emp.get('exit_date',''),emp.get('exit_reason',''),emp.get('exit_article',''),
+                emp.get('notes',''),now,now,st.session_state.get('user_name','')))
+        conn.commit()
+    except Exception as e:
+        st.error(f"خطأ في حفظ الموظف: {e}")
+    finally:
+        conn.close()
+
+def db_load_employees(status=None, dept=None):
+    """Load employees from database."""
+    conn = get_conn(); c = conn.cursor()
+    query = "SELECT * FROM employees"
+    params = []
+    filters = []
+    if status: filters.append(f"status = {_ph()}"); params.append(status)
+    if dept: filters.append(f"dept = {_ph()}"); params.append(dept)
+    if filters: query += " WHERE " + " AND ".join(filters)
+    query += " ORDER BY name_ar"
+    try:
+        c.execute(query, tuple(params))
+        cols = [d[0] for d in c.description]
+        rows = c.fetchall()
+        conn.close()
+        return pd.DataFrame(rows, columns=cols) if rows else pd.DataFrame()
+    except:
+        conn.close()
+        return pd.DataFrame()
+
+def db_delete_employee(emp_id):
+    """Delete employee by emp_id."""
+    conn = get_conn(); c = conn.cursor()
+    c.execute(f"DELETE FROM employees WHERE emp_id = {_ph()}", (emp_id,))
+    conn.commit(); conn.close()
+
+def db_import_employees_from_excel(df):
+    """Bulk import employees from Excel DataFrame."""
+    # Map common column names
+    col_map = {
+        'الرقم الوظيفي':'emp_id','رقم الموظف':'emp_id','employee_id':'emp_id','emp_no':'emp_id','الرقم':'emp_id',
+        'الاسم':'name_ar','اسم الموظف':'name_ar','الاسم بالعربي':'name_ar','name':'name_ar','employee_name':'name_ar',
+        'الاسم بالانجليزي':'name_en','name_en':'name_en','english_name':'name_en',
+        'الجنسية':'nationality','nationality':'nationality',
+        'الجنس':'gender','gender':'gender',
+        'القسم':'dept','الإدارة':'dept','department':'dept','dept':'dept',
+        'المسمى الوظيفي':'job_title','المسمى':'job_title','الوظيفة':'job_title','job_title':'job_title','position':'job_title','title':'job_title',
+        'المستوى':'job_level','الدرجة':'job_level','level':'job_level','grade':'job_level',
+        'تاريخ التعيين':'hire_date','تاريخ الالتحاق':'hire_date','hire_date':'hire_date','join_date':'hire_date',
+        'نوع العقد':'contract_type','contract_type':'contract_type',
+        'الحالة':'status','status':'status',
+        'الراتب الأساسي':'basic_salary','الراتب':'basic_salary','basic_salary':'basic_salary','salary':'basic_salary','basic':'basic_salary',
+        'بدل السكن':'housing','السكن':'housing','housing':'housing',
+        'بدل المواصلات':'transport','المواصلات':'transport','transport':'transport',
+        'البدلات الأخرى':'other_allowances','بدلات':'other_allowances',
+        'الهاتف':'phone','الجوال':'phone','phone':'phone','mobile':'phone',
+        'البريد':'email','الإيميل':'email','email':'email',
+        'المدير':'manager','المدير المباشر':'manager','manager':'manager',
+        'الموقع':'location','المدينة':'location','location':'location','city':'location',
+        'المؤهل':'education','التعليم':'education','education':'education',
+        'التخصص':'major','major':'major',
+    }
+
+    # Rename columns
+    df_clean = df.copy()
+    for old, new in col_map.items():
+        if old in df_clean.columns:
+            df_clean = df_clean.rename(columns={old: new})
+
+    # Ensure emp_id exists
+    if 'emp_id' not in df_clean.columns:
+        df_clean['emp_id'] = [f"EMP-{i+1:04d}" for i in range(len(df_clean))]
+
+    # Convert to string
+    df_clean['emp_id'] = df_clean['emp_id'].astype(str)
+
+    count = 0
+    for _, row in df_clean.iterrows():
+        emp = row.to_dict()
+        # Clean NaN values
+        emp = {k: ('' if pd.isna(v) else v) for k, v in emp.items()}
+        if emp.get('name_ar') or emp.get('name_en') or emp.get('emp_id'):
+            db_save_employee(emp)
+            count += 1
     return count
 
 def db_save_users(users_db):
@@ -3281,7 +3424,7 @@ def main():
         elif section == "🎁 Total Rewards":
             page = st.radio("📌", ["🎁 لوحة Total Rewards","💰 لوحة الرواتب","📈 تحليل شهري/ربعي","🏷️ تحليل حسب الفئات","📊 سلم الرواتب","💰 هيكل الرواتب","🏥 المزايا والتأمينات","📊 تحليل التنافسية","📥 تصدير TR"], label_visibility="collapsed", key="_nav_p_tr")
         elif section == "👥 Headcount":
-            page = st.radio("📌", ["👥 Headcount Report","📊 تحليل الأداء","🚪 تحليل المغادرين","📋 بيانات الموظفين","📥 تصدير Headcount"], label_visibility="collapsed", key="_nav_p_hc")
+            page = st.radio("📌", ["👥 Headcount Report","📊 تحليل الأداء","🚪 تحليل المغادرين","🗄️ سجل الموظفين HRIS","📋 بيانات الموظفين","📥 تصدير Headcount"], label_visibility="collapsed", key="_nav_p_hc")
         elif section == "⚖️ حاسبة المستحقات":
             page = "⚖️ حاسبة المستحقات"
         elif section == "🎯 التوظيف":
@@ -4881,6 +5024,208 @@ def main():
                             conn.commit(); conn.close()
                         except: pass
                         st.success("✅ تم مسح جميع السجلات")
+
+        # ===== HRIS EMPLOYEE DATABASE =====
+        elif page == "🗄️ سجل الموظفين HRIS":
+            hdr("🗄️ نظام إدارة الموارد البشرية HRIS","قاعدة بيانات الموظفين - إضافة، تعديل، استيراد، تحليل")
+
+            tab1, tab2, tab3, tab4 = st.tabs(["➕ إضافة موظف","📥 استيراد من Excel","📋 عرض وتعديل","📊 لوحة المعلومات"])
+
+            with tab1:
+                st.markdown("### ➕ إضافة موظف جديد")
+                c1,c2,c3 = st.columns(3)
+                with c1:
+                    h_empid = st.text_input("الرقم الوظيفي:", key="h_eid", placeholder="EMP-0001")
+                    h_name_ar = st.text_input("الاسم بالعربي:", key="h_nar")
+                    h_name_en = st.text_input("الاسم بالإنجليزي:", key="h_nen")
+                    h_nationality = st.text_input("الجنسية:", key="h_nat", value="سعودي")
+                    h_gender = st.selectbox("الجنس:", ["ذكر","أنثى"], key="h_gen")
+                with c2:
+                    h_dept = st.text_input("القسم:", key="h_dept")
+                    h_title = st.text_input("المسمى الوظيفي:", key="h_title")
+                    h_level = st.selectbox("المستوى:", ["تنفيذي","إداري","أخصائي","فني","مبتدئ"], key="h_level")
+                    h_hire = st.date_input("تاريخ التعيين:", key="h_hire")
+                    h_contract = st.selectbox("نوع العقد:", ["محدد المدة","غير محدد","تجربة","مؤقت"], key="h_cont")
+                with c3:
+                    h_salary = st.number_input("الراتب الأساسي:", 0, 200000, 5000, key="h_sal")
+                    h_housing = st.number_input("بدل السكن:", 0, 100000, round(h_salary*0.25), key="h_hous")
+                    h_transport = st.number_input("بدل المواصلات:", 0, 10000, 500, key="h_trans")
+                    h_phone = st.text_input("الجوال:", key="h_phone")
+                    h_email = st.text_input("البريد:", key="h_email")
+
+                with st.expander("بيانات إضافية"):
+                    ec1,ec2 = st.columns(2)
+                    with ec1:
+                        h_manager = st.text_input("المدير المباشر:", key="h_mgr")
+                        h_location = st.text_input("الموقع:", key="h_loc", value="جدة")
+                    with ec2:
+                        h_edu = st.selectbox("المؤهل:", ["دكتوراه","ماجستير","بكالوريوس","دبلوم","ثانوية","أخرى"], index=2, key="h_edu")
+                        h_major = st.text_input("التخصص:", key="h_major")
+                    h_notes = st.text_area("ملاحظات:", height=60, key="h_notes")
+
+                if st.button("💾 حفظ الموظف", type="primary", use_container_width=True, key="h_save"):
+                    if h_name_ar and h_empid:
+                        db_save_employee({
+                            'emp_id':h_empid,'name_ar':h_name_ar,'name_en':h_name_en,
+                            'nationality':h_nationality,'gender':h_gender,'dept':h_dept,
+                            'job_title':h_title,'job_level':h_level,'hire_date':str(h_hire),
+                            'contract_type':h_contract,'status':'نشط',
+                            'basic_salary':h_salary,'housing':h_housing,'transport':h_transport,
+                            'phone':h_phone,'email':h_email,'manager':h_manager,
+                            'location':h_location,'education':h_edu,'major':h_major,'notes':h_notes,
+                        })
+                        st.success(f"✅ تم حفظ {h_name_ar} ({h_empid})")
+                    else:
+                        st.error("❌ الاسم والرقم الوظيفي مطلوبان")
+
+            with tab2:
+                st.markdown("### 📥 استيراد الموظفين من Excel")
+                st.info("💡 ارفع ملف Excel يحتوي على بيانات الموظفين. النظام يكشف أسماء الأعمدة تلقائياً (عربي أو إنجليزي).")
+
+                imp_file = st.file_uploader("ارفع ملف Excel:", type=["xlsx","xls","csv"], key="hris_import")
+                if imp_file:
+                    try:
+                        if imp_file.name.endswith('.csv'):
+                            imp_df = pd.read_csv(io.BytesIO(imp_file.getvalue()))
+                        else:
+                            imp_df = pd.read_excel(io.BytesIO(imp_file.getvalue()))
+
+                        st.success(f"✅ تم قراءة {len(imp_df)} صف و {len(imp_df.columns)} عمود")
+                        st.caption(f"الأعمدة: {', '.join(imp_df.columns.tolist())}")
+                        st.dataframe(imp_df.head(5), use_container_width=True, hide_index=True)
+
+                        if st.button("📥 استيراد للقاعدة", type="primary", use_container_width=True, key="hris_do_imp"):
+                            with st.spinner("جاري الاستيراد..."):
+                                count = db_import_employees_from_excel(imp_df)
+                            st.success(f"✅ تم استيراد {count} موظف بنجاح!")
+                    except Exception as e:
+                        st.error(f"❌ خطأ في قراءة الملف: {e}")
+
+                # Also import from currently uploaded data
+                if len(emp) > 0:
+                    st.markdown("---")
+                    st.markdown("### 📊 استيراد من البيانات المرفوعة حالياً")
+                    st.caption(f"البيانات الحالية: {len(emp)} موظف | الأعمدة: {len(emp.columns)}")
+                    if st.button(f"📥 استيراد {len(emp)} موظف من البيانات الحالية", key="hris_imp_current"):
+                        with st.spinner("جاري الاستيراد..."):
+                            count = db_import_employees_from_excel(emp)
+                        st.success(f"✅ تم استيراد {count} موظف!")
+
+            with tab3:
+                st.markdown("### 📋 سجل الموظفين")
+                # Filters
+                fc1,fc2,fc3 = st.columns(3)
+                with fc1: f_status = st.selectbox("الحالة:", ["الكل","نشط","غادر","معلّق"], key="hf_st")
+                with fc2: f_dept = st.text_input("القسم (فلتر):", key="hf_dept")
+                with fc3: f_search = st.text_input("🔍 بحث بالاسم:", key="hf_search")
+
+                status_filter = None if f_status == "الكل" else f_status
+                dept_filter = f_dept if f_dept else None
+                all_emp = db_load_employees(status=status_filter, dept=dept_filter)
+
+                if f_search and len(all_emp) > 0:
+                    name_cols = [c for c in all_emp.columns if 'name' in c.lower() or 'اسم' in c.lower()]
+                    if name_cols:
+                        all_emp = all_emp[all_emp[name_cols[0]].astype(str).str.contains(f_search, case=False, na=False)]
+
+                if len(all_emp) > 0:
+                    st.caption(f"📊 {len(all_emp)} موظف")
+
+                    # Apply data masking based on permissions
+                    display_df = mask_salary_data(all_emp) if not can_see_salaries() else all_emp
+                    display_df = filter_employee_data(display_df) if not can_see_all_data() else display_df
+
+                    # Select columns to display
+                    show_cols = [c for c in display_df.columns if c not in ['id','created_at','updated_at','created_by','iban','notes']]
+                    st.dataframe(display_df[show_cols] if show_cols else display_df, use_container_width=True, hide_index=True)
+
+                    # Edit/Delete
+                    if can_edit():
+                        st.markdown("---")
+                        st.markdown("### ✏️ تعديل/حذف")
+                        if 'emp_id' in all_emp.columns:
+                            sel_emp = st.selectbox("اختر موظف:", all_emp['emp_id'].tolist(), key="hris_sel")
+                            emp_row = all_emp[all_emp['emp_id']==sel_emp].iloc[0].to_dict()
+
+                            with st.expander(f"✏️ تعديل: {emp_row.get('name_ar','')} ({sel_emp})"):
+                                uc1,uc2 = st.columns(2)
+                                with uc1:
+                                    u_status = st.selectbox("الحالة:", ["نشط","غادر","معلّق"], index=["نشط","غادر","معلّق"].index(emp_row.get('status','نشط')) if emp_row.get('status','نشط') in ["نشط","غادر","معلّق"] else 0, key="hu_st")
+                                    u_dept = st.text_input("القسم:", value=emp_row.get('dept',''), key="hu_dept")
+                                    u_title = st.text_input("المسمى:", value=emp_row.get('job_title',''), key="hu_title")
+                                with uc2:
+                                    u_sal = st.number_input("الراتب:", value=int(emp_row.get('basic_salary',0) or 0), key="hu_sal")
+                                    u_phone = st.text_input("الجوال:", value=emp_row.get('phone',''), key="hu_phone")
+                                    u_notes = st.text_area("ملاحظات:", value=emp_row.get('notes',''), key="hu_notes")
+
+                                if st.button("💾 حفظ التعديلات", key="hu_save"):
+                                    updated = emp_row.copy()
+                                    updated.update({'status':u_status,'dept':u_dept,'job_title':u_title,
+                                        'basic_salary':u_sal,'phone':u_phone,'notes':u_notes})
+                                    db_save_employee(updated)
+                                    st.success("✅ تم التحديث")
+
+                            if can_delete():
+                                if st.button(f"🗑️ حذف {sel_emp}", key="hris_del"):
+                                    db_delete_employee(sel_emp)
+                                    st.success(f"✅ تم حذف {sel_emp}")
+
+                    # Export
+                    if can_export() and len(all_emp) > 0:
+                        st.markdown("---")
+                        if st.button("📥 تصدير Excel", key="hris_exp"):
+                            ox = io.BytesIO()
+                            export_df = mask_salary_data(all_emp) if not can_see_salaries() else all_emp
+                            with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
+                                export_df.to_excel(w, sheet_name='Employees', index=False)
+                            st.download_button("📥 تحميل", data=ox.getvalue(),
+                                file_name=f"HRIS_Employees_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                else:
+                    st.info("📭 لا توجد سجلات في قاعدة البيانات. استورد من Excel أو أضف موظفين يدوياً.")
+
+            with tab4:
+                all_emp = db_load_employees()
+                if len(all_emp) == 0:
+                    st.info("📭 لا توجد بيانات. استورد موظفين أولاً.")
+                else:
+                    total = len(all_emp)
+                    active = len(all_emp[all_emp['status']=='نشط']) if 'status' in all_emp.columns else total
+                    left = len(all_emp[all_emp['status']=='غادر']) if 'status' in all_emp.columns else 0
+
+                    st.markdown("### 📊 لوحة معلومات الموظفين")
+                    k1,k2,k3,k4,k5 = st.columns(5)
+                    with k1: kpi("👥 الإجمالي", str(total))
+                    with k2: kpi("✅ النشطون", str(active))
+                    with k3: kpi("🚪 المغادرون", str(left))
+                    with k4:
+                        if 'dept' in all_emp.columns:
+                            kpi("🏢 الأقسام", str(all_emp['dept'].nunique()))
+                    with k5:
+                        if 'nationality' in all_emp.columns and can_see_all_data():
+                            saudi = len(all_emp[(all_emp['nationality'].str.contains('سعودي', na=False)) & (all_emp['status']=='نشط')]) if 'status' in all_emp.columns else 0
+                            kpi("🇸🇦 السعودة", f"{round(saudi/max(active,1)*100)}%")
+
+                    # Charts
+                    if 'dept' in all_emp.columns and all_emp['dept'].nunique() > 0:
+                        ch1,ch2 = st.columns(2)
+                        with ch1:
+                            dept_c = all_emp['dept'].value_counts().reset_index()
+                            dept_c.columns = ['القسم','العدد']
+                            fig = px.bar(dept_c, y='القسم', x='العدد', orientation='h',
+                                color='العدد', color_continuous_scale='teal', text='العدد')
+                            fig.update_layout(title='التوزيع حسب القسم', height=400,
+                                font=dict(family="Noto Sans Arabic"), coloraxis_showscale=False)
+                            fig.update_traces(textposition='outside')
+                            st.plotly_chart(fig, use_container_width=True)
+
+                        with ch2:
+                            if 'nationality' in all_emp.columns:
+                                nat_c = all_emp['nationality'].value_counts().head(8).reset_index()
+                                nat_c.columns = ['الجنسية','العدد']
+                                fig = go.Figure(data=[go.Pie(labels=nat_c['الجنسية'], values=nat_c['العدد'], hole=0.4)])
+                                fig.update_layout(title='توزيع الجنسيات', height=400, font=dict(family="Noto Sans Arabic"))
+                                st.plotly_chart(fig, use_container_width=True)
 
         elif page == "📋 بيانات الموظفين":
             hdr("📋 سجل بيانات الموظفين","Employee Data Registry - عرض وتصفية")
