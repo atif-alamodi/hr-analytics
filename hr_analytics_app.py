@@ -337,23 +337,25 @@ class KnowledgeEngine:
         except: pass
 
     def _build_all_indices(self):
-        """Build separate persistent vector indices for legal and HR."""
+        """Build separate persistent vector indices for legal and HR with improved precision."""
         self._ensure_vectorizer()
         if self._vectorizer == "unavailable": return
         try:
             from sklearn.feature_extraction.text import TfidfVectorizer
             from sklearn.metrics.pairwise import cosine_similarity
             self._cosine = cosine_similarity
+            # Higher max_features + trigrams for better matching
             legal_texts = [ch.get('text','') for ch in self._legal_chunks if ch.get('text','').strip()]
             if legal_texts:
-                self._legal_vect = TfidfVectorizer(max_features=5000, ngram_range=(1,2))
+                self._legal_vect = TfidfVectorizer(max_features=8000, ngram_range=(1,3), sublinear_tf=True)
                 self._legal_vectors = self._legal_vect.fit_transform(legal_texts)
             hr_texts = [ch.get('text','') for ch in self._hr_chunks if ch.get('text','').strip()]
             if hr_texts:
-                self._hr_vect = TfidfVectorizer(max_features=5000, ngram_range=(1,2))
+                self._hr_vect = TfidfVectorizer(max_features=8000, ngram_range=(1,3), sublinear_tf=True)
                 self._hr_vectors = self._hr_vect.fit_transform(hr_texts)
             all_texts = [ch.get('text','') for ch in self._chunks if ch.get('text','').strip()]
             if all_texts:
+                self._vectorizer = TfidfVectorizer(max_features=8000, ngram_range=(1,3), sublinear_tf=True)
                 self._vectors = self._vectorizer.fit_transform(all_texts)
         except: pass
 
@@ -377,17 +379,18 @@ class KnowledgeEngine:
 
         if not chunks: return ""
 
-        # Vector search (primary)
+        # Vector search (primary) with stricter relevance threshold
         if vectors is not None and vect is not None and self._cosine is not None:
             try:
                 valid_chunks = [ch for ch in chunks if ch.get('text','').strip()]
                 query_vec = vect.transform([query])
                 scores = self._cosine(query_vec, vectors).flatten()
-                top_indices = scores.argsort()[-top_k:][::-1]
+                top_indices = scores.argsort()[-top_k*2:][::-1]  # Get more, filter by quality
                 results = []
                 for idx in top_indices:
-                    if idx < len(valid_chunks) and scores[idx] > 0.02:
-                        results.append(f"[{valid_chunks[idx].get('source','')}]\n{valid_chunks[idx]['text']}")
+                    if idx < len(valid_chunks) and scores[idx] > 0.05:  # Stricter threshold
+                        results.append(f"[ثقة: {scores[idx]:.0%}] [{valid_chunks[idx].get('source','')}]\n{valid_chunks[idx]['text']}")
+                        if len(results) >= top_k: break
                 if results:
                     return "\n\n---\n".join(results)
             except: pass
@@ -530,21 +533,34 @@ class LearningSystem:
         except: pass
 
     def get_relevant_history(self, query, model_type, top_k=3):
-        """Get relevant past Q&A for context injection (learning from past)."""
+        """Get relevant past Q&A for context injection with improved matching."""
         self._load()
+        # Only use good/neutral feedback (exclude bad)
         relevant = [h for h in self._history if h.get('model') == model_type and h.get('feedback') != 'bad']
         if not relevant: return ""
 
+        # Prioritize good feedback
+        good = [h for h in relevant if h.get('feedback') == 'good']
+        neutral = [h for h in relevant if h.get('feedback') is None]
+        ordered = good + neutral  # Good answers first
+
         query_words = set(query.lower().split())
+        # Remove common Arabic stopwords for better matching
+        stopwords = {'في','من','على','إلى','عن','مع','هل','ما','كيف','أن','هذا','هذه','التي','الذي','لا','يمكن','أريد','هو','هي','كان','ذلك','هناك','أو','و','ثم'}
+        query_words -= stopwords
+
         scored = []
-        for h in relevant:
-            q_words = set(h.get('q','').lower().split())
-            match = len(query_words & q_words)
-            if match > 1: scored.append((match, h))
+        for h in ordered:
+            q_words = set(h.get('q','').lower().split()) - stopwords
+            overlap = len(query_words & q_words)
+            bonus = 1.5 if h.get('feedback') == 'good' else 1.0
+            score = overlap * bonus
+            if score > 1.5: scored.append((score, h))
+
         scored.sort(key=lambda x: x[0], reverse=True)
         top = scored[:top_k]
         if not top: return ""
-        return "\n\n".join([f"Q: {h[1]['q']}\nA: {h[1]['a'][:300]}" for h in top])
+        return "\n\n".join([f"[سؤال سابق مشابه - ثقة {t[0]:.0f}]\nQ: {t[1]['q']}\nA: {t[1]['a'][:400]}" for t in top])
 
     def build_finetune_dataset(self, min_feedback='good'):
         """Build fine-tuning dataset from positively-rated interactions."""
@@ -2225,31 +2241,125 @@ def calc_roi(budget, rev_inc_pct, current_rev, ret_pct, avg_sal, hc, prod_pct):
             "payback":budget/max(total/12,1)}
 
 
-# ===== ACCESS CONTROL SYSTEM =====
+# ===== ACCESS CONTROL & GOVERNANCE SYSTEM =====
 import hashlib
 
 def hash_pw(pw):
     return hashlib.sha256(pw.encode()).hexdigest()
 
-# Default users (can be managed in-app)
+# === ROLE-BASED ACCESS CONTROL (RBAC) ===
+ROLE_PERMISSIONS = {
+    "مدير النظام": {
+        "desc": "وصول كامل + إدارة المستخدمين + إعدادات النظام",
+        "sections": "all",
+        "can_edit": True, "can_delete": True, "can_export": True,
+        "can_manage_users": True, "can_see_all_data": True,
+        "can_see_salaries": True, "can_see_personal": True,
+    },
+    "الرئيس التنفيذي": {
+        "desc": "وصول كامل لجميع البيانات والتقارير",
+        "sections": "all",
+        "can_edit": True, "can_delete": False, "can_export": True,
+        "can_manage_users": False, "can_see_all_data": True,
+        "can_see_salaries": True, "can_see_personal": True,
+    },
+    "المالية": {
+        "desc": "وصول كامل للبيانات المالية والرواتب والتقارير",
+        "sections": "all",
+        "can_edit": True, "can_delete": False, "can_export": True,
+        "can_manage_users": False, "can_see_all_data": True,
+        "can_see_salaries": True, "can_see_personal": False,
+    },
+    "الموارد البشرية": {
+        "desc": "وصول كامل لجميع أقسام HR والتوظيف والعقود",
+        "sections": "all",
+        "can_edit": True, "can_delete": True, "can_export": True,
+        "can_manage_users": False, "can_see_all_data": True,
+        "can_see_salaries": True, "can_see_personal": True,
+    },
+    "محلل": {
+        "desc": "اطلاع فقط على التحليلات والتقارير المطلوبة للتحليل",
+        "sections": "📊 التحليلات العامة,🎁 Total Rewards,👥 Headcount,🔍 التحليل العام,📈 التحليلات المتقدمة,📤 التقارير والتصدير",
+        "can_edit": False, "can_delete": False, "can_export": True,
+        "can_manage_users": False, "can_see_all_data": True,
+        "can_see_salaries": False, "can_see_personal": False,
+    },
+    "موظف": {
+        "desc": "اطلاع على بياناته الشخصية فقط + اختبارات الشخصية المعيّنة",
+        "sections": "🧠 اختبارات الشخصية",
+        "can_edit": False, "can_delete": False, "can_export": False,
+        "can_manage_users": False, "can_see_all_data": False,
+        "can_see_salaries": False, "can_see_personal": False,
+    },
+}
+
+# Default users
 DEFAULT_USERS = {
-    "admin": {"password": hash_pw("Rsl@Adm2026"), "role": "مدير", "name": "مدير النظام", "email": "HR@resal.me", "dept": "الإدارة", "sections": "all"},
+    "admin": {"password": hash_pw("Rsl@Adm2026"), "role": "مدير النظام", "name": "مدير النظام", "email": "HR@resal.me", "dept": "الإدارة", "sections": "all"},
+    "ceo": {"password": hash_pw("Rsl@Ceo2026"), "role": "الرئيس التنفيذي", "name": "الرئيس التنفيذي", "email": "", "dept": "الإدارة العليا", "sections": "all"},
+    "finance": {"password": hash_pw("Rsl@Fin2026"), "role": "المالية", "name": "المدير المالي", "email": "", "dept": "المالية", "sections": "all"},
+    "hr": {"password": hash_pw("Rsl@HR2026"), "role": "الموارد البشرية", "name": "مدير الموارد البشرية", "email": "", "dept": "الموارد البشرية", "sections": "all"},
     "analyst": {"password": hash_pw("Rsl@Anl2026"), "role": "محلل", "name": "محلل البيانات", "email": "", "dept": "التحليلات",
-        "sections": "📊 التحليلات العامة,🎁 Total Rewards,👥 Headcount,🔍 التحليل العام,📤 التقارير والتصدير"},
-    "viewer": {"password": hash_pw("Rsl@Vwr2026"), "role": "عارض", "name": "عارض", "email": "", "dept": "",
-        "sections": "📊 التحليلات العامة,📤 التقارير والتصدير"},
+        "sections": "📊 التحليلات العامة,🎁 Total Rewards,👥 Headcount,🔍 التحليل العام,📈 التحليلات المتقدمة,📤 التقارير والتصدير"},
     "emp1": {"password": hash_pw("Rsl@Emp2026"), "role": "موظف", "name": "أحمد محمد", "email": "", "dept": "تقنية المعلومات",
         "sections": "🧠 اختبارات الشخصية"},
     "emp2": {"password": hash_pw("Rsl@Emp2026"), "role": "موظف", "name": "سارة أحمد", "email": "", "dept": "الموارد البشرية",
         "sections": "🧠 اختبارات الشخصية"},
 }
 
-ROLE_DESCRIPTIONS = {
-    "مدير": "وصول كامل لجميع الأقسام + إدارة المستخدمين",
-    "محلل": "وصول للتحليلات والتقارير بدون إدارة المستخدمين",
-    "موظف": "أداء الاختبارات المعيّنة + عرض نتائجه فقط",
-    "عارض": "عرض التقارير فقط بدون تعديل",
-}
+ROLE_DESCRIPTIONS = {k: v["desc"] for k, v in ROLE_PERMISSIONS.items()}
+
+# === Permission helper functions ===
+def get_user_permission(perm_key):
+    """Check if current user has a specific permission."""
+    role = st.session_state.get('user_role', 'موظف')
+    perms = ROLE_PERMISSIONS.get(role, ROLE_PERMISSIONS['موظف'])
+    return perms.get(perm_key, False)
+
+def can_edit():
+    return get_user_permission('can_edit')
+
+def can_delete():
+    return get_user_permission('can_delete')
+
+def can_export():
+    return get_user_permission('can_export')
+
+def can_see_salaries():
+    return get_user_permission('can_see_salaries')
+
+def can_see_all_data():
+    return get_user_permission('can_see_all_data')
+
+def can_manage_users():
+    role = st.session_state.get('user_role', '')
+    return role == "مدير النظام"
+
+def filter_employee_data(df):
+    """Filter dataframe to show only current employee's data if they're a regular employee."""
+    if can_see_all_data():
+        return df
+    # Employee can only see their own data
+    user_name = st.session_state.get('user_name', '')
+    if not user_name or len(df) == 0:
+        return pd.DataFrame()
+    # Try to match by name
+    name_cols = [c for c in df.columns if any(n in c.lower() for n in ['اسم','الاسم','name','الموظف'])]
+    if name_cols:
+        mask = df[name_cols[0]].astype(str).str.contains(user_name, case=False, na=False)
+        return df[mask]
+    return pd.DataFrame()
+
+def mask_salary_data(df):
+    """Mask salary columns if user doesn't have salary permission."""
+    if can_see_salaries():
+        return df
+    sal_cols = [c for c in df.columns if any(s in c.lower() for s in ['راتب','salary','أجر','بدل','تأمين','allowance','wage','compensation','الراتب'])]
+    if sal_cols:
+        df = df.copy()
+        for c in sal_cols:
+            df[c] = "***"
+    return df
 
 ALL_SECTIONS = ["📊 التحليلات العامة","🎁 Total Rewards","👥 Headcount","⚖️ حاسبة المستحقات",
     "📚 التدريب والتطوير","🎯 التوظيف","🚀 Onboarding","📜 العقود","🤖 المستشار الذكي",
@@ -2595,7 +2705,11 @@ def login_page():
 
 def check_section_access(section_name):
     if not st.session_state.get('logged_in'): return False
-    user_sections = st.session_state.get('user_sections', 'all')
+    role = st.session_state.get('user_role', 'موظف')
+    perms = ROLE_PERMISSIONS.get(role, ROLE_PERMISSIONS.get('موظف', {}))
+    allowed = perms.get('sections', '')
+    if allowed == "all": return True
+    user_sections = st.session_state.get('user_sections', allowed)
     if user_sections == "all": return True
     return section_name in user_sections
 
@@ -2603,8 +2717,8 @@ def user_management_page():
     hdr("👥 إدارة المستخدمين والصلاحيات", "إضافة وتعديل المستخدمين وصلاحياتهم")
     init_users()
 
-    if st.session_state.get('user_role') != "مدير":
-        st.warning("⚠️ هذه الصفحة متاحة للمدير فقط")
+    if not can_manage_users():
+        st.warning("⚠️ هذه الصفحة متاحة لمدير النظام فقط")
         return
 
     # Current users
@@ -2706,7 +2820,7 @@ def user_management_page():
     with uc2:
         new_role = st.selectbox("الدور:", list(ROLE_DESCRIPTIONS.keys()), key="nu_role")
         st.info(f"📋 {ROLE_DESCRIPTIONS[new_role]}")
-        if new_role == "مدير":
+        if new_role == "مدير النظام":
             new_sections = "all"
         elif new_role == "موظف":
             new_sections = "🧠 اختبارات الشخصية"
@@ -3155,7 +3269,7 @@ def main():
 
         # Filter sections by access
         available_sections = [s for s in ALL_SECTIONS if check_section_access(s)]
-        if st.session_state.user_role == "مدير":
+        if st.session_state.user_role == "مدير النظام":
             available_sections.append("👥 إدارة المستخدمين")
 
 
@@ -8652,7 +8766,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
         elif page == "🏢 معلومات الشركة":
             hdr("🏢 إدارة معلومات الشركة","تحديث المعلومات التي تظهر في عرض Onboarding")
 
-            if st.session_state.get('user_role') != "مدير":
+            if st.session_state.get('user_role') not in ["مدير النظام","الرئيس التنفيذي","الموارد البشرية","المالية"]:
                 st.warning("⚠️ تعديل معلومات الشركة متاح للمدير فقط")
                 # Show read-only
                 ci = st.session_state.company_info
@@ -9361,7 +9475,7 @@ function stopSpeak(){{speechSynthesis.cancel()}}
                 "بواسطة":c.get('created_by','')} for c in contracts]
             st.dataframe(pd.DataFrame(ct_rows), use_container_width=True, hide_index=True)
 
-            if st.session_state.get('user_role') == "مدير":
+            if st.session_state.get('user_role') in ["مدير النظام","الرئيس التنفيذي","الموارد البشرية","المالية"]:
                 if st.button("🗑️ حذف جميع العقود", key="ct_del"):
                     st.session_state.saved_contracts = []
                     try:
@@ -9831,7 +9945,7 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
                     src_df = pd.DataFrame([{"المصدر":k,"الأجزاء":v,"النوع": chunks[0].get('type','') if chunks else ''} for k,v in sources.items()])
                     st.dataframe(src_df, use_container_width=True, hide_index=True)
 
-                    if st.session_state.get('user_role') == "مدير":
+                    if st.session_state.get('user_role') in ["مدير النظام","الرئيس التنفيذي","الموارد البشرية","المالية"]:
                         if st.button("🗑️ مسح القاعدة المعرفية بالكامل", key="rag_clear"):
                             conn = get_conn()
                             c = conn.cursor()
@@ -10076,7 +10190,7 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
         elif page == "📋 إدارة المراجع":
             hdr("📋 إدارة المراجع والإعدادات","API Key + تحديث الأنظمة القانونية")
 
-            if st.session_state.get('user_role') != "مدير":
+            if st.session_state.get('user_role') not in ["مدير النظام","الرئيس التنفيذي","الموارد البشرية","المالية"]:
                 st.warning("⚠️ إدارة المراجع متاحة للمدير فقط")
                 return
 
@@ -10902,7 +11016,7 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
         elif page == "📋 سجل التدقيق":
             hdr("📋 سجل التدقيق","Audit Trail - تتبع جميع العمليات")
 
-            if st.session_state.get('user_role') != "مدير":
+            if st.session_state.get('user_role') not in ["مدير النظام","الرئيس التنفيذي","الموارد البشرية","المالية"]:
                 st.warning("⚠️ سجل التدقيق متاح للمدير فقط"); return
 
             try:
@@ -12657,7 +12771,7 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                         ibox("لا توجد اختبارات معيّنة لهذا الموظف.")
 
             # === Manager Assignment Section ===
-            if cur_role == "مدير" or st.session_state.get('current_user') == "guest":
+            if cur_role in ["مدير النظام","الرئيس التنفيذي","الموارد البشرية"] or st.session_state.get('current_user') == "guest":
                 st.markdown("---")
                 st.markdown("### 📌 تعيين اختبار لموظف (المدير)")
 
@@ -12793,7 +12907,7 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                     with k3: kpi("⏳ قيد الانتظار", f"{total_a - done_a}")
 
                     # Admin-only delete
-                    if st.session_state.get('user_role') == "مدير":
+                    if st.session_state.get('user_role') in ["مدير النظام","الرئيس التنفيذي","الموارد البشرية","المالية"]:
                         if st.button("🗑️ مسح التعيينات (مدير فقط)", key="assign_clr"):
                             db_delete_assignments()
                             st.session_state.test_assignments = []
@@ -13050,7 +13164,7 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
 
                 # Admin-only delete section
                 st.markdown("---")
-                if st.session_state.get('user_role') == "مدير":
+                if st.session_state.get('user_role') in ["مدير النظام","الرئيس التنفيذي","الموارد البشرية","المالية"]:
                     st.markdown("### 🔒 إدارة قاعدة البيانات (مدير النظام فقط)")
 
                     del_tab1, del_tab2 = st.tabs(["🗑️ حذف سجل محدد", "⚠️ حذف الكل"])
