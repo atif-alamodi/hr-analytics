@@ -10422,35 +10422,76 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
             if submitted and labor_q:
                 st.session_state.labor_chat = []
                 with st.spinner("جاري التحليل القانوني..."):
-                    # Get RAG context
-                    rag_ctx = ""
                     try:
-                        if '_knowledge_engine' in st.session_state:
-                            rag_ctx = st.session_state._knowledge_engine.search(labor_q, advisor_type="legal")
-                    except: pass
+                        import requests as req_lib
 
-                    enhanced_prompt = LABOR_LAW_SYSTEM_PROMPT + (f"\n\nمعلومات مرجعية:\n{rag_ctx}" if rag_ctx else "")
-                    enhanced_prompt += "\n\n⚠️ لا تختلق أرقام مواد. اذكر فقط المواد 1-245 التي تعرفها بيقين."
-
-                    response, error = call_ai_api(enhanced_prompt, labor_q, model_type="labor_law")
-                    if response and len(response) > 30:
-                        # Verify no fake articles
-                        import re
-                        for a in re.findall(r'المادة\s*(\d+)', response):
-                            if int(a) > 245: response = response.replace(f"المادة {a}", "[مادة غير صحيحة - تحقق]")
-                        auto_learn_from_answer(labor_q, response, "legal")
-                        st.session_state.labor_chat = [{"role":"user","content":labor_q},{"role":"assistant","content":response}]
-                    elif error:
-                        st.session_state.labor_chat = [{"role":"user","content":labor_q},
-                            {"role":"assistant","content":f"تعذرت الإجابة: {error}\n\nأضف مفتاح API مجاني في الإعدادات (Gemini أو Groq)."}]
-                    else:
-                        # Try local KB
+                        # Get RAG context
+                        rag_ctx = ""
                         try:
-                            local = get_best_kb_answer(labor_q, LABOR_LAW_SYSTEM_PROMPT)
-                            st.session_state.labor_chat = [{"role":"user","content":labor_q},{"role":"assistant","content":local}]
-                        except:
+                            if '_knowledge_engine' in st.session_state:
+                                rag_ctx = st.session_state._knowledge_engine.search(labor_q, advisor_type="legal")
+                        except: pass
+
+                        # Build anti-hallucination prompt
+                        sys_prompt = LABOR_LAW_SYSTEM_PROMPT
+                        sys_prompt += "\n\n⚠️ تعليمات صارمة: لا تختلق أرقام مواد. المواد 1-245 فقط. إذا لم تتأكد اكتب يُرجع للنظام."
+                        if rag_ctx:
+                            sys_prompt += f"\n\nمعلومات مرجعية:\n{rag_ctx[:2000]}"
+
+                        # Try all providers directly (bypass orchestrator scope issues)
+                        response = None
+                        for prov, key_name, secret_name, url, model in [
+                            ('gemini','gemini_api_key','gemini',
+                             'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',''),
+                            ('groq','groq_api_key','groq',
+                             'https://api.groq.com/openai/v1/chat/completions','llama-3.3-70b-versatile'),
+                            ('openrouter','openrouter_api_key','openrouter',
+                             'https://openrouter.ai/api/v1/chat/completions','meta-llama/llama-3.3-70b-instruct:free'),
+                        ]:
+                            api_key = st.session_state.get(key_name,'')
+                            if not api_key:
+                                try: api_key = st.secrets.get(secret_name,{}).get("api_key","")
+                                except: pass
+                            if not api_key: continue
+
+                            try:
+                                if prov == 'gemini':
+                                    resp = req_lib.post(f"{url}?key={api_key}",
+                                        json={"contents":[{"parts":[{"text":f"{sys_prompt[:3000]}\n\nالسؤال: {labor_q}"}]}],
+                                            "generationConfig":{"maxOutputTokens":2500,"temperature":0.1}},timeout=30)
+                                    if resp.status_code == 200:
+                                        response = resp.json().get('candidates',[{}])[0].get('content',{}).get('parts',[{}])[0].get('text','')
+                                else:
+                                    headers = {'Authorization':f'Bearer {api_key}'}
+                                    if prov == 'openrouter': headers['HTTP-Referer'] = 'https://hr-analytics-risal.streamlit.app'
+                                    resp = req_lib.post(url,
+                                        json={"model":model,"messages":[
+                                            {"role":"system","content":sys_prompt[:3000]},
+                                            {"role":"user","content":labor_q}],
+                                            "max_tokens":2500,"temperature":0.1},
+                                        headers=headers,timeout=30)
+                                    if resp.status_code == 200:
+                                        response = resp.json().get('choices',[{}])[0].get('message',{}).get('content','')
+                                if response and len(response) > 30:
+                                    # Verify no fake articles
+                                    import re
+                                    for a in re.findall(r'المادة\s*(\d+)', response):
+                                        if int(a) > 245: response = response.replace(f"المادة {a}", "[مادة غير موثقة]")
+                                    break
+                                else:
+                                    response = None
+                            except: continue
+
+                        if response:
+                            auto_learn_from_answer(labor_q, response, "legal")
+                            st.session_state.labor_chat = [{"role":"user","content":labor_q},{"role":"assistant","content":response}]
+                        else:
+                            keys = [f"{p}: {'✅' if st.session_state.get(f'{p}_api_key','') else '❌'}" for p in ['gemini','groq','openrouter']]
                             st.session_state.labor_chat = [{"role":"user","content":labor_q},
-                                {"role":"assistant","content":"تعذرت الإجابة. تأكد من إعداد مفتاح API."}]
+                                {"role":"assistant","content":f"تعذرت الإجابة.\n\nالمزودين: {' | '.join(keys)}\n\nأضف مفتاح API مجاني:\n- Gemini: https://aistudio.google.com/apikey\n- Groq: https://console.groq.com/keys"}]
+                    except Exception as e:
+                        st.session_state.labor_chat = [{"role":"user","content":labor_q},
+                            {"role":"assistant","content":f"خطأ: {e}"}]
 
             # Clear chat
             if st.session_state.labor_chat and st.button("🗑️ مسح المحادثة", key="labor_clear"):
@@ -10515,30 +10556,68 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
             if submitted and hr_q:
                 st.session_state.hr_chat = []
                 with st.spinner("جاري التحليل المهني..."):
-                    # Get RAG context
-                    rag_ctx = ""
                     try:
-                        if '_knowledge_engine' in st.session_state:
-                            rag_ctx = st.session_state._knowledge_engine.search(hr_q, advisor_type="hr")
-                    except: pass
+                        import requests as req_lib
 
-                    enhanced_prompt = HR_EXPERT_SYSTEM_PROMPT + (f"\n\nمعلومات مرجعية:\n{rag_ctx}" if rag_ctx else "")
-                    enhanced_prompt += "\n\n⚠️ أجب وفق أطر PHRi/SHRM/CIPD فقط. لا تذكر مواد قانونية. لا تختلق مصطلحات."
-
-                    response, error = call_ai_api(enhanced_prompt, hr_q, model_type="hr")
-                    if response and len(response) > 30:
-                        auto_learn_from_answer(hr_q, response, "hr")
-                        st.session_state.hr_chat = [{"role":"user","content":hr_q},{"role":"assistant","content":response}]
-                    elif error:
-                        st.session_state.hr_chat = [{"role":"user","content":hr_q},
-                            {"role":"assistant","content":f"تعذرت الإجابة: {error}\n\nأضف مفتاح API مجاني في الإعدادات (Gemini أو Groq)."}]
-                    else:
+                        # Get RAG context
+                        rag_ctx = ""
                         try:
-                            local = get_best_kb_answer(hr_q, HR_EXPERT_SYSTEM_PROMPT)
-                            st.session_state.hr_chat = [{"role":"user","content":hr_q},{"role":"assistant","content":local}]
-                        except:
+                            if '_knowledge_engine' in st.session_state:
+                                rag_ctx = st.session_state._knowledge_engine.search(hr_q, advisor_type="hr")
+                        except: pass
+
+                        sys_prompt = HR_EXPERT_SYSTEM_PROMPT
+                        sys_prompt += "\n\n⚠️ أجب وفق أطر PHRi/SHRM/CIPD فقط. لا تذكر مواد قانونية. لا تختلق مصطلحات."
+                        if rag_ctx:
+                            sys_prompt += f"\n\nمعلومات مرجعية:\n{rag_ctx[:2000]}"
+
+                        response = None
+                        for prov, key_name, secret_name, url, model in [
+                            ('gemini','gemini_api_key','gemini',
+                             'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',''),
+                            ('groq','groq_api_key','groq',
+                             'https://api.groq.com/openai/v1/chat/completions','llama-3.3-70b-versatile'),
+                            ('openrouter','openrouter_api_key','openrouter',
+                             'https://openrouter.ai/api/v1/chat/completions','meta-llama/llama-3.3-70b-instruct:free'),
+                        ]:
+                            api_key = st.session_state.get(key_name,'')
+                            if not api_key:
+                                try: api_key = st.secrets.get(secret_name,{}).get("api_key","")
+                                except: pass
+                            if not api_key: continue
+
+                            try:
+                                if prov == 'gemini':
+                                    resp = req_lib.post(f"{url}?key={api_key}",
+                                        json={"contents":[{"parts":[{"text":f"{sys_prompt[:3000]}\n\nالسؤال: {hr_q}"}]}],
+                                            "generationConfig":{"maxOutputTokens":2500,"temperature":0.1}},timeout=30)
+                                    if resp.status_code == 200:
+                                        response = resp.json().get('candidates',[{}])[0].get('content',{}).get('parts',[{}])[0].get('text','')
+                                else:
+                                    headers = {'Authorization':f'Bearer {api_key}'}
+                                    if prov == 'openrouter': headers['HTTP-Referer'] = 'https://hr-analytics-risal.streamlit.app'
+                                    resp = req_lib.post(url,
+                                        json={"model":model,"messages":[
+                                            {"role":"system","content":sys_prompt[:3000]},
+                                            {"role":"user","content":hr_q}],
+                                            "max_tokens":2500,"temperature":0.1},
+                                        headers=headers,timeout=30)
+                                    if resp.status_code == 200:
+                                        response = resp.json().get('choices',[{}])[0].get('message',{}).get('content','')
+                                if response and len(response) > 30: break
+                                else: response = None
+                            except: continue
+
+                        if response:
+                            auto_learn_from_answer(hr_q, response, "hr")
+                            st.session_state.hr_chat = [{"role":"user","content":hr_q},{"role":"assistant","content":response}]
+                        else:
+                            keys = [f"{p}: {'✅' if st.session_state.get(f'{p}_api_key','') else '❌'}" for p in ['gemini','groq','openrouter']]
                             st.session_state.hr_chat = [{"role":"user","content":hr_q},
-                                {"role":"assistant","content":"تعذرت الإجابة. تأكد من إعداد مفتاح API."}]
+                                {"role":"assistant","content":f"تعذرت الإجابة.\n\nالمزودين: {' | '.join(keys)}\n\nأضف مفتاح API مجاني:\n- Gemini: https://aistudio.google.com/apikey\n- Groq: https://console.groq.com/keys"}]
+                    except Exception as e:
+                        st.session_state.hr_chat = [{"role":"user","content":hr_q},
+                            {"role":"assistant","content":f"خطأ: {e}"}]
 
             if st.session_state.hr_chat and st.button("🗑️ مسح المحادثة", key="hr_clear"):
                 st.session_state.hr_chat = []
