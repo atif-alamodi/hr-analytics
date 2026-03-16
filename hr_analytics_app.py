@@ -10379,23 +10379,22 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
 
             # Display chat history with feedback
             if st.session_state.labor_chat:
-                st.components.v1.html('<script>window.parent.document.querySelector("section.main").scrollTo({top:0,behavior:"smooth"});</script>', height=0)
-            for idx, msg in enumerate(st.session_state.labor_chat):
-                if msg['role'] == 'user':
-                    st.markdown(f"<div style='background:#1e3a5f;color:white;padding:12px;border-radius:10px;margin:8px 0'>👤 {msg['content']}</div>", unsafe_allow_html=True)
-                else:
-                    st.markdown(f"<div style='background:#f0f4f8;color:#333;padding:12px;border-radius:10px;margin:8px 0;border-right:4px solid #0F4C5C'>⚖️ {msg['content']}</div>", unsafe_allow_html=True)
-                    fc1, fc2, fc3 = st.columns([1,1,8])
-                    q_text = st.session_state.labor_chat[idx-1]['content'] if idx > 0 else ""
-                    q_hash = hashlib.md5(q_text.encode()).hexdigest()[:10] if q_text else ""
-                    with fc1:
-                        if st.button("👍", key=f"lg_{idx}", help="إجابة مفيدة"):
-                            rate_answer(q_hash, 1, "legal")
-                            st.toast("✅ شكراً لتقييمك")
-                    with fc2:
-                        if st.button("👎", key=f"lb_{idx}", help="إجابة غير دقيقة"):
-                            rate_answer(q_hash, -1, "legal")
-                            st.toast("📝 سيتم تحسين الإجابة")
+                for idx, msg in enumerate(st.session_state.labor_chat):
+                    if msg['role'] == 'user':
+                        st.markdown(f"<div style='background:#1e3a5f;color:white;padding:12px;border-radius:10px;margin:8px 0'>👤 {msg['content']}</div>", unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"<div style='background:#f0f4f8;color:#333;padding:12px;border-radius:10px;margin:8px 0;border-right:4px solid #0F4C5C'>⚖️ {msg['content']}</div>", unsafe_allow_html=True)
+                        fc1, fc2, fc3 = st.columns([1,1,8])
+                        q_text = st.session_state.labor_chat[idx-1]['content'] if idx > 0 else ""
+                        q_hash = hashlib.md5(q_text.encode()).hexdigest()[:10] if q_text else ""
+                        with fc1:
+                            if st.button("👍", key=f"lg_{idx}", help="إجابة مفيدة"):
+                                rate_answer(q_hash, 1, "legal")
+                                st.toast("شكراً لتقييمك")
+                        with fc2:
+                            if st.button("👎", key=f"lb_{idx}", help="إجابة غير دقيقة"):
+                                rate_answer(q_hash, -1, "legal")
+                                st.toast("سيتم تحسين الإجابة")
 
             # Instant answers database
             INSTANT_ANSWERS = {
@@ -10415,37 +10414,35 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
                     if st.button(q, key=f"lq_{i}", use_container_width=True):
                         st.session_state.labor_chat = [{"role":"user","content":q},{"role":"assistant","content":INSTANT_ANSWERS[q]}]
 
-            # Input for custom questions - NO FORM (forms cause issues)
-            labor_q = st.text_input("اكتب سؤالك القانوني:", key="labor_q_input",
-                placeholder="مثال: تم فصلي بعد 3 سنوات خدمة بدون سبب، ما مستحقاتي؟")
+            # Input
+            with st.form("labor_form"):
+                labor_q = st.text_area("اكتب سؤالك القانوني:", height=80, key="labor_q_input",
+                    placeholder="مثال: تم فصلي بعد 3 سنوات خدمة بدون سبب، ما مستحقاتي؟")
+                submitted = st.form_submit_button("استشارة قانونية", type="primary", use_container_width=True)
 
-            if st.button("استشارة قانونية", type="primary", use_container_width=True, key="labor_submit"):
-                if labor_q and labor_q.strip():
-                    with st.spinner("جاري التحليل القانوني..."):
-                        # Build prompt with anti-hallucination
-                        sys_prompt = LABOR_LAW_SYSTEM_PROMPT
-                        sys_prompt += "\n\n⚠️ لا تختلق أرقام مواد. المواد 1-245 فقط. إذا لم تتأكد اكتب يُرجع للنظام."
+            if submitted and labor_q and labor_q.strip():
+                with st.spinner("جاري التحليل القانوني..."):
+                    sys_prompt = LABOR_LAW_SYSTEM_PROMPT
+                    sys_prompt += "\n\n⚠️ لا تختلق أرقام مواد. المواد 1-245 فقط. إذا لم تتأكد اكتب يُرجع للنظام."
 
-                        # Get RAG context
-                        try:
-                            if '_knowledge_engine' in st.session_state:
-                                rag = st.session_state._knowledge_engine.search(labor_q, advisor_type="legal")
-                                if rag: sys_prompt += f"\n\nمعلومات مرجعية:\n{rag[:2000]}"
-                        except: pass
+                    try:
+                        if '_knowledge_engine' in st.session_state:
+                            rag = st.session_state._knowledge_engine.search(labor_q, advisor_type="legal")
+                            if rag: sys_prompt += f"\n\nمعلومات مرجعية:\n{rag[:2000]}"
+                    except: pass
 
-                        response, error = call_ai_api(sys_prompt, labor_q, model_type="labor_law")
-                        if response and len(response) > 20:
-                            import re
-                            for a in re.findall(r'المادة\s*(\d+)', response):
-                                if int(a) > 245: response = response.replace(f"المادة {a}", "[تحقق من الرقم]")
-                            auto_learn_from_answer(labor_q, response, "legal")
-                            st.session_state.labor_chat = [{"role":"user","content":labor_q},{"role":"assistant","content":response}]
-                        else:
-                            err_msg = error or "لم يتم الحصول على إجابة"
-                            st.session_state.labor_chat = [{"role":"user","content":labor_q},
-                                {"role":"assistant","content":f"تعذرت الإجابة: {err_msg}\n\nتأكد من إعداد مفتاح API في الإعدادات (Gemini مجاني أو Groq)."}]
-                else:
-                    st.warning("اكتب سؤالك أولاً")
+                    response, error = call_ai_api(sys_prompt, labor_q, model_type="labor_law")
+                    if response and len(response) > 20:
+                        import re
+                        for a in re.findall(r'المادة\s*(\d+)', response):
+                            if int(a) > 245: response = response.replace(f"المادة {a}", "[تحقق من الرقم]")
+                        auto_learn_from_answer(labor_q, response, "legal")
+                        st.session_state.labor_chat = [{"role":"user","content":labor_q},{"role":"assistant","content":response}]
+                    else:
+                        err_msg = error or "لم يتم الحصول على إجابة"
+                        st.session_state.labor_chat = [{"role":"user","content":labor_q},
+                            {"role":"assistant","content":f"تعذرت الإجابة: {err_msg}\n\nتأكد من إعداد مفتاح API في الإعدادات (Gemini مجاني أو Groq)."}]
+                st.rerun()
 
             # Clear chat
             if st.session_state.labor_chat and st.button("🗑️ مسح المحادثة", key="labor_clear"):
@@ -10468,23 +10465,22 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
                 st.session_state.hr_chat = []
 
             if st.session_state.hr_chat:
-                st.components.v1.html('<script>window.parent.document.querySelector("section.main").scrollTo({top:0,behavior:"smooth"});</script>', height=0)
-            for idx, msg in enumerate(st.session_state.hr_chat):
-                if msg['role'] == 'user':
-                    st.markdown(f"<div style='background:#1e3a5f;color:white;padding:12px;border-radius:10px;margin:8px 0'>👤 {msg['content']}</div>", unsafe_allow_html=True)
-                else:
-                    st.markdown(f"<div style='background:#f0faf5;color:#333;padding:12px;border-radius:10px;margin:8px 0;border-right:4px solid #2A9D8F'>📚 {msg['content']}</div>", unsafe_allow_html=True)
-                    fc1, fc2, fc3 = st.columns([1,1,8])
-                    q_text = st.session_state.hr_chat[idx-1]['content'] if idx > 0 else ""
-                    q_hash = hashlib.md5(q_text.encode()).hexdigest()[:10] if q_text else ""
-                    with fc1:
-                        if st.button("👍", key=f"hg_{idx}", help="إجابة مفيدة"):
-                            rate_answer(q_hash, 1, "hr")
-                            st.toast("✅ شكراً لتقييمك")
-                    with fc2:
-                        if st.button("👎", key=f"hb_{idx}", help="إجابة غير دقيقة"):
-                            rate_answer(q_hash, -1, "hr")
-                            st.toast("📝 سيتم تحسين الإجابة")
+                for idx, msg in enumerate(st.session_state.hr_chat):
+                    if msg['role'] == 'user':
+                        st.markdown(f"<div style='background:#1e3a5f;color:white;padding:12px;border-radius:10px;margin:8px 0'>👤 {msg['content']}</div>", unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"<div style='background:#f0faf5;color:#333;padding:12px;border-radius:10px;margin:8px 0;border-right:4px solid #2A9D8F'>📚 {msg['content']}</div>", unsafe_allow_html=True)
+                        fc1, fc2, fc3 = st.columns([1,1,8])
+                        q_text = st.session_state.hr_chat[idx-1]['content'] if idx > 0 else ""
+                        q_hash = hashlib.md5(q_text.encode()).hexdigest()[:10] if q_text else ""
+                        with fc1:
+                            if st.button("👍", key=f"hg_{idx}", help="إجابة مفيدة"):
+                                rate_answer(q_hash, 1, "hr")
+                                st.toast("شكراً لتقييمك")
+                        with fc2:
+                            if st.button("👎", key=f"hb_{idx}", help="إجابة غير دقيقة"):
+                                rate_answer(q_hash, -1, "hr")
+                                st.toast("سيتم تحسين الإجابة")
 
             # Instant HR answers database
             HR_INSTANT = {
@@ -10504,31 +10500,31 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
                     if st.button(t, key=f"ht_{i}", use_container_width=True):
                         st.session_state.hr_chat = [{"role":"user","content":t},{"role":"assistant","content":HR_INSTANT[t]}]
 
-            hr_q = st.text_input("اكتب سؤالك:", key="hr_q_input",
-                placeholder="مثال: كيف أقيس فعالية برنامج التدريب باستخدام نموذج Kirkpatrick؟")
+            with st.form("hr_form"):
+                hr_q = st.text_area("اكتب سؤالك:", height=80, key="hr_q_input",
+                    placeholder="مثال: كيف أقيس فعالية برنامج التدريب باستخدام نموذج Kirkpatrick؟")
+                submitted = st.form_submit_button("استشارة مهنية", type="primary", use_container_width=True)
 
-            if st.button("استشارة مهنية", type="primary", use_container_width=True, key="hr_submit"):
-                if hr_q and hr_q.strip():
-                    with st.spinner("جاري التحليل المهني..."):
-                        sys_prompt = HR_EXPERT_SYSTEM_PROMPT
-                        sys_prompt += "\n\n⚠️ أجب وفق أطر PHRi/SHRM/CIPD فقط. لا تذكر مواد قانونية. لا تختلق مصطلحات."
+            if submitted and hr_q and hr_q.strip():
+                with st.spinner("جاري التحليل المهني..."):
+                    sys_prompt = HR_EXPERT_SYSTEM_PROMPT
+                    sys_prompt += "\n\n⚠️ أجب وفق أطر PHRi/SHRM/CIPD فقط. لا تذكر مواد قانونية. لا تختلق مصطلحات."
 
-                        try:
-                            if '_knowledge_engine' in st.session_state:
-                                rag = st.session_state._knowledge_engine.search(hr_q, advisor_type="hr")
-                                if rag: sys_prompt += f"\n\nمعلومات مرجعية:\n{rag[:2000]}"
-                        except: pass
+                    try:
+                        if '_knowledge_engine' in st.session_state:
+                            rag = st.session_state._knowledge_engine.search(hr_q, advisor_type="hr")
+                            if rag: sys_prompt += f"\n\nمعلومات مرجعية:\n{rag[:2000]}"
+                    except: pass
 
-                        response, error = call_ai_api(sys_prompt, hr_q, model_type="hr")
-                        if response and len(response) > 20:
-                            auto_learn_from_answer(hr_q, response, "hr")
-                            st.session_state.hr_chat = [{"role":"user","content":hr_q},{"role":"assistant","content":response}]
-                        else:
-                            err_msg = error or "لم يتم الحصول على إجابة"
-                            st.session_state.hr_chat = [{"role":"user","content":hr_q},
-                                {"role":"assistant","content":f"تعذرت الإجابة: {err_msg}\n\nتأكد من إعداد مفتاح API في الإعدادات (Gemini مجاني أو Groq)."}]
-                else:
-                    st.warning("اكتب سؤالك أولاً")
+                    response, error = call_ai_api(sys_prompt, hr_q, model_type="hr")
+                    if response and len(response) > 20:
+                        auto_learn_from_answer(hr_q, response, "hr")
+                        st.session_state.hr_chat = [{"role":"user","content":hr_q},{"role":"assistant","content":response}]
+                    else:
+                        err_msg = error or "لم يتم الحصول على إجابة"
+                        st.session_state.hr_chat = [{"role":"user","content":hr_q},
+                            {"role":"assistant","content":f"تعذرت الإجابة: {err_msg}\n\nتأكد من إعداد مفتاح API في الإعدادات (Gemini مجاني أو Groq)."}]
+                st.rerun()
 
             if st.session_state.hr_chat and st.button("🗑️ مسح المحادثة", key="hr_clear"):
                 st.session_state.hr_chat = []
