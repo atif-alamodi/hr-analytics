@@ -1860,25 +1860,96 @@ def _call_llm(question, reasoning_prompt, req_lib):
     return None
 
 def get_best_kb_answer(question, system_prompt=None):
-    """Main entry: ALL questions go through full advisory reasoning pipeline."""
+    """Main entry: questions go through RAG + main AI pipeline with anti-hallucination."""
     consultant_type = "legal" if system_prompt and 'المستشار القانوني' in system_prompt else "hr"
 
-    # Full reasoning pipeline (no shallow fallback)
-    answer = generate_advisor_answer(question, consultant_type, system_prompt)
-    if answer and len(answer) > 30:
-        auto_learn_from_answer(question, answer, consultant_type)
-        return answer
+    # Step 1: Check instant answers first (exact match)
+    from difflib import SequenceMatcher
+    instant_source = None
+    if consultant_type == "legal":
+        try:
+            for q, a in INSTANT_ANSWERS.items():
+                if SequenceMatcher(None, question.strip(), q.strip()).ratio() > 0.8:
+                    return a
+        except: pass
+    else:
+        try:
+            for q, a in HR_INSTANT.items():
+                if SequenceMatcher(None, question.strip(), q.strip()).ratio() > 0.8:
+                    return a
+        except: pass
 
-    # Diagnostic only (no shallow answers)
+    # Step 2: Get RAG context
+    rag_context = ""
+    try:
+        if '_knowledge_engine' in st.session_state:
+            rag_context = st.session_state._knowledge_engine.search(question, advisor_type=consultant_type)
+    except: pass
+
+    # Step 3: Build enhanced prompt with anti-hallucination
+    if consultant_type == "legal":
+        enhanced = f"""{system_prompt or ''}
+
+⚠️ تعليمات صارمة لمنع الهلوسة:
+- اذكر فقط مواد نظام العمل التي تعرفها بيقين (النظام يحتوي على المواد 1-245).
+- لا تختلق أرقام مواد غير موجودة.
+- إذا لم تكن متأكداً من مادة معينة اكتب "يُرجع لنظام العمل للتحقق".
+- هذه استشارة أولية وليست رأياً قانونياً نهائياً.
+
+{f'معلومات مرجعية ذات صلة:{chr(10)}{rag_context}' if rag_context else ''}"""
+    else:
+        enhanced = f"""{system_prompt or ''}
+
+⚠️ تعليمات صارمة:
+- أجب وفق أطر PHRi/SHRM/CIPD فقط. لا تذكر مواد قانونية.
+- إذا كان السؤال قانونياً أوصِ باستخدام المستشار القانوني.
+- لا تختلق مصطلحات أو أطر غير حقيقية.
+
+{f'معلومات مرجعية:{chr(10)}{rag_context}' if rag_context else ''}"""
+
+    # Step 4: Use main AI pipeline (has all the anti-hallucination guards)
+    try:
+        response, error = call_ai_api(enhanced, question, model_type=consultant_type)
+        if response and len(response) > 30:
+            # Basic verification - remove clearly wrong content
+            if consultant_type == "legal":
+                import re
+                cited = re.findall(r'(?:المادة|مادة)\s*(\d+)', response)
+                for a in cited:
+                    if int(a) > 245:
+                        response = response.replace(f"المادة {a}", "[مادة غير صحيحة]")
+            return response
+        elif error:
+            return f"**تعذر الإجابة:** {error}\n\nتأكد من إعداد مفتاح API في الإعدادات."
+    except Exception as e:
+        pass
+
+    # Step 5: Fallback - try local knowledge base
+    try:
+        analysis = analyze_question(question, consultant_type)
+        if analysis.get('facts') or analysis.get('certs'):
+            local_answer = f"**إجابة من قاعدة المعرفة المحلية:**\n\n"
+            if analysis.get('facts'):
+                local_answer += f"المراجع القانونية: {analysis['facts']}\n\n"
+            if analysis.get('certs'):
+                local_answer += f"الأطر المهنية: {analysis['certs']}\n\n"
+            if analysis.get('reasoning'):
+                for r in analysis['reasoning'][:3]:
+                    local_answer += f"- {r}\n"
+            if len(local_answer) > 80:
+                return local_answer + "\n\n⚠️ هذه إجابة مختصرة من القاعدة المحلية. أضف مفتاح API للحصول على إجابة تفصيلية."
+    except: pass
+
+    # Final fallback
     k_status = []
-    for p in ['groq','gemini','openrouter']:
-        has = bool(st.session_state.get(f'{p}_api_key',''))
-        k_status.append(f"{p}: {'✅' if has else '❌'}")
-    return (f"**لم يتمكن النظام من توليد إجابة تحليلية**\n\n"
+    for p in ['gemini','groq','openrouter']:
+        has_key = bool(st.session_state.get(f'{p}_api_key',''))
+        k_status.append(f"{p}: {'✅' if has_key else '❌'}")
+    return (f"**لم يتمكن النظام من الإجابة**\n\n"
             f"المزودين: {' | '.join(k_status)}\n\n"
-            f"**الحلول:**\n"
-            f"1. تأكد من إضافة مفتاح Groq في الإعدادات\n"
-            f"2. أعد المحاولة بعد لحظات")
+            f"**الحل:** أضف مفتاح API مجاني:\n"
+            f"- **Gemini** (مجاني): https://aistudio.google.com/apikey\n"
+            f"- **Groq** (مجاني): https://console.groq.com/keys")
 
 
 def auto_learn_from_answer(question, answer, consultant_type="legal"):
@@ -10351,9 +10422,35 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
             if submitted and labor_q:
                 st.session_state.labor_chat = []
                 with st.spinner("جاري التحليل القانوني..."):
-                    response = get_best_kb_answer(labor_q, LABOR_LAW_SYSTEM_PROMPT)
-                    auto_learn_from_answer(labor_q, response, "legal")
-                    st.session_state.labor_chat = [{"role":"user","content":labor_q},{"role":"assistant","content":response}]
+                    # Get RAG context
+                    rag_ctx = ""
+                    try:
+                        if '_knowledge_engine' in st.session_state:
+                            rag_ctx = st.session_state._knowledge_engine.search(labor_q, advisor_type="legal")
+                    except: pass
+
+                    enhanced_prompt = LABOR_LAW_SYSTEM_PROMPT + (f"\n\nمعلومات مرجعية:\n{rag_ctx}" if rag_ctx else "")
+                    enhanced_prompt += "\n\n⚠️ لا تختلق أرقام مواد. اذكر فقط المواد 1-245 التي تعرفها بيقين."
+
+                    response, error = call_ai_api(enhanced_prompt, labor_q, model_type="labor_law")
+                    if response and len(response) > 30:
+                        # Verify no fake articles
+                        import re
+                        for a in re.findall(r'المادة\s*(\d+)', response):
+                            if int(a) > 245: response = response.replace(f"المادة {a}", "[مادة غير صحيحة - تحقق]")
+                        auto_learn_from_answer(labor_q, response, "legal")
+                        st.session_state.labor_chat = [{"role":"user","content":labor_q},{"role":"assistant","content":response}]
+                    elif error:
+                        st.session_state.labor_chat = [{"role":"user","content":labor_q},
+                            {"role":"assistant","content":f"تعذرت الإجابة: {error}\n\nأضف مفتاح API مجاني في الإعدادات (Gemini أو Groq)."}]
+                    else:
+                        # Try local KB
+                        try:
+                            local = get_best_kb_answer(labor_q, LABOR_LAW_SYSTEM_PROMPT)
+                            st.session_state.labor_chat = [{"role":"user","content":labor_q},{"role":"assistant","content":local}]
+                        except:
+                            st.session_state.labor_chat = [{"role":"user","content":labor_q},
+                                {"role":"assistant","content":"تعذرت الإجابة. تأكد من إعداد مفتاح API."}]
 
             # Clear chat
             if st.session_state.labor_chat and st.button("🗑️ مسح المحادثة", key="labor_clear"):
@@ -10418,9 +10515,30 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
             if submitted and hr_q:
                 st.session_state.hr_chat = []
                 with st.spinner("جاري التحليل المهني..."):
-                    response = get_best_kb_answer(hr_q, HR_EXPERT_SYSTEM_PROMPT)
-                    auto_learn_from_answer(hr_q, response, "hr")
-                    st.session_state.hr_chat = [{"role":"user","content":hr_q},{"role":"assistant","content":response}]
+                    # Get RAG context
+                    rag_ctx = ""
+                    try:
+                        if '_knowledge_engine' in st.session_state:
+                            rag_ctx = st.session_state._knowledge_engine.search(hr_q, advisor_type="hr")
+                    except: pass
+
+                    enhanced_prompt = HR_EXPERT_SYSTEM_PROMPT + (f"\n\nمعلومات مرجعية:\n{rag_ctx}" if rag_ctx else "")
+                    enhanced_prompt += "\n\n⚠️ أجب وفق أطر PHRi/SHRM/CIPD فقط. لا تذكر مواد قانونية. لا تختلق مصطلحات."
+
+                    response, error = call_ai_api(enhanced_prompt, hr_q, model_type="hr")
+                    if response and len(response) > 30:
+                        auto_learn_from_answer(hr_q, response, "hr")
+                        st.session_state.hr_chat = [{"role":"user","content":hr_q},{"role":"assistant","content":response}]
+                    elif error:
+                        st.session_state.hr_chat = [{"role":"user","content":hr_q},
+                            {"role":"assistant","content":f"تعذرت الإجابة: {error}\n\nأضف مفتاح API مجاني في الإعدادات (Gemini أو Groq)."}]
+                    else:
+                        try:
+                            local = get_best_kb_answer(hr_q, HR_EXPERT_SYSTEM_PROMPT)
+                            st.session_state.hr_chat = [{"role":"user","content":hr_q},{"role":"assistant","content":local}]
+                        except:
+                            st.session_state.hr_chat = [{"role":"user","content":hr_q},
+                                {"role":"assistant","content":"تعذرت الإجابة. تأكد من إعداد مفتاح API."}]
 
             if st.session_state.hr_chat and st.button("🗑️ مسح المحادثة", key="hr_clear"):
                 st.session_state.hr_chat = []
