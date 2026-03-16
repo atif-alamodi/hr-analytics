@@ -10413,85 +10413,37 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
                     if st.button(q, key=f"lq_{i}", use_container_width=True):
                         st.session_state.labor_chat = [{"role":"user","content":q},{"role":"assistant","content":INSTANT_ANSWERS[q]}]
 
-            # Input for custom questions
-            with st.form("labor_form", clear_on_submit=True):
-                labor_q = st.text_area("اكتب سؤالك القانوني:", height=80, key="labor_q_input",
-                    placeholder="مثال: تم فصلي بعد 3 سنوات خدمة بدون سبب، ما مستحقاتي؟")
-                submitted = st.form_submit_button("⚖️ استشارة", type="primary", use_container_width=True)
+            # Input for custom questions - NO FORM (forms cause issues)
+            labor_q = st.text_input("اكتب سؤالك القانوني:", key="labor_q_input",
+                placeholder="مثال: تم فصلي بعد 3 سنوات خدمة بدون سبب، ما مستحقاتي؟")
 
-            if submitted and labor_q:
-                st.session_state.labor_chat = []
-                with st.spinner("جاري التحليل القانوني..."):
-                    try:
-                        import requests as req_lib
+            if st.button("استشارة قانونية", type="primary", use_container_width=True, key="labor_submit"):
+                if labor_q and labor_q.strip():
+                    with st.spinner("جاري التحليل القانوني..."):
+                        # Build prompt with anti-hallucination
+                        sys_prompt = LABOR_LAW_SYSTEM_PROMPT
+                        sys_prompt += "\n\n⚠️ لا تختلق أرقام مواد. المواد 1-245 فقط. إذا لم تتأكد اكتب يُرجع للنظام."
 
                         # Get RAG context
-                        rag_ctx = ""
                         try:
                             if '_knowledge_engine' in st.session_state:
-                                rag_ctx = st.session_state._knowledge_engine.search(labor_q, advisor_type="legal")
+                                rag = st.session_state._knowledge_engine.search(labor_q, advisor_type="legal")
+                                if rag: sys_prompt += f"\n\nمعلومات مرجعية:\n{rag[:2000]}"
                         except: pass
 
-                        # Build anti-hallucination prompt
-                        sys_prompt = LABOR_LAW_SYSTEM_PROMPT
-                        sys_prompt += "\n\n⚠️ تعليمات صارمة: لا تختلق أرقام مواد. المواد 1-245 فقط. إذا لم تتأكد اكتب يُرجع للنظام."
-                        if rag_ctx:
-                            sys_prompt += f"\n\nمعلومات مرجعية:\n{rag_ctx[:2000]}"
-
-                        # Try all providers directly (bypass orchestrator scope issues)
-                        response = None
-                        for prov, key_name, secret_name, url, model in [
-                            ('gemini','gemini_api_key','gemini',
-                             'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',''),
-                            ('groq','groq_api_key','groq',
-                             'https://api.groq.com/openai/v1/chat/completions','llama-3.3-70b-versatile'),
-                            ('openrouter','openrouter_api_key','openrouter',
-                             'https://openrouter.ai/api/v1/chat/completions','meta-llama/llama-3.3-70b-instruct:free'),
-                        ]:
-                            api_key = st.session_state.get(key_name,'')
-                            if not api_key:
-                                try: api_key = st.secrets.get(secret_name,{}).get("api_key","")
-                                except: pass
-                            if not api_key: continue
-
-                            try:
-                                if prov == 'gemini':
-                                    resp = req_lib.post(f"{url}?key={api_key}",
-                                        json={"contents":[{"parts":[{"text":f"{sys_prompt[:3000]}\n\nالسؤال: {labor_q}"}]}],
-                                            "generationConfig":{"maxOutputTokens":2500,"temperature":0.1}},timeout=30)
-                                    if resp.status_code == 200:
-                                        response = resp.json().get('candidates',[{}])[0].get('content',{}).get('parts',[{}])[0].get('text','')
-                                else:
-                                    headers = {'Authorization':f'Bearer {api_key}'}
-                                    if prov == 'openrouter': headers['HTTP-Referer'] = 'https://hr-analytics-risal.streamlit.app'
-                                    resp = req_lib.post(url,
-                                        json={"model":model,"messages":[
-                                            {"role":"system","content":sys_prompt[:3000]},
-                                            {"role":"user","content":labor_q}],
-                                            "max_tokens":2500,"temperature":0.1},
-                                        headers=headers,timeout=30)
-                                    if resp.status_code == 200:
-                                        response = resp.json().get('choices',[{}])[0].get('message',{}).get('content','')
-                                if response and len(response) > 30:
-                                    # Verify no fake articles
-                                    import re
-                                    for a in re.findall(r'المادة\s*(\d+)', response):
-                                        if int(a) > 245: response = response.replace(f"المادة {a}", "[مادة غير موثقة]")
-                                    break
-                                else:
-                                    response = None
-                            except: continue
-
-                        if response:
+                        response, error = call_ai_api(sys_prompt, labor_q, model_type="labor_law")
+                        if response and len(response) > 20:
+                            import re
+                            for a in re.findall(r'المادة\s*(\d+)', response):
+                                if int(a) > 245: response = response.replace(f"المادة {a}", "[تحقق من الرقم]")
                             auto_learn_from_answer(labor_q, response, "legal")
                             st.session_state.labor_chat = [{"role":"user","content":labor_q},{"role":"assistant","content":response}]
                         else:
-                            keys = [f"{p}: {'✅' if st.session_state.get(f'{p}_api_key','') else '❌'}" for p in ['gemini','groq','openrouter']]
+                            err_msg = error or "لم يتم الحصول على إجابة"
                             st.session_state.labor_chat = [{"role":"user","content":labor_q},
-                                {"role":"assistant","content":f"تعذرت الإجابة.\n\nالمزودين: {' | '.join(keys)}\n\nأضف مفتاح API مجاني:\n- Gemini: https://aistudio.google.com/apikey\n- Groq: https://console.groq.com/keys"}]
-                    except Exception as e:
-                        st.session_state.labor_chat = [{"role":"user","content":labor_q},
-                            {"role":"assistant","content":f"خطأ: {e}"}]
+                                {"role":"assistant","content":f"تعذرت الإجابة: {err_msg}\n\nتأكد من إعداد مفتاح API في الإعدادات (Gemini مجاني أو Groq)."}]
+                else:
+                    st.warning("اكتب سؤالك أولاً")
 
             # Clear chat
             if st.session_state.labor_chat and st.button("🗑️ مسح المحادثة", key="labor_clear"):
@@ -10548,76 +10500,31 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
                     if st.button(t, key=f"ht_{i}", use_container_width=True):
                         st.session_state.hr_chat = [{"role":"user","content":t},{"role":"assistant","content":HR_INSTANT[t]}]
 
-            with st.form("hr_form", clear_on_submit=True):
-                hr_q = st.text_area("اكتب سؤالك:", height=80, key="hr_q_input",
-                    placeholder="مثال: كيف أقيس فعالية برنامج التدريب باستخدام نموذج Kirkpatrick؟")
-                submitted = st.form_submit_button("📚 استشارة", type="primary", use_container_width=True)
+            hr_q = st.text_input("اكتب سؤالك:", key="hr_q_input",
+                placeholder="مثال: كيف أقيس فعالية برنامج التدريب باستخدام نموذج Kirkpatrick؟")
 
-            if submitted and hr_q:
-                st.session_state.hr_chat = []
-                with st.spinner("جاري التحليل المهني..."):
-                    try:
-                        import requests as req_lib
-
-                        # Get RAG context
-                        rag_ctx = ""
-                        try:
-                            if '_knowledge_engine' in st.session_state:
-                                rag_ctx = st.session_state._knowledge_engine.search(hr_q, advisor_type="hr")
-                        except: pass
-
+            if st.button("استشارة مهنية", type="primary", use_container_width=True, key="hr_submit"):
+                if hr_q and hr_q.strip():
+                    with st.spinner("جاري التحليل المهني..."):
                         sys_prompt = HR_EXPERT_SYSTEM_PROMPT
                         sys_prompt += "\n\n⚠️ أجب وفق أطر PHRi/SHRM/CIPD فقط. لا تذكر مواد قانونية. لا تختلق مصطلحات."
-                        if rag_ctx:
-                            sys_prompt += f"\n\nمعلومات مرجعية:\n{rag_ctx[:2000]}"
 
-                        response = None
-                        for prov, key_name, secret_name, url, model in [
-                            ('gemini','gemini_api_key','gemini',
-                             'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',''),
-                            ('groq','groq_api_key','groq',
-                             'https://api.groq.com/openai/v1/chat/completions','llama-3.3-70b-versatile'),
-                            ('openrouter','openrouter_api_key','openrouter',
-                             'https://openrouter.ai/api/v1/chat/completions','meta-llama/llama-3.3-70b-instruct:free'),
-                        ]:
-                            api_key = st.session_state.get(key_name,'')
-                            if not api_key:
-                                try: api_key = st.secrets.get(secret_name,{}).get("api_key","")
-                                except: pass
-                            if not api_key: continue
+                        try:
+                            if '_knowledge_engine' in st.session_state:
+                                rag = st.session_state._knowledge_engine.search(hr_q, advisor_type="hr")
+                                if rag: sys_prompt += f"\n\nمعلومات مرجعية:\n{rag[:2000]}"
+                        except: pass
 
-                            try:
-                                if prov == 'gemini':
-                                    resp = req_lib.post(f"{url}?key={api_key}",
-                                        json={"contents":[{"parts":[{"text":f"{sys_prompt[:3000]}\n\nالسؤال: {hr_q}"}]}],
-                                            "generationConfig":{"maxOutputTokens":2500,"temperature":0.1}},timeout=30)
-                                    if resp.status_code == 200:
-                                        response = resp.json().get('candidates',[{}])[0].get('content',{}).get('parts',[{}])[0].get('text','')
-                                else:
-                                    headers = {'Authorization':f'Bearer {api_key}'}
-                                    if prov == 'openrouter': headers['HTTP-Referer'] = 'https://hr-analytics-risal.streamlit.app'
-                                    resp = req_lib.post(url,
-                                        json={"model":model,"messages":[
-                                            {"role":"system","content":sys_prompt[:3000]},
-                                            {"role":"user","content":hr_q}],
-                                            "max_tokens":2500,"temperature":0.1},
-                                        headers=headers,timeout=30)
-                                    if resp.status_code == 200:
-                                        response = resp.json().get('choices',[{}])[0].get('message',{}).get('content','')
-                                if response and len(response) > 30: break
-                                else: response = None
-                            except: continue
-
-                        if response:
+                        response, error = call_ai_api(sys_prompt, hr_q, model_type="hr")
+                        if response and len(response) > 20:
                             auto_learn_from_answer(hr_q, response, "hr")
                             st.session_state.hr_chat = [{"role":"user","content":hr_q},{"role":"assistant","content":response}]
                         else:
-                            keys = [f"{p}: {'✅' if st.session_state.get(f'{p}_api_key','') else '❌'}" for p in ['gemini','groq','openrouter']]
+                            err_msg = error or "لم يتم الحصول على إجابة"
                             st.session_state.hr_chat = [{"role":"user","content":hr_q},
-                                {"role":"assistant","content":f"تعذرت الإجابة.\n\nالمزودين: {' | '.join(keys)}\n\nأضف مفتاح API مجاني:\n- Gemini: https://aistudio.google.com/apikey\n- Groq: https://console.groq.com/keys"}]
-                    except Exception as e:
-                        st.session_state.hr_chat = [{"role":"user","content":hr_q},
-                            {"role":"assistant","content":f"خطأ: {e}"}]
+                                {"role":"assistant","content":f"تعذرت الإجابة: {err_msg}\n\nتأكد من إعداد مفتاح API في الإعدادات (Gemini مجاني أو Groq)."}]
+                else:
+                    st.warning("اكتب سؤالك أولاً")
 
             if st.session_state.hr_chat and st.button("🗑️ مسح المحادثة", key="hr_clear"):
                 st.session_state.hr_chat = []
