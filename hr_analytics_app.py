@@ -10378,6 +10378,8 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
                 st.session_state.labor_chat = []
 
             # Display chat history with feedback
+            if st.session_state.labor_chat:
+                st.components.v1.html('<script>window.parent.document.querySelector("section.main").scrollTo({top:0,behavior:"smooth"});</script>', height=0)
             for idx, msg in enumerate(st.session_state.labor_chat):
                 if msg['role'] == 'user':
                     st.markdown(f"<div style='background:#1e3a5f;color:white;padding:12px;border-radius:10px;margin:8px 0'>👤 {msg['content']}</div>", unsafe_allow_html=True)
@@ -10465,6 +10467,8 @@ GOSI: سعودي 10.5%+12.5% | غير سعودي 2% | ساند 60%+50% أقصى 
             if 'hr_chat' not in st.session_state:
                 st.session_state.hr_chat = []
 
+            if st.session_state.hr_chat:
+                st.components.v1.html('<script>window.parent.document.querySelector("section.main").scrollTo({top:0,behavior:"smooth"});</script>', height=0)
             for idx, msg in enumerate(st.session_state.hr_chat):
                 if msg['role'] == 'user':
                     st.markdown(f"<div style='background:#1e3a5f;color:white;padding:12px;border-radius:10px;margin:8px 0'>👤 {msg['content']}</div>", unsafe_allow_html=True)
