@@ -27,11 +27,11 @@ class ModelOrchestrator:
     Handles: prompt building, model routing, context assembly, caching, error management."""
 
     MODELS = {
-        'claude': {'url':'https://api.anthropic.com/v1/messages','model':'claude-sonnet-4-20250514','max_tokens':4000},
-        'groq': {'url':'https://api.groq.com/openai/v1/chat/completions','model':'llama-3.3-70b-versatile','max_tokens':4000},
-        'gemini': {'url':'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent','model':'gemini-2.0-flash','max_tokens':2000},
-        'openrouter': {'url':'https://openrouter.ai/api/v1/chat/completions','model':'meta-llama/llama-3.3-70b-instruct:free','max_tokens':2000},
-        'huggingface': {'url':'https://api-inference.huggingface.co/v1/chat/completions','model':'mistralai/Mistral-7B-Instruct-v0.3','max_tokens':1500},
+        'claude': {'url':'https://api.anthropic.com/v1/messages','model':'claude-sonnet-4-20250514','max_tokens':8000},
+        'groq': {'url':'https://api.groq.com/openai/v1/chat/completions','model':'llama-3.3-70b-versatile','max_tokens':8000},
+        'gemini': {'url':'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent','model':'gemini-2.0-flash','max_tokens':8000},
+        'openrouter': {'url':'https://openrouter.ai/api/v1/chat/completions','model':'meta-llama/llama-3.3-70b-instruct:free','max_tokens':4000},
+        'huggingface': {'url':'https://api-inference.huggingface.co/v1/chat/completions','model':'mistralai/Mistral-7B-Instruct-v0.3','max_tokens':2000},
     }
 
     # Fallback models for OpenRouter
@@ -97,14 +97,15 @@ class ModelOrchestrator:
         max_ctx = self.CONTEXT_LIMITS.get(provider, 8000)
 
         # ANTI-HALLUCINATION PREFIX (always prepended)
-        ANTI_HALLUCINATION = """[تعليمات صارمة]
-- أجب فقط بمعلومات تعرفها بيقين. إذا لم تكن متأكداً اكتب "غير متأكد" أو "يحتاج تحقق".
-- لا تختلق أرقاماً أو إحصائيات أو أسماء أو مراجع غير حقيقية.
-- لا تنسب معلومات لمصادر لم تتحقق منها.
-- إذا سُئلت عن رقم محدد (راتب، نسبة، تاريخ) وأنت غير متأكد، أعط نطاقاً تقريبياً واذكر أنه تقديري.
-- في المسائل القانونية: اذكر رقم المادة بدقة أو اكتب "يُرجع للنظام".
-- في الرواتب: وضّح أن الأرقام تقديرية وتختلف حسب الشركة والخبرة والمؤهلات.
-- لا تعطِ نصائح طبية أو قانونية نهائية. دائماً أوصِ بالرجوع لمتخصص.
+        ANTI_HALLUCINATION = """[تعليمات جودة الإجابة]
+- فكّر خطوة بخطوة قبل الإجابة. حلّل السؤال بعمق ثم أجب.
+- أعطِ إجابات شاملة ومفصلة وعملية كمستشار محترف.
+- ادعم إجابتك بأرقام ومعايير وأمثلة واقعية.
+- إذا كان السؤال معقداً، قسّمه لأجزاء وأجب على كل جزء.
+- لا تختلق معلومات. إذا لم تتأكد اكتب "يحتاج تحقق".
+- في المسائل القانونية: اذكر الشروط والاستثناءات لكل مادة.
+- في الرواتب: وضّح أن الأرقام تقديرية.
+- أجب باللغة العربية بأسلوب مهني واضح.
 """
         enhanced = ANTI_HALLUCINATION + system_prompt[:max_ctx // 2]
 
@@ -10435,21 +10436,53 @@ GOSI: سعودي 10.5% موظف + 12.5% شركة | غير سعودي 2% شركة
                 submitted = st.form_submit_button("استشارة قانونية", type="primary", use_container_width=True)
 
             if submitted and labor_q and labor_q.strip():
-                with st.spinner("جاري التحليل القانوني..."):
-                    sys_prompt = LABOR_LAW_SYSTEM_PROMPT
-                    sys_prompt += "\n\n⚠️ تحليل معمّق مطلوب: اذكر الشروط والاستثناءات لكل مادة. لا تعطِ الحكم العام فقط. إذا كانت المادة مشروطة (مثل: ما لم يتضمن العقد...) اذكر الشرط أولاً."
-
+                with st.spinner("جاري التحليل القانوني المعمّق..."):
+                    # Build intelligent chain-of-thought prompt
+                    rag_ctx = ""
                     try:
                         if '_knowledge_engine' in st.session_state:
-                            rag = st.session_state._knowledge_engine.search(labor_q, advisor_type="legal")
-                            if rag: sys_prompt += f"\n\nمعلومات مرجعية:\n{rag[:2000]}"
+                            rag_ctx = st.session_state._knowledge_engine.search(labor_q, advisor_type="legal")
                     except: pass
 
-                    response, error = call_ai_api(sys_prompt, labor_q, model_type="labor_law")
+                    # Chain-of-thought prompt that forces deep reasoning
+                    cot_prompt = f"""أنت مستشار قانوني متخصص في نظام العمل السعودي المعدّل (المرسوم الملكي م/44، 2025).
+
+عند الإجابة على أي سؤال، فكّر خطوة بخطوة كالتالي:
+
+**الخطوة 1 - افهم السؤال بعمق:**
+اقرأ السؤال بدقة. ما الذي يريد السائل معرفته تحديداً؟ ما السياق؟
+
+**الخطوة 2 - حدد المواد القانونية المتعلقة:**
+اذكر كل مادة ذات علاقة برقمها ونصها الدقيق.
+
+**الخطوة 3 - حلل الشروط والاستثناءات:**
+معظم المواد لها شروط. مثلاً:
+- المادة 77 تقول "ما لم يتضمن العقد تعويضاً محدداً" - يعني لو العقد فيه بند تعويض يُطبق العقد أولاً
+- المادة 53 المعدلة: 180 يوماً كحد أقصى (لا يوجد تمديد بعد التعديل)
+- المادة 80 تشترط إنذاراً كتابياً قبل الفصل بسبب الغياب
+اذكر كل شرط واستثناء.
+
+**الخطوة 4 - طبّق على الحالة:**
+كيف تنطبق المواد على سؤال السائل تحديداً؟ احسب الأرقام إن لزم.
+
+**الخطوة 5 - قدّم إجابة شاملة:**
+اكتب إجابة واضحة ومنظمة تغطي كل الجوانب مع الأرقام والمواد.
+
+**تعليمات صارمة:**
+- لا تختلق أرقام مواد (النظام 1-245 فقط)
+- اذكر الشروط قبل الأحكام
+- إذا لم تتأكد من نص مادة اكتب "يُرجع للنص الرسمي"
+- الإجابة يجب أن تكون شاملة ومفصلة كإجابة محامٍ محترف
+
+{f'معلومات مرجعية من قاعدة المعرفة:{chr(10)}{rag_ctx[:3000]}' if rag_ctx else ''}"""
+
+                    user_msg = f"السؤال القانوني: {labor_q}\n\nأجب بتحليل قانوني معمّق وشامل باللغة العربية. اتبع الخطوات الخمس."
+
+                    response, error = call_ai_api(cot_prompt, user_msg, model_type="labor_law")
                     if response and len(response) > 20:
                         import re
                         for a in re.findall(r'المادة\s*(\d+)', response):
-                            if int(a) > 245: response = response.replace(f"المادة {a}", "[تحقق من الرقم]")
+                            if int(a) > 245: response = response.replace(f"المادة {a}", "[رقم مادة غير صحيح]")
                         auto_learn_from_answer(labor_q, response, "legal")
                         st.session_state.labor_chat = [{"role":"user","content":labor_q},{"role":"assistant","content":response}]
                     else:
@@ -10520,17 +10553,48 @@ GOSI: سعودي 10.5% موظف + 12.5% شركة | غير سعودي 2% شركة
                 submitted = st.form_submit_button("استشارة مهنية", type="primary", use_container_width=True)
 
             if submitted and hr_q and hr_q.strip():
-                with st.spinner("جاري التحليل المهني..."):
-                    sys_prompt = HR_EXPERT_SYSTEM_PROMPT
-                    sys_prompt += "\n\n⚠️ أجب وفق أطر PHRi/SHRM/CIPD فقط. لا تذكر مواد قانونية. لا تختلق مصطلحات."
-
+                with st.spinner("جاري التحليل المهني المعمّق..."):
+                    rag_ctx = ""
                     try:
                         if '_knowledge_engine' in st.session_state:
-                            rag = st.session_state._knowledge_engine.search(hr_q, advisor_type="hr")
-                            if rag: sys_prompt += f"\n\nمعلومات مرجعية:\n{rag[:2000]}"
+                            rag_ctx = st.session_state._knowledge_engine.search(hr_q, advisor_type="hr")
                     except: pass
 
-                    response, error = call_ai_api(sys_prompt, hr_q, model_type="hr")
+                    cot_prompt = f"""أنت مستشار موارد بشرية عالمي المستوى، معتمد في PHRi وSPHRi وSHRM-SCP وCIPD Level 7 وAPTD.
+
+عند الإجابة، فكّر خطوة بخطوة:
+
+**الخطوة 1 - افهم ما يُسأل:**
+ما الذي يحتاجه السائل تحديداً؟ هل يريد مفهوماً نظرياً أم تطبيقاً عملياً أم حلاً لمشكلة؟
+
+**الخطوة 2 - حدد الإطار المنهجي:**
+أي إطار أو نموذج من المناهج المعتمدة يُجيب على هذا السؤال؟
+PHRi | aPHRi | SPHRi | SHRM | CIPD L5 | CIPD L7 | APTD
+
+**الخطوة 3 - اشرح بعمق:**
+اشرح المفهوم بالتفصيل مع:
+- التعريف الدقيق
+- الخطوات العملية
+- أمثلة واقعية
+- أرقام ومعايير (benchmarks) حيثما أمكن
+
+**الخطوة 4 - التطبيق العملي:**
+كيف يُطبق هذا في بيئة عمل سعودية/خليجية؟ ما التحديات المتوقعة؟
+
+**الخطوة 5 - التوصيات:**
+نصائح عملية قابلة للتنفيذ فوراً.
+
+**تعليمات:**
+- لا تذكر مواد قانونية (هذا اختصاص المستشار القانوني)
+- اذكر مصدر كل معلومة (أي منهج/إطار)
+- أعطِ إجابة شاملة ومفصلة كما يفعل مستشار محترف
+- لا تختلق مصطلحات أو أطر غير حقيقية
+
+{f'معلومات مرجعية:{chr(10)}{rag_ctx[:3000]}' if rag_ctx else ''}"""
+
+                    user_msg = f"السؤال: {hr_q}\n\nأجب بتحليل مهني معمّق وشامل باللغة العربية مع ذكر المناهج المرجعية."
+
+                    response, error = call_ai_api(cot_prompt, user_msg, model_type="hr")
                     if response and len(response) > 20:
                         auto_learn_from_answer(hr_q, response, "hr")
                         st.session_state.hr_chat = [{"role":"user","content":hr_q},{"role":"assistant","content":response}]
