@@ -214,7 +214,7 @@ class ModelOrchestrator:
                 resp = req_lib.post(url, json={
                     "contents": gemini_contents,
                     "systemInstruction": {"parts":[{"text":system_prompt[:4000]}]},
-                    "generationConfig": {"maxOutputTokens": config['max_tokens'], "temperature": 0.1}
+                    "generationConfig": {"maxOutputTokens": config['max_tokens'], "temperature": 0.3}
                 }, timeout=30)
                 if resp.status_code == 200:
                     text = resp.json().get('candidates',[{}])[0].get('content',{}).get('parts',[{}])[0].get('text','')
@@ -231,7 +231,7 @@ class ModelOrchestrator:
                 models_to_try = self.OR_MODELS if provider == 'openrouter' else [config['model']]
                 for model_name in models_to_try:
                     try:
-                        payload = json.dumps({"model":model_name,"max_tokens":config['max_tokens'],"messages":[{"role":"system","content":system_prompt}]+messages,"temperature":0.1})
+                        payload = json.dumps({"model":model_name,"max_tokens":config['max_tokens'],"messages":[{"role":"system","content":system_prompt}]+messages,"temperature":0.3})
                         headers = {'Content-Type':'application/json','Authorization':f'Bearer {api_key}'}
                         req = _ur.Request(config['url'], data=payload.encode('utf-8'), headers=headers, method='POST')
                         with _ur.urlopen(req, timeout=30) as resp:
@@ -249,7 +249,7 @@ class ModelOrchestrator:
                     resp = req_lib.post(config['url'],
                         json={"model":model_name,"max_tokens":config['max_tokens'],
                             "messages":[{"role":"system","content":system_prompt}]+messages,
-                            "temperature":0.1},
+                            "temperature":0.3},
                         headers=headers, timeout=30)
                     if resp.status_code == 200:
                         text = resp.json().get('choices',[{}])[0].get('message',{}).get('content','')
@@ -1840,12 +1840,12 @@ def _call_llm(question, reasoning_prompt, req_lib):
                 resp = req_lib.post("https://api.groq.com/openai/v1/chat/completions",
                     json={"model":"llama-3.3-70b-versatile","messages":[
                         {"role":"system","content":reasoning_prompt[:3500]},
-                        {"role":"user","content":question}],"max_tokens":2500,"temperature":0.1},
+                        {"role":"user","content":question}],"max_tokens":2500,"temperature":0.3},
                     headers={'Authorization':f'Bearer {api_key}'},timeout=30)
             elif prov == 'gemini':
                 resp = req_lib.post(f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}",
                     json={"contents":[{"parts":[{"text":f"{reasoning_prompt[:3000]}\n\nالسؤال: {question}"}]}],
-                        "generationConfig":{"maxOutputTokens":2000,"temperature":0.1}},timeout=30)
+                        "generationConfig":{"maxOutputTokens":2000,"temperature":0.3}},timeout=30)
             else:
                 resp = req_lib.post("https://openrouter.ai/api/v1/chat/completions",
                     json={"model":"meta-llama/llama-3.3-70b-instruct:free",
@@ -10667,8 +10667,9 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
 المواد:
 م53: تجربة 180 يوم محظور التمديد. م55: تحول العقد بعد 3 تجديدات/4 سنوات.
 م75: إشعار 60 يوم صاحب عمل، 30 عامل. م77: تعويض العقد أولاً وإلا 15يوم/سنة أو الباقي أدنى شهرين.
-م80: فصل بلا مكافأة (اعتداء من العامل، غياب >30/>15). م81: ترك بلا إشعار مع كل الحقوق (تعدي، إهانة، غش، خطر).
-م84: مكافأة نصف شهر×5 سنوات + شهر×بعدها. م85: استقالة <2=0 2-5=ثلث 5-10=ثلثين >10=كاملة.
+م80: فصل بلا مكافأة (اعتداء من العامل، إخلال جوهري، غياب أكثر من 30 يوم متفرقة أو أكثر من 15 متصلة في السنة بعد إنذار كتابي عند 20 متفرقة أو 10 متصلة، تزوير، إفشاء أسرار).
+م81: للعامل ترك العمل فوراً بدون إشعار مع كل حقوقه إذا: تعدى عليه صاحب العمل أو أهانه، لم يفِ بالتزاماته، غش في الشروط، كلّفه بعمل مختلف جوهرياً، خطر على سلامته.
+م84: مكافأة نصف شهر×5 سنوات + شهر×بعدها. م85: استقالة: أقل من 2 سنة=لا شيء، 2-5=ثلث، 5-10=ثلثين، أكثر من 10=كاملة.
 م88: تسوية أسبوع. م98: 8 ساعات 6 رمضان. م109: إجازة 21/30. م113: أبوة 3. م116: مرضية 30+60+30. م151: أمومة 12 أسبوع.
 GOSI قديم: موظف 9.75% شركة 11.75%. جديد(بعد 7/2024): 9.5%+9.5% تدريجي حتى 11%+11%. تقاعد جديد 65.
 
