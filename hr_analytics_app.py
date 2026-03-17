@@ -10638,8 +10638,16 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
 
             # === DISPLAY ANSWER AT TOP (before form) ===
             if st.session_state.labor_chat:
-                # Scroll to top when answer is shown
-                st.components.v1.html('<script>window.parent.document.querySelector("section.main").scrollTo({top:0,behavior:"smooth"});</script>',height=0)
+                # Reliable scroll to top
+                st.components.v1.html("""<script>
+                    setTimeout(function(){
+                        var main = window.parent.document.querySelector('section.main');
+                        if(main) main.scrollTo({top:0, behavior:'smooth'});
+                        var block = window.parent.document.querySelector('[data-testid="stVerticalBlock"]');
+                        if(block) block.scrollTo({top:0, behavior:'smooth'});
+                        window.parent.document.documentElement.scrollTo({top:0, behavior:'smooth'});
+                    }, 100);
+                </script>""", height=0)
                 st.markdown("---")
                 for idx, msg in enumerate(st.session_state.labor_chat):
                     if msg['role'] == 'user':
@@ -10691,9 +10699,8 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
             if st.button("⚖️ استشارة قانونية", type="primary", use_container_width=True, key="labor_submit_btn"):
                 if labor_q and labor_q.strip():
                     st.session_state._pending_labor_q = labor_q.strip()
-                    st.rerun()
 
-            # Process pending question AFTER rerun
+            # Process pending question
             if '_pending_labor_q' in st.session_state:
                 pending_q = st.session_state.pop('_pending_labor_q')
                 with st.spinner("جاري التحليل القانوني..."):
@@ -10784,7 +10791,15 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
 
             # === DISPLAY ANSWER AT TOP (before form) ===
             if st.session_state.hr_chat:
-                st.components.v1.html('<script>window.parent.document.querySelector("section.main").scrollTo({top:0,behavior:"smooth"});</script>',height=0)
+                st.components.v1.html("""<script>
+                    setTimeout(function(){
+                        var main = window.parent.document.querySelector('section.main');
+                        if(main) main.scrollTo({top:0, behavior:'smooth'});
+                        var block = window.parent.document.querySelector('[data-testid="stVerticalBlock"]');
+                        if(block) block.scrollTo({top:0, behavior:'smooth'});
+                        window.parent.document.documentElement.scrollTo({top:0, behavior:'smooth'});
+                    }, 100);
+                </script>""", height=0)
                 st.markdown("---")
                 for idx, msg in enumerate(st.session_state.hr_chat):
                     if msg['role'] == 'user':
@@ -10829,9 +10844,8 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
             if st.button("📚 استشارة مهنية", type="primary", use_container_width=True, key="hr_submit_btn"):
                 if hr_q and hr_q.strip():
                     st.session_state._pending_hr_q = hr_q.strip()
-                    st.rerun()
 
-            # Process pending question AFTER rerun
+            # Process pending question
             if '_pending_hr_q' in st.session_state:
                 pending_q = st.session_state.pop('_pending_hr_q')
                 with st.spinner("جاري التحليل المهني..."):
