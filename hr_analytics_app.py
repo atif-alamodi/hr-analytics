@@ -1570,381 +1570,141 @@ try:
     init_saas_tables()
 except: pass
 
-# ===== WORLD-CLASS DESIGN SYSTEM =====
+# ===== STYLES =====
 st.markdown("""
 <style>
-/* ====== FONTS ====== */
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
-
-/* ====== CSS VARIABLES (Design Tokens) ====== */
-:root {
-    --bg-primary: #F8FAFB;
-    --bg-secondary: #FFFFFF;
-    --bg-tertiary: #F1F5F9;
-    --bg-elevated: #FFFFFF;
-    --text-primary: #0F172A;
-    --text-secondary: #475569;
-    --text-muted: #94A3B8;
-    --brand-primary: #0E7490;
-    --brand-secondary: #06B6D4;
-    --brand-accent: #F97316;
-    --brand-dark: #0C4A6E;
-    --brand-gradient: linear-gradient(135deg, #0E7490 0%, #0891B2 50%, #06B6D4 100%);
-    --success: #059669;
-    --warning: #D97706;
-    --danger: #DC2626;
-    --info: #0284C7;
-    --border-color: #E2E8F0;
-    --border-light: #F1F5F9;
-    --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
-    --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
-    --shadow-lg: 0 8px 24px rgba(0,0,0,0.08);
-    --shadow-xl: 0 16px 48px rgba(0,0,0,0.1);
-    --radius-sm: 8px;
-    --radius-md: 12px;
-    --radius-lg: 16px;
-    --radius-xl: 20px;
-    --font-main: 'IBM Plex Sans Arabic', -apple-system, BlinkMacSystemFont, sans-serif;
-    --font-mono: 'JetBrains Mono', monospace;
-    --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* ====== GLOBAL RESET ====== */
-*, *::before, *::after { font-family: var(--font-main) !important; box-sizing: border-box; }
-.main { background: var(--bg-primary) !important; }
-.main .block-container { padding: 1rem 2rem 3rem; max-width: 1440px; }
-
-/* ====== SCROLLBAR ====== */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
-::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
-
-/* ====== SIDEBAR ====== */
-[data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #0C4A6E 0%, #083344 100%) !important;
-    border-left: none !important;
-    box-shadow: 4px 0 24px rgba(0,0,0,0.15);
-}
-[data-testid="stSidebar"] label,
-[data-testid="stSidebar"] .stRadio label,
-[data-testid="stSidebar"] .stMarkdown,
-[data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2,
-[data-testid="stSidebar"] h3, [data-testid="stSidebar"] h4,
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;500;600;700;800&display=swap');
+*{font-family:'Noto Sans Arabic',sans-serif}
+.main .block-container{padding-top:.8rem;max-width:1400px}
+/* Sidebar - dark theme */
+[data-testid="stSidebar"]{background:linear-gradient(180deg,#0E7490 0%,#083344 100%)}
+[data-testid="stSidebar"] label, [data-testid="stSidebar"] .stRadio label,
+[data-testid="stSidebar"] .stMarkdown, [data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
+[data-testid="stSidebar"] h4, [data-testid="stSidebar"] h5,
 [data-testid="stSidebar"] p, [data-testid="stSidebar"] span,
-[data-testid="stSidebar"] .stButton button { color: #E0F2FE !important; }
-[data-testid="stSidebar"] input,
-[data-testid="stSidebar"] select,
-[data-testid="stSidebar"] textarea,
-[data-testid="stSidebar"] .stSelectbox div[data-baseweb] { color: #1E293B !important; }
-[data-testid="stSidebar"] .stRadio > div { gap: 2px; }
-[data-testid="stSidebar"] .stRadio > div > label {
-    padding: 8px 12px; border-radius: var(--radius-sm); font-size: 13px;
-    transition: var(--transition); border: 1px solid transparent;
+[data-testid="stSidebar"] .stButton button{color:white !important}
+[data-testid="stSidebar"] input, [data-testid="stSidebar"] select,
+[data-testid="stSidebar"] textarea, [data-testid="stSidebar"] .stSelectbox div[data-baseweb] {color:#333 !important}
+/* Metrics */
+[data-testid="stMetric"]{background:white;border-radius:12px;padding:14px 18px;box-shadow:0 1px 3px rgba(0,0,0,.06);border:1px solid #E2E8F0}
+[data-testid="stMetric"] label{font-size:12px !important;color:#64748B !important}
+[data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:20px !important;font-weight:700 !important;color:#0E7490 !important}
+/* Headers */
+.main h1{color:#0E7490 !important;font-weight:800 !important;font-size:1.6em !important}
+.hdr{background:linear-gradient(135deg,#0E7490,#083344);padding:20px 28px;border-radius:14px;margin-bottom:20px;color:white}
+.hdr h1{color:white !important;margin:0;font-size:24px !important}
+.hdr p{color:rgba(255,255,255,.7);margin:4px 0 0;font-size:13px}
+/* Info boxes */
+.ibox{background:#EFF6FF;border-radius:10px;padding:12px 16px;border-right:4px solid #3B82F6;margin-bottom:8px;font-size:13px;line-height:1.7}
+.ibox.warn{background:#FFF7ED;border-right-color:#F97316}
+.ibox.ok{background:#F0FDF4;border-right-color:#22C55E}
+.ibox.bad{background:#FEF2F2;border-right-color:#EF4444}
+/* KPI cards */
+.kpi{background:linear-gradient(135deg,#0E7490,#0C5A72);color:white;border-radius:12px;padding:16px;text-align:center;margin-bottom:10px}
+.kpi h3{font-size:22px;margin:6px 0 2px;font-weight:800;color:white !important}
+.kpi p{font-size:11px;opacity:.7;margin:0;color:white !important}
+/* Tabs */
+.stTabs [data-baseweb="tab-list"]{gap:4px}
+.stTabs [data-baseweb="tab"]{padding:8px 16px;font-size:13px}
+/* Dataframes */
+[data-testid="stDataFrame"]{margin-bottom:16px}
+/* Chat messages */
+.chat-user{background:#0C4A6E;color:white;padding:12px;border-radius:10px;margin:8px 0}
+.chat-ai-legal{background:#f0f4f8;color:#333;padding:12px;border-radius:10px;margin:8px 0;border-right:4px solid #0E7490}
+.chat-ai-hr{background:#f0faf5;color:#333;padding:12px;border-radius:10px;margin:8px 0;border-right:4px solid #059669}
+/* === SIDEBAR TOGGLE BUTTON (MUST BE VISIBLE) === */
+#MainMenu, footer{visibility:hidden}
+[data-testid="stSidebarCollapsedControl"]{visibility:visible !important;z-index:999999 !important}
+[data-testid="stSidebarCollapsedControl"] button{
+    color:#0E7490 !important;
+    background:white !important;
+    border:1px solid #E2E8F0 !important;
+    border-radius:8px !important;
+    box-shadow:0 2px 6px rgba(0,0,0,.1) !important;
+    width:36px !important;
+    height:36px !important;
 }
-[data-testid="stSidebar"] .stRadio > div > label:hover {
-    background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.15);
+[data-testid="stSidebarCollapsedControl"] button:hover{
+    background:#f0f9ff !important;
+    box-shadow:0 4px 12px rgba(0,0,0,.15) !important;
 }
-[data-testid="stSidebar"] .stRadio > div > label[data-checked="true"],
-[data-testid="stSidebar"] .stRadio > div > label[aria-checked="true"] {
-    background: rgba(6,182,212,0.2) !important; border-color: rgba(6,182,212,0.4) !important;
+[data-testid="stSidebarCollapsedControl"] svg{
+    fill:#0E7490 !important;
+    color:#0E7490 !important;
+    stroke:#0E7490 !important;
 }
-[data-testid="stSidebar"] .streamlit-expanderHeader { color: #E0F2FE !important; }
-[data-testid="stSidebar"] hr { border-color: rgba(255,255,255,0.1) !important; }
-
-/* ====== HEADER COMPONENT (.hdr) ====== */
-.hdr {
-    background: var(--brand-gradient);
-    padding: 24px 32px;
-    border-radius: var(--radius-lg);
-    margin-bottom: 24px;
-    position: relative;
-    overflow: hidden;
-    box-shadow: var(--shadow-lg);
+/* Sidebar close button */
+[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button{
+    color:white !important;
 }
-.hdr::before {
-    content: '';
-    position: absolute;
-    top: -50%;
-    left: -20%;
-    width: 200%;
-    height: 200%;
-    background: radial-gradient(circle at 30% 50%, rgba(255,255,255,0.08) 0%, transparent 60%);
-    pointer-events: none;
+[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] svg{
+    fill:white !important;
+    color:white !important;
+    stroke:white !important;
 }
-.hdr h1 {
-    color: #FFFFFF !important;
-    margin: 0 !important;
-    font-size: 22px !important;
-    font-weight: 700 !important;
-    position: relative;
-    letter-spacing: -0.3px;
-}
-.hdr p {
-    color: rgba(255,255,255,0.75);
-    margin: 6px 0 0;
-    font-size: 13px;
-    position: relative;
-    font-weight: 400;
-}
-
-/* ====== KPI CARDS ====== */
-.kpi {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    padding: 18px 16px;
-    text-align: center;
-    margin-bottom: 12px;
-    transition: var(--transition);
-    position: relative;
-    overflow: hidden;
-}
-.kpi::before {
-    content: '';
-    position: absolute;
-    top: 0; right: 0; left: 0;
-    height: 3px;
-    background: var(--brand-gradient);
-    border-radius: var(--radius-md) var(--radius-md) 0 0;
-}
-.kpi:hover {
-    box-shadow: var(--shadow-md);
-    border-color: var(--brand-secondary);
-    transform: translateY(-2px);
-}
-.kpi h3 {
-    font-size: 24px !important;
-    margin: 8px 0 2px !important;
-    font-weight: 700 !important;
-    color: var(--text-primary) !important;
-    letter-spacing: -0.5px;
-}
-.kpi p {
-    font-size: 11px !important;
-    color: var(--text-muted) !important;
-    margin: 0 !important;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-/* ====== INFO BOXES ====== */
-.ibox {
-    background: #F0F9FF;
-    border-radius: var(--radius-md);
-    padding: 14px 18px;
-    border-right: 4px solid var(--info);
-    margin-bottom: 12px;
-    font-size: 13px;
-    line-height: 1.8;
-    color: var(--text-primary);
-    transition: var(--transition);
-}
-.ibox:hover { box-shadow: var(--shadow-sm); }
-.ibox.warn { background: #FFFBEB; border-right-color: var(--warning); }
-.ibox.ok { background: #F0FDF4; border-right-color: var(--success); }
-.ibox.bad { background: #FEF2F2; border-right-color: var(--danger); }
-
-/* ====== HEADINGS ====== */
-.main h1 { color: var(--brand-dark) !important; font-weight: 700 !important; font-size: 1.5em !important; letter-spacing: -0.3px; }
-.main h2 { color: var(--text-primary) !important; font-weight: 600 !important; font-size: 1.2em !important; }
-.main h3 { color: var(--text-primary) !important; font-weight: 600 !important; font-size: 1.05em !important; }
-
-/* ====== METRICS ====== */
-[data-testid="stMetric"] {
-    background: var(--bg-secondary);
-    border-radius: var(--radius-md);
-    padding: 16px 18px;
-    border: 1px solid var(--border-color);
-    transition: var(--transition);
-}
-[data-testid="stMetric"]:hover { box-shadow: var(--shadow-md); border-color: var(--brand-secondary); }
-[data-testid="stMetric"] label { font-size: 11px !important; color: var(--text-muted) !important; font-weight: 500 !important; text-transform: uppercase; letter-spacing: 0.3px; }
-[data-testid="stMetric"] [data-testid="stMetricValue"] { font-size: 22px !important; font-weight: 700 !important; color: var(--brand-dark) !important; }
-
-/* ====== BUTTONS ====== */
-.stButton > button {
-    border-radius: var(--radius-sm) !important;
-    font-weight: 600 !important;
-    transition: var(--transition) !important;
-    border: none !important;
-    letter-spacing: 0.2px;
-}
-.stButton > button[kind="primary"] {
-    background: var(--brand-gradient) !important;
-    color: white !important;
-    box-shadow: 0 2px 8px rgba(14,116,144,0.3) !important;
-}
-.stButton > button[kind="primary"]:hover {
-    box-shadow: 0 4px 16px rgba(14,116,144,0.4) !important;
-    transform: translateY(-1px);
-}
-.stButton > button:not([kind="primary"]) {
-    background: var(--bg-secondary) !important;
-    border: 1px solid var(--border-color) !important;
-    color: var(--text-primary) !important;
-}
-.stButton > button:not([kind="primary"]):hover {
-    border-color: var(--brand-secondary) !important;
-    background: #F0F9FF !important;
-}
-
-/* ====== INPUTS ====== */
-.stTextInput > div > div > input,
-.stTextArea > div > div > textarea,
-.stNumberInput > div > div > input {
-    border-radius: var(--radius-sm) !important;
-    border: 1.5px solid var(--border-color) !important;
-    transition: var(--transition) !important;
-    font-size: 14px !important;
-}
-.stTextInput > div > div > input:focus,
-.stTextArea > div > div > textarea:focus,
-.stNumberInput > div > div > input:focus {
-    border-color: var(--brand-secondary) !important;
-    box-shadow: 0 0 0 3px rgba(6,182,212,0.15) !important;
-}
-
-/* ====== TABS ====== */
-.stTabs [data-baseweb="tab-list"] { gap: 4px; border-bottom: 2px solid var(--border-light); }
-.stTabs [data-baseweb="tab"] {
-    padding: 10px 18px;
-    font-size: 13px;
-    font-weight: 500;
-    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-    transition: var(--transition);
-}
-.stTabs [data-baseweb="tab"]:hover { background: var(--bg-tertiary); }
-.stTabs [data-baseweb="tab"][aria-selected="true"] {
-    font-weight: 600;
-    color: var(--brand-primary) !important;
-    border-bottom: 2px solid var(--brand-primary);
-}
-
-/* ====== DATAFRAMES ====== */
-[data-testid="stDataFrame"] {
-    margin-bottom: 16px;
-    border-radius: var(--radius-md);
-    overflow: hidden;
-    box-shadow: var(--shadow-sm);
-}
-
-/* ====== EXPANDERS ====== */
-.streamlit-expanderHeader {
-    font-weight: 600 !important;
-    font-size: 14px !important;
-    border-radius: var(--radius-sm) !important;
-}
-
-/* ====== CHAT MESSAGES ====== */
-.chat-user {
-    background: linear-gradient(135deg, #0C4A6E, #0E7490);
-    color: white;
-    padding: 14px 20px;
-    border-radius: var(--radius-md);
-    margin: 10px 0;
-    font-size: 14px;
-    line-height: 1.7;
-    box-shadow: var(--shadow-sm);
-}
-.chat-ai-legal {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    padding: 16px 20px;
-    border-radius: var(--radius-md);
-    margin: 10px 0;
-    border-right: 4px solid var(--brand-primary);
-    font-size: 14px;
-    line-height: 1.8;
-    box-shadow: var(--shadow-sm);
-}
-.chat-ai-hr {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    padding: 16px 20px;
-    border-radius: var(--radius-md);
-    margin: 10px 0;
-    border-right: 4px solid var(--success);
-    font-size: 14px;
-    line-height: 1.8;
-    box-shadow: var(--shadow-sm);
-}
-
-/* ====== PLOTLY CHARTS ====== */
-.js-plotly-plot { border-radius: var(--radius-md); overflow: hidden; }
-
-/* ====== TOAST ====== */
-[data-testid="stToast"] { border-radius: var(--radius-md) !important; }
-
-/* ====== HIDE DEFAULTS ====== */
-#MainMenu, footer, header[data-testid="stHeader"] { visibility: hidden; }
-
-/* ====== ANIMATIONS ====== */
-@keyframes fadeInUp {
-    from { opacity: 0; transform: translateY(12px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-.kpi, .hdr, .ibox, [data-testid="stMetric"] {
-    animation: fadeInUp 0.4s ease-out;
-}
-
-/* ========================================================= */
-/*                 RESPONSIVE DESIGN                         */
-/* ========================================================= */
-
-/* Tablet (768-1024px) */
+/* Make header bar transparent but keep sidebar button */
+header[data-testid="stHeader"]{background:transparent !important;backdrop-filter:none !important}
+/* Radio buttons in sidebar */
+[data-testid="stSidebar"] .stRadio > div{gap:2px}
+[data-testid="stSidebar"] .stRadio > div > label{padding:6px 8px;border-radius:8px;font-size:13px}
+[data-testid="stSidebar"] .stRadio > div > label:hover{background:rgba(255,255,255,0.1)}
+[data-testid="stSidebar"] .streamlit-expanderHeader{color:white !important}
+/* === RTL / LTR SUPPORT === */
+.rtl-mode .ibox{border-right:4px solid #3B82F6;border-left:none}
+.rtl-mode .ibox.warn{border-right-color:#F97316}
+.rtl-mode .ibox.ok{border-right-color:#22C55E}
+.rtl-mode .ibox.bad{border-right-color:#EF4444}
+.rtl-mode .chat-ai-legal{border-right:4px solid #0E7490;border-left:none}
+.rtl-mode .chat-ai-hr{border-right:4px solid #059669;border-left:none}
+.ltr-mode .ibox{border-left:4px solid #3B82F6;border-right:none}
+.ltr-mode .ibox.warn{border-left-color:#F97316}
+.ltr-mode .ibox.ok{border-left-color:#22C55E}
+.ltr-mode .ibox.bad{border-left-color:#EF4444}
+.ltr-mode .chat-ai-legal{border-left:4px solid #0E7490;border-right:none}
+.ltr-mode .chat-ai-hr{border-left:4px solid #059669;border-right:none}
+/* === RESPONSIVE === */
 @media (max-width: 1024px) {
-    .main .block-container { padding: 0.5rem 1rem; max-width: 100%; }
-    .hdr { padding: 18px 22px; border-radius: var(--radius-md); }
-    .hdr h1 { font-size: 18px !important; }
-    .hdr p { font-size: 12px; }
-    .kpi { padding: 12px; }
-    .kpi h3 { font-size: 20px !important; }
-    .kpi p { font-size: 10px !important; }
-    [data-testid="stMetric"] { padding: 12px 14px; }
-    [data-testid="stMetric"] [data-testid="stMetricValue"] { font-size: 18px !important; }
+    .main .block-container{padding:0.5rem 1rem;max-width:100%}
+    .hdr{padding:14px 18px;border-radius:10px}
+    .hdr h1{font-size:18px !important}
+    .kpi{padding:10px;border-radius:10px}
+    .kpi h3{font-size:18px}
+    [data-testid="stMetric"]{padding:10px 12px}
+    [data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:16px !important}
 }
-
-/* Mobile (< 768px) */
 @media (max-width: 768px) {
-    .main .block-container { padding: 0.3rem 0.6rem; max-width: 100%; }
-    .hdr { padding: 14px 16px; border-radius: var(--radius-sm); margin-bottom: 14px; }
-    .hdr h1 { font-size: 16px !important; }
-    .hdr p { font-size: 11px; }
-    .kpi { padding: 10px 8px; border-radius: var(--radius-sm); margin-bottom: 6px; }
-    .kpi h3 { font-size: 17px !important; }
-    .kpi p { font-size: 9px !important; }
-    .ibox { padding: 10px 12px; font-size: 12px; border-radius: var(--radius-sm); }
-    [data-testid="stMetric"] { padding: 10px; border-radius: var(--radius-sm); }
-    [data-testid="stMetric"] label { font-size: 10px !important; }
-    [data-testid="stMetric"] [data-testid="stMetricValue"] { font-size: 15px !important; }
-    .main h1 { font-size: 1.2em !important; }
-    /* Stack columns on mobile */
-    [data-testid="column"] { min-width: 100% !important; width: 100% !important; }
-    [data-testid="stSidebar"] { min-width: 0 !important; }
-    [data-testid="stDataFrame"] { font-size: 11px; }
-    .stTabs [data-baseweb="tab"] { padding: 6px 12px; font-size: 11px; }
-    .stTabs [data-baseweb="tab-list"] { gap: 2px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-    .js-plotly-plot, .js-plotly-plot .plotly { width: 100% !important; }
-    .stTextInput, .stSelectbox, .stNumberInput { margin-bottom: 4px; }
-    .stButton > button { font-size: 13px; padding: 10px 14px; width: 100%; }
-    .chat-user, .chat-ai-legal, .chat-ai-hr { padding: 12px 14px; font-size: 13px; }
+    .main .block-container{padding:0.3rem 0.5rem;max-width:100%}
+    .hdr{padding:12px 14px;border-radius:8px;margin-bottom:12px}
+    .hdr h1{font-size:16px !important}
+    .kpi{padding:8px;border-radius:8px;margin-bottom:6px}
+    .kpi h3{font-size:16px}
+    .ibox{padding:8px 10px;font-size:12px;border-radius:8px}
+    [data-testid="stMetric"]{padding:8px 10px;border-radius:8px}
+    [data-testid="stMetric"] label{font-size:10px !important}
+    [data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:14px !important}
+    .main h1{font-size:1.2em !important}
+    [data-testid="column"]{min-width:100% !important;width:100% !important}
+    [data-testid="stSidebar"]{min-width:0 !important}
+    [data-testid="stDataFrame"]{font-size:11px}
+    .stTabs [data-baseweb="tab"]{padding:6px 10px;font-size:11px}
+    .stTabs [data-baseweb="tab-list"]{gap:2px;overflow-x:auto}
+    .js-plotly-plot{width:100% !important}
+    .js-plotly-plot .plotly{width:100% !important}
+    .stButton > button{font-size:13px;padding:8px 12px}
 }
-
-/* Small Mobile (< 480px) */
 @media (max-width: 480px) {
-    .hdr h1 { font-size: 14px !important; }
-    .hdr p { font-size: 10px; }
-    .kpi h3 { font-size: 15px !important; }
-    .kpi { padding: 8px 6px; }
-    [data-testid="stMetric"] [data-testid="stMetricValue"] { font-size: 13px !important; }
-    .stTabs [data-baseweb="tab"] { padding: 4px 8px; font-size: 10px; }
+    .hdr h1{font-size:14px !important}
+    .kpi h3{font-size:14px}
+    .kpi{padding:6px}
+    [data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:12px !important}
+    .stTabs [data-baseweb="tab"]{padding:4px 8px;font-size:10px}
 }
 </style>
 """, unsafe_allow_html=True)
 
 CL = {'p':'#0E7490','a':'#F97316','s':'#059669','d':'#DC2626','dept':px.colors.qualitative.Set2,'sal':px.colors.qualitative.Pastel}
+
 
 def hdr(t,s=""): st.markdown(f'<div class="hdr"><h1>{t}</h1><p>{s}</p></div>',unsafe_allow_html=True)
 def ibox(t,tp="info"):
@@ -1952,6 +1712,145 @@ def ibox(t,tp="info"):
     ic={"info":"💡","warning":"⚠️","success":"✅","danger":"🚨"}
     st.markdown(f'<div class="{c.get(tp,"ibox")}">{ic.get(tp,"💡")} {t}</div>',unsafe_allow_html=True)
 def kpi(l,v): st.markdown(f'<div class="kpi"><p>{l}</p><h3>{v}</h3></div>',unsafe_allow_html=True)
+
+# =====================================================
+# INTERNATIONALIZATION (i18n) - Arabic/English
+# =====================================================
+
+TRANSLATIONS = {
+    # === Navigation & Sections ===
+    "app_title": {"ar": "منصة تحليلات الموارد البشرية", "en": "HR Analytics Platform"},
+    "app_subtitle": {"ar": "تحليلات ذكية لإدارة رأس المال البشري", "en": "Smart Analytics for Human Capital Management"},
+    "general_analytics": {"ar": "📊 التحليلات العامة", "en": "📊 General Analytics"},
+    "total_rewards": {"ar": "🎁 Total Rewards", "en": "🎁 Total Rewards"},
+    "headcount": {"ar": "👥 Headcount", "en": "👥 Headcount"},
+    "calculator": {"ar": "⚖️ حاسبة المستحقات", "en": "⚖️ Benefits Calculator"},
+    "recruitment": {"ar": "🎯 التوظيف", "en": "🎯 Recruitment"},
+    "onboarding": {"ar": "🚀 Onboarding", "en": "🚀 Onboarding"},
+    "contracts": {"ar": "📜 العقود", "en": "📜 Contracts"},
+    "smart_advisor": {"ar": "🤖 المستشار الذكي", "en": "🤖 AI Advisor"},
+    "org_dev": {"ar": "🏗️ التطوير المؤسسي OD", "en": "🏗️ Org Development"},
+    "advanced_analytics": {"ar": "📈 التحليلات المتقدمة", "en": "📈 Advanced Analytics"},
+    "general_analysis": {"ar": "🔍 التحليل العام", "en": "🔍 General Analysis"},
+    "surveys": {"ar": "📝 الاستبيانات", "en": "📝 Surveys"},
+    "personality_tests": {"ar": "🧠 اختبارات الشخصية", "en": "🧠 Personality Tests"},
+    "training": {"ar": "📚 التدريب والتطوير", "en": "📚 Training & Development"},
+    "settings": {"ar": "⚙️ الإعدادات", "en": "⚙️ Settings"},
+    "reports_export": {"ar": "📤 التقارير والتصدير", "en": "📤 Reports & Export"},
+
+    # === Sub-pages ===
+    "overview": {"ar": "🏠 نظرة عامة", "en": "🏠 Overview"},
+    "departments": {"ar": "📊 الأقسام", "en": "📊 Departments"},
+    "smart_analyzer": {"ar": "🤖 المحلل الذكي", "en": "🤖 Smart Analyzer"},
+    "data_view": {"ar": "📋 البيانات", "en": "📋 Data View"},
+    "tr_dashboard": {"ar": "🎁 لوحة Total Rewards", "en": "🎁 Total Rewards Dashboard"},
+    "salary_dashboard": {"ar": "💰 لوحة الرواتب", "en": "💰 Salary Dashboard"},
+    "monthly_analysis": {"ar": "📈 تحليل شهري/ربعي", "en": "📈 Monthly/Quarterly Analysis"},
+    "categories_analysis": {"ar": "🏷️ تحليل حسب الفئات", "en": "🏷️ Categories Analysis"},
+    "salary_scale": {"ar": "📊 سلم الرواتب", "en": "📊 Salary Scale"},
+    "salary_structure": {"ar": "💰 هيكل الرواتب", "en": "💰 Salary Structure"},
+    "benefits_insurance": {"ar": "🏥 المزايا والتأمينات", "en": "🏥 Benefits & Insurance"},
+    "competitiveness": {"ar": "📊 تحليل التنافسية", "en": "📊 Competitiveness Analysis"},
+    "export_tr": {"ar": "📥 تصدير TR", "en": "📥 Export TR"},
+    "legal_advisor": {"ar": "⚖️ المستشار القانوني", "en": "⚖️ Legal Advisor"},
+    "hr_advisor": {"ar": "📚 مستشار الموارد البشرية", "en": "📚 HR Advisor"},
+    "knowledge_base": {"ar": "🧠 قاعدة المعرفة RAG", "en": "🧠 Knowledge Base RAG"},
+    "learning": {"ar": "📊 التعلم والتحسين", "en": "📊 Learning & Improvement"},
+    "references": {"ar": "📋 إدارة المراجع", "en": "📋 Reference Management"},
+
+    # === Common UI Elements ===
+    "upload_file": {"ar": "ارفع Excel", "en": "Upload Excel"},
+    "upload_prompt": {"ar": "📁 ارفع ملف من القائمة الجانبية", "en": "📁 Upload a file from the sidebar"},
+    "employees": {"ar": "👥 الموظفين", "en": "👥 Employees"},
+    "total_salary": {"ar": "💵 إجمالي الرواتب", "en": "💵 Total Payroll"},
+    "average": {"ar": "📊 المتوسط", "en": "📊 Average"},
+    "highest": {"ar": "📈 الأعلى", "en": "📈 Highest"},
+    "lowest": {"ar": "📉 الأقل", "en": "📉 Lowest"},
+    "median": {"ar": "📐 الوسيط", "en": "📐 Median"},
+    "submit": {"ar": "إرسال", "en": "Submit"},
+    "clear": {"ar": "🗑️ مسح المحادثة", "en": "🗑️ Clear Chat"},
+    "search": {"ar": "بحث", "en": "Search"},
+    "export": {"ar": "📥 تصدير", "en": "📥 Export"},
+    "save": {"ar": "💾 حفظ", "en": "💾 Save"},
+    "delete": {"ar": "🗑️ حذف", "en": "🗑️ Delete"},
+    "edit": {"ar": "✏️ تعديل", "en": "✏️ Edit"},
+    "cancel": {"ar": "إلغاء", "en": "Cancel"},
+    "confirm": {"ar": "تأكيد", "en": "Confirm"},
+    "loading": {"ar": "جاري التحميل...", "en": "Loading..."},
+    "no_data": {"ar": "لا توجد بيانات", "en": "No data available"},
+    "records": {"ar": "سجل", "en": "records"},
+    "active": {"ar": "✅ نشط", "en": "✅ Active"},
+    "saudi_pct": {"ar": "🇸🇦 نسبة السعودة", "en": "🇸🇦 Saudization %"},
+    "avg_salary": {"ar": "💰 متوسط الراتب", "en": "💰 Avg Salary"},
+
+    # === Advisor ===
+    "legal_consult": {"ar": "⚖️ استشارة قانونية", "en": "⚖️ Legal Consultation"},
+    "hr_consult": {"ar": "📚 استشارة مهنية", "en": "📚 Professional Consultation"},
+    "write_legal_q": {"ar": "اكتب سؤالك القانوني:", "en": "Write your legal question:"},
+    "write_hr_q": {"ar": "اكتب سؤالك:", "en": "Write your question:"},
+    "legal_placeholder": {"ar": "مثال: تم فصلي بعد 3 سنوات خدمة بدون سبب، ما مستحقاتي؟", "en": "Example: I was terminated after 3 years without cause, what are my entitlements?"},
+    "hr_placeholder": {"ar": "مثال: كيف أقيس فعالية برنامج التدريب باستخدام نموذج Kirkpatrick؟", "en": "Example: How to measure training effectiveness using Kirkpatrick model?"},
+    "analyzing_legal": {"ar": "جاري التحليل القانوني...", "en": "Analyzing legal query..."},
+    "analyzing_hr": {"ar": "جاري التحليل المهني...", "en": "Analyzing HR query..."},
+    "helpful": {"ar": "مفيدة", "en": "Helpful"},
+    "inaccurate": {"ar": "غير دقيقة", "en": "Inaccurate"},
+    "thanks": {"ar": "شكراً", "en": "Thanks"},
+    "will_improve": {"ar": "سيتم التحسين", "en": "Will improve"},
+    "common_questions": {"ar": "💡 أسئلة شائعة", "en": "💡 Common Questions"},
+    "common_topics": {"ar": "💡 مواضيع شائعة", "en": "💡 Common Topics"},
+
+    # === Language selector ===
+    "language": {"ar": "🌐 اللغة", "en": "🌐 Language"},
+    "file_loaded": {"ar": "📂", "en": "📂"},
+    "delete_file": {"ar": "🗑️ حذف الملف", "en": "🗑️ Delete File"},
+    "provider": {"ar": "🤖 مزود الذكاء الاصطناعي", "en": "🤖 AI Provider"},
+    "welcome": {"ar": "مرحباً", "en": "Welcome"},
+    "login": {"ar": "تسجيل الدخول", "en": "Login"},
+    "logout": {"ar": "🚪 تسجيل خروج", "en": "🚪 Logout"},
+    "username": {"ar": "اسم المستخدم", "en": "Username"},
+    "password": {"ar": "كلمة المرور", "en": "Password"},
+    "role": {"ar": "الدور", "en": "Role"},
+}
+
+def get_lang():
+    """Get current language from session state."""
+    return st.session_state.get('app_lang', 'ar')
+
+def t(key, **kwargs):
+    """Translate a key to the current language. Falls back to Arabic then key."""
+    lang = get_lang()
+    entry = TRANSLATIONS.get(key, {})
+    text = entry.get(lang, entry.get('ar', key))
+    if kwargs:
+        for k, v in kwargs.items():
+            text = text.replace(f'{{{k}}}', str(v))
+    return text
+
+def get_dir():
+    """Get text direction based on current language."""
+    return 'rtl' if get_lang() == 'ar' else 'ltr'
+
+def apply_direction():
+    """Apply RTL/LTR direction to the page."""
+    lang = get_lang()
+    dir_class = 'rtl-mode' if lang == 'ar' else 'ltr-mode'
+    dir_attr = 'rtl' if lang == 'ar' else 'ltr'
+    text_align = 'right' if lang == 'ar' else 'left'
+    script = f"""
+    <script>
+        document.documentElement.setAttribute('dir', '{dir_attr}');
+        document.documentElement.setAttribute('lang', '{lang}');
+        document.body.classList.remove('rtl-mode', 'ltr-mode');
+        document.body.classList.add('{dir_class}');
+        var mainEl = window.parent.document.querySelector('.main');
+        if (mainEl) {{ mainEl.style.direction = '{dir_attr}'; mainEl.style.textAlign = '{text_align}'; }}
+    </script>
+    <style>
+        .main, .main .block-container {{ direction: {dir_attr} !important; text-align: {text_align} !important; }}
+        [data-testid="stSidebar"] {{ direction: {dir_attr} !important; text-align: {text_align} !important; }}
+    </style>
+    """
+    st.markdown(script, unsafe_allow_html=True)
 
 # ===== LOCAL KNOWLEDGE ENGINE (No API needed) =====
 LABOR_KB = {
@@ -3774,24 +3673,41 @@ def _restore_login():
     return False
 
 def login_page():
-    st.markdown("""<div style='text-align:center;padding:30px 10px 20px;'>
-        <div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:70px;height:70px;border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:28px;font-weight:800;color:white;'>HR</div>
-        <h2 style='color:#0E7490;margin-bottom:4px;font-weight:700;font-size:clamp(1.1rem,3vw,1.6rem);'>منصة تحليلات الموارد البشرية</h2>
-        <p style='color:#64748B;font-size:clamp(11px,2vw,14px);'>رسال الود لتقنية المعلومات - الإصدار v5</p>
+    # Language selector on login page
+    lp_lang_opts = {"العربية 🇸🇦": "ar", "English 🇺🇸": "en"}
+    lp_col1, lp_col2, lp_col3 = st.columns([2, 1, 2])
+    with lp_col2:
+        lp_sel = st.selectbox("🌐", list(lp_lang_opts.keys()),
+            index=list(lp_lang_opts.values()).index(get_lang()),
+            label_visibility="collapsed", key="_login_lang")
+        if lp_lang_opts[lp_sel] != get_lang():
+            st.session_state['app_lang'] = lp_lang_opts[lp_sel]
+            st.rerun()
+
+    apply_direction()
+
+    st.markdown(f"""<div style='text-align:center;padding:30px 10px 20px;'>
+        <div style='background:linear-gradient(135deg,#F97316,#E9C46A);width:70px;height:70px;border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:28px;font-weight:800;color:white;'>HR</div>
+        <h2 style='color:#0E7490;margin-bottom:4px;font-weight:700;font-size:clamp(1.1rem,3vw,1.6rem);'>{t('app_title')}</h2>
+        <p style='color:#64748B;font-size:clamp(11px,2vw,14px);'>{t('app_subtitle')}</p>
     </div>""", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([0.5,3,0.5])
     with col2:
-        login_tab, forgot_tab = st.tabs(["تسجيل الدخول", "استرجاع كلمة المرور"])
+        login_lbl = t("login")
+        forgot_lbl = "استرجاع كلمة المرور" if get_lang() == "ar" else "Reset Password"
+        login_tab, forgot_tab = st.tabs([login_lbl, forgot_lbl])
 
         with login_tab:
             with st.form("login_form", clear_on_submit=False):
-                username = st.text_input("اسم المستخدم:", key="login_user")
-                password = st.text_input("كلمة المرور:", type="password", key="login_pass")
+                username = st.text_input(t("username") + ":", key="login_user")
+                password = st.text_input(t("password") + ":", type="password", key="login_pass")
                 lc1, lc2 = st.columns(2)
+                enter_lbl = "دخول" if get_lang() == "ar" else "Sign In"
+                guest_lbl = "دخول كزائر" if get_lang() == "ar" else "Guest Access"
                 with lc1:
-                    login_btn = st.form_submit_button("دخول", type="primary", use_container_width=True)
+                    login_btn = st.form_submit_button(enter_lbl, type="primary", use_container_width=True)
                 with lc2:
-                    guest_btn = st.form_submit_button("دخول كزائر", use_container_width=True)
+                    guest_btn = st.form_submit_button(guest_lbl, use_container_width=True)
 
                 if login_btn:
                     init_users()
@@ -4433,7 +4349,20 @@ def main():
 
     # Sidebar
     with st.sidebar:
-        st.markdown(f"<div style='text-align:center;padding:20px 0;'><div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:56px;height:56px;border-radius:12px;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:22px;font-weight:800;color:white;'>HR</div><h2 style='margin:0;font-size:16px;'>تحليلات الموارد البشرية</h2><p style='opacity:.6;font-size:11px;'>رسال الود لتقنية المعلومات v5</p><div style='background:rgba(255,255,255,.1);border-radius:6px;padding:6px 10px;margin-top:8px;font-size:11px'>👤 {st.session_state.user_name} <span style='opacity:.6'>| {st.session_state.user_role}</span></div></div>", unsafe_allow_html=True)
+        # === Language Selector ===
+        lang_options = {"العربية 🇸🇦": "ar", "English 🇺🇸": "en"}
+        current_lang_label = "العربية 🇸🇦" if get_lang() == "ar" else "English 🇺🇸"
+        selected_lang = st.selectbox("🌐", list(lang_options.keys()),
+            index=list(lang_options.values()).index(get_lang()),
+            label_visibility="collapsed", key="_lang_selector")
+        if lang_options[selected_lang] != get_lang():
+            st.session_state['app_lang'] = lang_options[selected_lang]
+            st.rerun()
+
+        # Apply direction
+        apply_direction()
+
+        st.markdown(f"<div style='text-align:center;padding:16px 0;'><div style='background:linear-gradient(135deg,#F97316,#E9C46A);width:52px;height:52px;border-radius:12px;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:20px;font-weight:800;color:white;'>HR</div><h2 style='margin:0;font-size:15px;'>{t('app_title')}</h2><p style='opacity:.6;font-size:11px;'>v5.5</p><div style='background:rgba(255,255,255,.1);border-radius:6px;padding:6px 10px;margin-top:8px;font-size:11px'>👤 {st.session_state.user_name} <span style='opacity:.6'>| {st.session_state.user_role}</span></div></div>", unsafe_allow_html=True)
         st.markdown("---")
 
         # Filter sections by access
@@ -4480,7 +4409,7 @@ def main():
 
         # Logout button
         st.markdown("---")
-        if st.button("🚪 تسجيل الخروج", use_container_width=True):
+        if st.button(t("logout"), use_container_width=True):
             # Clear login token from DB
             token = st.session_state.get('_login_token')
             if token:
@@ -4499,8 +4428,8 @@ def main():
             st.rerun()
 
         st.markdown("---")
-        st.markdown("##### 📁 ملف البيانات")
-        file = st.file_uploader("ارفع Excel", type=["xlsx","xls","csv"], label_visibility="collapsed", key="main_uploader")
+        st.markdown(f"##### 📁 {t('upload_file')}")
+        file = st.file_uploader(t("upload_file"), type=["xlsx","xls","csv"], label_visibility="collapsed", key="main_uploader")
         if file:
             # Store file bytes in session_state + save to DB for persistence
             file_bytes_val = file.getvalue()
