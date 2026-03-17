@@ -3693,14 +3693,14 @@ def login_page():
     </div>""", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([0.5,3,0.5])
     with col2:
-        login_lbl = tr("login")
+        login_lbl = _i18n("login")
         forgot_lbl = "استرجاع كلمة المرور" if get_lang() == "ar" else "Reset Password"
         login_tab, forgot_tab = st.tabs([login_lbl, forgot_lbl])
 
         with login_tab:
             with st.form("login_form", clear_on_submit=False):
-                username = st.text_input(tr("username") + ":", key="login_user")
-                password = st.text_input(tr("password") + ":", type="password", key="login_pass")
+                username = st.text_input(_i18n("username") + ":", key="login_user")
+                password = st.text_input(_i18n("password") + ":", type="password", key="login_pass")
                 lc1, lc2 = st.columns(2)
                 enter_lbl = "دخول" if get_lang() == "ar" else "Sign In"
                 guest_lbl = "دخول كزائر" if get_lang() == "ar" else "Guest Access"
@@ -4409,7 +4409,7 @@ def main():
 
         # Logout button
         st.markdown("---")
-        if st.button(tr("logout"), use_container_width=True):
+        if st.button(_i18n("logout"), use_container_width=True):
             # Clear login token from DB
             token = st.session_state.get('_login_token')
             if token:
@@ -4429,7 +4429,7 @@ def main():
 
         st.markdown("---")
         st.markdown(f"##### 📁 {_i18n('upload_file')}")
-        file = st.file_uploader(tr("upload_file"), type=["xlsx","xls","csv"], label_visibility="collapsed", key="main_uploader")
+        file = st.file_uploader(_i18n("upload_file"), type=["xlsx","xls","csv"], label_visibility="collapsed", key="main_uploader")
         if file:
             # Store file bytes in session_state + save to DB for persistence
             file_bytes_val = file.getvalue()
