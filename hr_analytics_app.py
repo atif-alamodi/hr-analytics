@@ -788,8 +788,8 @@ def init_saas_tables():
         max_ai_calls INTEGER DEFAULT 100,
         is_active INTEGER DEFAULT 1,
         logo_url TEXT,
-        primary_color TEXT DEFAULT '#0E7490',
-        secondary_color TEXT DEFAULT '#F97316',
+        primary_color TEXT DEFAULT '#0F4C5C',
+        secondary_color TEXT DEFAULT '#E36414',
         created_at TEXT,
         updated_at TEXT
     )''')
@@ -844,8 +844,8 @@ def init_saas_tables():
     c.execute(f'''CREATE TABLE IF NOT EXISTS company_branding (
         company_id TEXT PRIMARY KEY,
         logo_base64 TEXT,
-        primary_color TEXT DEFAULT '#0E7490',
-        secondary_color TEXT DEFAULT '#F97316',
+        primary_color TEXT DEFAULT '#0F4C5C',
+        secondary_color TEXT DEFAULT '#E36414',
         accent_color TEXT DEFAULT '#2A9D8F',
         font_family TEXT DEFAULT 'Noto Sans Arabic',
         custom_css TEXT,
@@ -1071,7 +1071,7 @@ def get_company_branding(company_id=None):
         conn.close()
         return dict(zip(cols, row))
     conn.close()
-    return {"primary_color": "#0E7490", "secondary_color": "#F97316", "accent_color": "#2A9D8F", "font_family": "Noto Sans Arabic"}
+    return {"primary_color": "#0F4C5C", "secondary_color": "#E36414", "accent_color": "#2A9D8F", "font_family": "Noto Sans Arabic"}
 
 def save_company_branding(primary_color, secondary_color, accent_color, logo_base64=None, footer_text=None):
     """Save company branding."""
@@ -1576,23 +1576,24 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;500;600;700;800&display=swap');
 *{font-family:'Noto Sans Arabic',sans-serif}
 .main .block-container{padding-top:.8rem;max-width:1400px}
-/* Sidebar - dark theme */
-[data-testid="stSidebar"]{background:linear-gradient(180deg,#0E7490 0%,#083344 100%)}
+/* Sidebar - dark theme but keep dropdowns readable */
+[data-testid="stSidebar"]{background:linear-gradient(180deg,#0F4C5C 0%,#1A1A2E 100%)}
 [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stRadio label,
 [data-testid="stSidebar"] .stMarkdown, [data-testid="stSidebar"] h1,
 [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
 [data-testid="stSidebar"] h4, [data-testid="stSidebar"] h5,
 [data-testid="stSidebar"] p, [data-testid="stSidebar"] span,
 [data-testid="stSidebar"] .stButton button{color:white !important}
+/* Keep sidebar inputs/selects readable */
 [data-testid="stSidebar"] input, [data-testid="stSidebar"] select,
 [data-testid="stSidebar"] textarea, [data-testid="stSidebar"] .stSelectbox div[data-baseweb] {color:#333 !important}
 /* Metrics */
 [data-testid="stMetric"]{background:white;border-radius:12px;padding:14px 18px;box-shadow:0 1px 3px rgba(0,0,0,.06);border:1px solid #E2E8F0}
 [data-testid="stMetric"] label{font-size:12px !important;color:#64748B !important}
-[data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:20px !important;font-weight:700 !important;color:#0E7490 !important}
+[data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:20px !important;font-weight:700 !important;color:#0F4C5C !important}
 /* Headers */
-.main h1{color:#0E7490 !important;font-weight:800 !important;font-size:1.6em !important}
-.hdr{background:linear-gradient(135deg,#0E7490,#083344);padding:20px 28px;border-radius:14px;margin-bottom:20px;color:white}
+.main h1{color:#0F4C5C !important;font-weight:800 !important;font-size:1.6em !important}
+.hdr{background:linear-gradient(135deg,#0F4C5C,#1A1A2E);padding:20px 28px;border-radius:14px;margin-bottom:20px;color:white}
 .hdr h1{color:white !important;margin:0;font-size:24px !important}
 .hdr p{color:rgba(255,255,255,.7);margin:4px 0 0;font-size:13px}
 /* Info boxes */
@@ -1601,98 +1602,68 @@ st.markdown("""
 .ibox.ok{background:#F0FDF4;border-right-color:#22C55E}
 .ibox.bad{background:#FEF2F2;border-right-color:#EF4444}
 /* KPI cards */
-.kpi{background:linear-gradient(135deg,#0E7490,#0C5A72);color:white;border-radius:12px;padding:16px;text-align:center;margin-bottom:10px}
+.kpi{background:linear-gradient(135deg,#0F4C5C,#1B4D5C);color:white;border-radius:12px;padding:16px;text-align:center;margin-bottom:10px}
 .kpi h3{font-size:22px;margin:6px 0 2px;font-weight:800;color:white !important}
 .kpi p{font-size:11px;opacity:.7;margin:0;color:white !important}
-/* Tabs */
+/* Tabs - fix overlap */
 .stTabs [data-baseweb="tab-list"]{gap:4px}
 .stTabs [data-baseweb="tab"]{padding:8px 16px;font-size:13px}
-/* Dataframes */
+/* Dataframes - better spacing */
 [data-testid="stDataFrame"]{margin-bottom:16px}
-/* Chat messages */
-.chat-user{background:#0C4A6E;color:white;padding:12px;border-radius:10px;margin:8px 0}
-.chat-ai-legal{background:#f0f4f8;color:#333;padding:12px;border-radius:10px;margin:8px 0;border-right:4px solid #0E7490}
-.chat-ai-hr{background:#f0faf5;color:#333;padding:12px;border-radius:10px;margin:8px 0;border-right:4px solid #059669}
-/* === SIDEBAR TOGGLE BUTTON (MUST BE VISIBLE) === */
-#MainMenu, footer{visibility:hidden}
-[data-testid="stSidebarCollapsedControl"]{visibility:visible !important;z-index:999999 !important}
-[data-testid="stSidebarCollapsedControl"] button{
-    color:#0E7490 !important;
-    background:white !important;
-    border:1px solid #E2E8F0 !important;
-    border-radius:8px !important;
-    box-shadow:0 2px 6px rgba(0,0,0,.1) !important;
-    width:36px !important;
-    height:36px !important;
-}
-[data-testid="stSidebarCollapsedControl"] button:hover{
-    background:#f0f9ff !important;
-    box-shadow:0 4px 12px rgba(0,0,0,.15) !important;
-}
-[data-testid="stSidebarCollapsedControl"] svg{
-    fill:#0E7490 !important;
-    color:#0E7490 !important;
-    stroke:#0E7490 !important;
-}
-/* Sidebar close button */
-[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button{
-    color:white !important;
-}
-[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] svg{
-    fill:white !important;
-    color:white !important;
-    stroke:white !important;
-}
-/* Make header bar transparent but keep sidebar button */
-header[data-testid="stHeader"]{background:transparent !important;backdrop-filter:none !important}
-/* Radio buttons in sidebar */
+/* Hide defaults */
+#MainMenu,footer{visibility:hidden}
+/* Fix radio buttons in sidebar */
 [data-testid="stSidebar"] .stRadio > div{gap:2px}
 [data-testid="stSidebar"] .stRadio > div > label{padding:6px 8px;border-radius:8px;font-size:13px}
 [data-testid="stSidebar"] .stRadio > div > label:hover{background:rgba(255,255,255,0.1)}
+/* Fix expander in dark sidebar */
 [data-testid="stSidebar"] .streamlit-expanderHeader{color:white !important}
-/* === RTL / LTR SUPPORT === */
-.rtl-mode .ibox{border-right:4px solid #3B82F6;border-left:none}
-.rtl-mode .ibox.warn{border-right-color:#F97316}
-.rtl-mode .ibox.ok{border-right-color:#22C55E}
-.rtl-mode .ibox.bad{border-right-color:#EF4444}
-.rtl-mode .chat-ai-legal{border-right:4px solid #0E7490;border-left:none}
-.rtl-mode .chat-ai-hr{border-right:4px solid #059669;border-left:none}
-.ltr-mode .ibox{border-left:4px solid #3B82F6;border-right:none}
-.ltr-mode .ibox.warn{border-left-color:#F97316}
-.ltr-mode .ibox.ok{border-left-color:#22C55E}
-.ltr-mode .ibox.bad{border-left-color:#EF4444}
-.ltr-mode .chat-ai-legal{border-left:4px solid #0E7490;border-right:none}
-.ltr-mode .chat-ai-hr{border-left:4px solid #059669;border-right:none}
-/* === RESPONSIVE === */
+
+/* ===== RESPONSIVE DESIGN ===== */
+/* Tablet */
 @media (max-width: 1024px) {
     .main .block-container{padding:0.5rem 1rem;max-width:100%}
     .hdr{padding:14px 18px;border-radius:10px}
     .hdr h1{font-size:18px !important}
+    .hdr p{font-size:11px}
     .kpi{padding:10px;border-radius:10px}
     .kpi h3{font-size:18px}
+    .kpi p{font-size:10px}
     [data-testid="stMetric"]{padding:10px 12px}
     [data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:16px !important}
 }
+/* Mobile */
 @media (max-width: 768px) {
     .main .block-container{padding:0.3rem 0.5rem;max-width:100%}
     .hdr{padding:12px 14px;border-radius:8px;margin-bottom:12px}
     .hdr h1{font-size:16px !important}
+    .hdr p{font-size:10px}
     .kpi{padding:8px;border-radius:8px;margin-bottom:6px}
     .kpi h3{font-size:16px}
+    .kpi p{font-size:9px}
     .ibox{padding:8px 10px;font-size:12px;border-radius:8px}
     [data-testid="stMetric"]{padding:8px 10px;border-radius:8px}
     [data-testid="stMetric"] label{font-size:10px !important}
     [data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:14px !important}
     .main h1{font-size:1.2em !important}
+    /* Make columns stack on mobile */
     [data-testid="column"]{min-width:100% !important;width:100% !important}
+    /* Sidebar auto-collapse on mobile */
     [data-testid="stSidebar"]{min-width:0 !important}
+    /* Smaller tables */
     [data-testid="stDataFrame"]{font-size:11px}
+    /* Tabs smaller */
     .stTabs [data-baseweb="tab"]{padding:6px 10px;font-size:11px}
     .stTabs [data-baseweb="tab-list"]{gap:2px;overflow-x:auto}
+    /* Charts full width */
     .js-plotly-plot{width:100% !important}
     .js-plotly-plot .plotly{width:100% !important}
+    /* Forms compact */
+    .stTextInput, .stSelectbox, .stNumberInput{margin-bottom:4px}
+    /* Buttons full width */
     .stButton > button{font-size:13px;padding:8px 12px}
 }
+/* Small mobile */
 @media (max-width: 480px) {
     .hdr h1{font-size:14px !important}
     .kpi h3{font-size:14px}
@@ -1703,8 +1674,7 @@ header[data-testid="stHeader"]{background:transparent !important;backdrop-filter
 </style>
 """, unsafe_allow_html=True)
 
-CL = {'p':'#0E7490','a':'#F97316','s':'#059669','d':'#DC2626','dept':px.colors.qualitative.Set2,'sal':px.colors.qualitative.Pastel}
-
+CL = {'p':'#0F4C5C','a':'#E36414','s':'#2D6A4F','d':'#9A031E','dept':px.colors.qualitative.Set2,'sal':px.colors.qualitative.Pastel}
 
 def hdr(t,s=""): st.markdown(f'<div class="hdr"><h1>{t}</h1><p>{s}</p></div>',unsafe_allow_html=True)
 def ibox(t,tp="info"):
@@ -1712,145 +1682,6 @@ def ibox(t,tp="info"):
     ic={"info":"💡","warning":"⚠️","success":"✅","danger":"🚨"}
     st.markdown(f'<div class="{c.get(tp,"ibox")}">{ic.get(tp,"💡")} {t}</div>',unsafe_allow_html=True)
 def kpi(l,v): st.markdown(f'<div class="kpi"><p>{l}</p><h3>{v}</h3></div>',unsafe_allow_html=True)
-
-# =====================================================
-# INTERNATIONALIZATION (i18n) - Arabic/English
-# =====================================================
-
-TRANSLATIONS = {
-    # === Navigation & Sections ===
-    "app_title": {"ar": "منصة تحليلات الموارد البشرية", "en": "HR Analytics Platform"},
-    "app_subtitle": {"ar": "تحليلات ذكية لإدارة رأس المال البشري", "en": "Smart Analytics for Human Capital Management"},
-    "general_analytics": {"ar": "📊 التحليلات العامة", "en": "📊 General Analytics"},
-    "total_rewards": {"ar": "🎁 Total Rewards", "en": "🎁 Total Rewards"},
-    "headcount": {"ar": "👥 Headcount", "en": "👥 Headcount"},
-    "calculator": {"ar": "⚖️ حاسبة المستحقات", "en": "⚖️ Benefits Calculator"},
-    "recruitment": {"ar": "🎯 التوظيف", "en": "🎯 Recruitment"},
-    "onboarding": {"ar": "🚀 Onboarding", "en": "🚀 Onboarding"},
-    "contracts": {"ar": "📜 العقود", "en": "📜 Contracts"},
-    "smart_advisor": {"ar": "🤖 المستشار الذكي", "en": "🤖 AI Advisor"},
-    "org_dev": {"ar": "🏗️ التطوير المؤسسي OD", "en": "🏗️ Org Development"},
-    "advanced_analytics": {"ar": "📈 التحليلات المتقدمة", "en": "📈 Advanced Analytics"},
-    "general_analysis": {"ar": "🔍 التحليل العام", "en": "🔍 General Analysis"},
-    "surveys": {"ar": "📝 الاستبيانات", "en": "📝 Surveys"},
-    "personality_tests": {"ar": "🧠 اختبارات الشخصية", "en": "🧠 Personality Tests"},
-    "training": {"ar": "📚 التدريب والتطوير", "en": "📚 Training & Development"},
-    "settings": {"ar": "⚙️ الإعدادات", "en": "⚙️ Settings"},
-    "reports_export": {"ar": "📤 التقارير والتصدير", "en": "📤 Reports & Export"},
-
-    # === Sub-pages ===
-    "overview": {"ar": "🏠 نظرة عامة", "en": "🏠 Overview"},
-    "departments": {"ar": "📊 الأقسام", "en": "📊 Departments"},
-    "smart_analyzer": {"ar": "🤖 المحلل الذكي", "en": "🤖 Smart Analyzer"},
-    "data_view": {"ar": "📋 البيانات", "en": "📋 Data View"},
-    "tr_dashboard": {"ar": "🎁 لوحة Total Rewards", "en": "🎁 Total Rewards Dashboard"},
-    "salary_dashboard": {"ar": "💰 لوحة الرواتب", "en": "💰 Salary Dashboard"},
-    "monthly_analysis": {"ar": "📈 تحليل شهري/ربعي", "en": "📈 Monthly/Quarterly Analysis"},
-    "categories_analysis": {"ar": "🏷️ تحليل حسب الفئات", "en": "🏷️ Categories Analysis"},
-    "salary_scale": {"ar": "📊 سلم الرواتب", "en": "📊 Salary Scale"},
-    "salary_structure": {"ar": "💰 هيكل الرواتب", "en": "💰 Salary Structure"},
-    "benefits_insurance": {"ar": "🏥 المزايا والتأمينات", "en": "🏥 Benefits & Insurance"},
-    "competitiveness": {"ar": "📊 تحليل التنافسية", "en": "📊 Competitiveness Analysis"},
-    "export_tr": {"ar": "📥 تصدير TR", "en": "📥 Export TR"},
-    "legal_advisor": {"ar": "⚖️ المستشار القانوني", "en": "⚖️ Legal Advisor"},
-    "hr_advisor": {"ar": "📚 مستشار الموارد البشرية", "en": "📚 HR Advisor"},
-    "knowledge_base": {"ar": "🧠 قاعدة المعرفة RAG", "en": "🧠 Knowledge Base RAG"},
-    "learning": {"ar": "📊 التعلم والتحسين", "en": "📊 Learning & Improvement"},
-    "references": {"ar": "📋 إدارة المراجع", "en": "📋 Reference Management"},
-
-    # === Common UI Elements ===
-    "upload_file": {"ar": "ارفع Excel", "en": "Upload Excel"},
-    "upload_prompt": {"ar": "📁 ارفع ملف من القائمة الجانبية", "en": "📁 Upload a file from the sidebar"},
-    "employees": {"ar": "👥 الموظفين", "en": "👥 Employees"},
-    "total_salary": {"ar": "💵 إجمالي الرواتب", "en": "💵 Total Payroll"},
-    "average": {"ar": "📊 المتوسط", "en": "📊 Average"},
-    "highest": {"ar": "📈 الأعلى", "en": "📈 Highest"},
-    "lowest": {"ar": "📉 الأقل", "en": "📉 Lowest"},
-    "median": {"ar": "📐 الوسيط", "en": "📐 Median"},
-    "submit": {"ar": "إرسال", "en": "Submit"},
-    "clear": {"ar": "🗑️ مسح المحادثة", "en": "🗑️ Clear Chat"},
-    "search": {"ar": "بحث", "en": "Search"},
-    "export": {"ar": "📥 تصدير", "en": "📥 Export"},
-    "save": {"ar": "💾 حفظ", "en": "💾 Save"},
-    "delete": {"ar": "🗑️ حذف", "en": "🗑️ Delete"},
-    "edit": {"ar": "✏️ تعديل", "en": "✏️ Edit"},
-    "cancel": {"ar": "إلغاء", "en": "Cancel"},
-    "confirm": {"ar": "تأكيد", "en": "Confirm"},
-    "loading": {"ar": "جاري التحميل...", "en": "Loading..."},
-    "no_data": {"ar": "لا توجد بيانات", "en": "No data available"},
-    "records": {"ar": "سجل", "en": "records"},
-    "active": {"ar": "✅ نشط", "en": "✅ Active"},
-    "saudi_pct": {"ar": "🇸🇦 نسبة السعودة", "en": "🇸🇦 Saudization %"},
-    "avg_salary": {"ar": "💰 متوسط الراتب", "en": "💰 Avg Salary"},
-
-    # === Advisor ===
-    "legal_consult": {"ar": "⚖️ استشارة قانونية", "en": "⚖️ Legal Consultation"},
-    "hr_consult": {"ar": "📚 استشارة مهنية", "en": "📚 Professional Consultation"},
-    "write_legal_q": {"ar": "اكتب سؤالك القانوني:", "en": "Write your legal question:"},
-    "write_hr_q": {"ar": "اكتب سؤالك:", "en": "Write your question:"},
-    "legal_placeholder": {"ar": "مثال: تم فصلي بعد 3 سنوات خدمة بدون سبب، ما مستحقاتي؟", "en": "Example: I was terminated after 3 years without cause, what are my entitlements?"},
-    "hr_placeholder": {"ar": "مثال: كيف أقيس فعالية برنامج التدريب باستخدام نموذج Kirkpatrick؟", "en": "Example: How to measure training effectiveness using Kirkpatrick model?"},
-    "analyzing_legal": {"ar": "جاري التحليل القانوني...", "en": "Analyzing legal query..."},
-    "analyzing_hr": {"ar": "جاري التحليل المهني...", "en": "Analyzing HR query..."},
-    "helpful": {"ar": "مفيدة", "en": "Helpful"},
-    "inaccurate": {"ar": "غير دقيقة", "en": "Inaccurate"},
-    "thanks": {"ar": "شكراً", "en": "Thanks"},
-    "will_improve": {"ar": "سيتم التحسين", "en": "Will improve"},
-    "common_questions": {"ar": "💡 أسئلة شائعة", "en": "💡 Common Questions"},
-    "common_topics": {"ar": "💡 مواضيع شائعة", "en": "💡 Common Topics"},
-
-    # === Language selector ===
-    "language": {"ar": "🌐 اللغة", "en": "🌐 Language"},
-    "file_loaded": {"ar": "📂", "en": "📂"},
-    "delete_file": {"ar": "🗑️ حذف الملف", "en": "🗑️ Delete File"},
-    "provider": {"ar": "🤖 مزود الذكاء الاصطناعي", "en": "🤖 AI Provider"},
-    "welcome": {"ar": "مرحباً", "en": "Welcome"},
-    "login": {"ar": "تسجيل الدخول", "en": "Login"},
-    "logout": {"ar": "🚪 تسجيل خروج", "en": "🚪 Logout"},
-    "username": {"ar": "اسم المستخدم", "en": "Username"},
-    "password": {"ar": "كلمة المرور", "en": "Password"},
-    "role": {"ar": "الدور", "en": "Role"},
-}
-
-def get_lang():
-    """Get current language from session state."""
-    return st.session_state.get('app_lang', 'ar')
-
-def _i18n(key, **kwargs):
-    """Translate a key to the current language. Falls back to Arabic then key."""
-    lang = get_lang()
-    entry = TRANSLATIONS.get(key, {})
-    text = entry.get(lang, entry.get('ar', key))
-    if kwargs:
-        for k, v in kwargs.items():
-            text = text.replace(f'{{{k}}}', str(v))
-    return text
-
-def get_dir():
-    """Get text direction based on current language."""
-    return 'rtl' if get_lang() == 'ar' else 'ltr'
-
-def apply_direction():
-    """Apply RTL/LTR direction to the page."""
-    lang = get_lang()
-    dir_class = 'rtl-mode' if lang == 'ar' else 'ltr-mode'
-    dir_attr = 'rtl' if lang == 'ar' else 'ltr'
-    text_align = 'right' if lang == 'ar' else 'left'
-    script = f"""
-    <script>
-        document.documentElement.setAttribute('dir', '{dir_attr}');
-        document.documentElement.setAttribute('lang', '{lang}');
-        document.body.classList.remove('rtl-mode', 'ltr-mode');
-        document.body.classList.add('{dir_class}');
-        var mainEl = window.parent.document.querySelector('.main');
-        if (mainEl) {{ mainEl.style.direction = '{dir_attr}'; mainEl.style.textAlign = '{text_align}'; }}
-    </script>
-    <style>
-        .main, .main .block-container {{ direction: {dir_attr} !important; text-align: {text_align} !important; }}
-        [data-testid="stSidebar"] {{ direction: {dir_attr} !important; text-align: {text_align} !important; }}
-    </style>
-    """
-    st.markdown(script, unsafe_allow_html=True)
 
 # ===== LOCAL KNOWLEDGE ENGINE (No API needed) =====
 LABOR_KB = {
@@ -2826,7 +2657,7 @@ def export_widget(dataframes, title="تقرير", key_prefix="exp"):
                     clean = str(sname)[:31].replace('/','_').replace('\\','_')
                     df.to_excel(w, sheet_name=clean, index=False)
                     ws = w.sheets[clean]; ws.set_column('A:Z', 18)
-                    hf = w.book.add_format({'bold':True,'bg_color':'#0E7490','font_color':'white','border':1})
+                    hf = w.book.add_format({'bold':True,'bg_color':'#0F4C5C','font_color':'white','border':1})
                     for ci, col in enumerate(df.columns): ws.write(0, ci, str(col), hf)
                     # Auto-charts
                     num_c = df.select_dtypes('number').columns.tolist()
@@ -2838,7 +2669,7 @@ def export_widget(dataframes, title="تقرير", key_prefix="exp"):
                         cws.write(0,0,cat_c[0],hf); cws.write(0,1,num_c[0],hf)
                         for j,(idx,val) in enumerate(grp.items()): cws.write(j+1,0,str(idx)); cws.write(j+1,1,val)
                         ch = w.book.add_chart({'type':'bar'})
-                        ch.add_series({'categories':[csn,1,0,len(grp),0],'values':[csn,1,1,len(grp),1],'fill':{'color':'#0E7490'}})
+                        ch.add_series({'categories':[csn,1,0,len(grp),0],'values':[csn,1,1,len(grp),1],'fill':{'color':'#0F4C5C'}})
                         ch.set_title({'name':f'{cat_c[0]} vs {num_c[0]}'}); ch.set_size({'width':520,'height':320}); ch.set_legend({'none':True})
                         cws.insert_chart('D1',ch)
                         ch2 = w.book.add_chart({'type':'pie'})
@@ -2889,7 +2720,7 @@ def export_widget(dataframes, title="تقرير", key_prefix="exp"):
                     charts_html += fig.to_html(full_html=False,include_plotlyjs='cdn')
                 # Histogram
                 if num_c:
-                    fig = px.histogram(df,x=num_c[0],nbins=20,title=f'توزيع {num_c[0]}',color_discrete_sequence=['#0E7490'])
+                    fig = px.histogram(df,x=num_c[0],nbins=20,title=f'توزيع {num_c[0]}',color_discrete_sequence=['#0F4C5C'])
                     fig.add_vline(x=df[num_c[0]].mean(),line_dash="dash",line_color="red",annotation_text=f"المتوسط: {df[num_c[0]].mean():,.0f}")
                     fig.update_layout(height=350,margin=dict(l=10,r=10,t=40,b=10))
                     charts_html += fig.to_html(full_html=False,include_plotlyjs='cdn')
@@ -2903,14 +2734,14 @@ def export_widget(dataframes, title="تقرير", key_prefix="exp"):
             kpi_html += "</div>"
             pdf_html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
             <style>body{{font-family:Arial,sans-serif;padding:20px;direction:rtl;color:#333}}
-            h1{{color:#0E7490;text-align:center;border-bottom:3px solid #E36414;padding-bottom:10px}}
+            h1{{color:#0F4C5C;text-align:center;border-bottom:3px solid #E36414;padding-bottom:10px}}
             h2{{color:#264653;margin-top:25px;border-bottom:1px solid #eee;padding-bottom:5px}}
             .tbl{{border-collapse:collapse;width:100%;margin:10px 0}}
             .tbl th{{background:#0F4C5C;color:white;padding:8px;border:1px solid #ddd;text-align:center}}
             .tbl td{{padding:6px;border:1px solid #ddd;text-align:center}}
             .tbl tr:nth-child(even){{background:#f8f9fa}}
             .kb{{background:#f0f4f8;border-radius:8px;padding:12px 20px;border-right:4px solid #E36414;min-width:110px}}
-            .kv{{font-size:1.3em;font-weight:700;color:#0E7490}} .kl{{font-size:0.7em;color:#888}}
+            .kv{{font-size:1.3em;font-weight:700;color:#0F4C5C}} .kl{{font-size:0.7em;color:#888}}
             .footer{{margin-top:30px;color:#888;font-size:0.8em;text-align:center;border-top:1px solid #ddd;padding-top:10px}}
             @media print{{@page{{margin:0.5cm}} .js-plotly-plot{{break-inside:avoid}}}}</style>
             
@@ -3460,13 +3291,13 @@ def send_test_email(to_email, emp_name, tests, deadline, assigned_by, app_url=""
 <head><meta charset="UTF-8"></head>
 <body style="font-family:'Segoe UI',Arial,sans-serif;direction:rtl;text-align:right;margin:0;padding:0;background:#f4f4f4;">
 <div style="max-width:600px;margin:20px auto;background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.1);">
-    <div style="background:linear-gradient(135deg,#0C4A6E,#083344);color:white;padding:24px;text-align:center;">
+    <div style="background:linear-gradient(135deg,#0F4C5C,#1A1A2E);color:white;padding:24px;text-align:center;">
         <div style="background:rgba(255,255,255,0.15);width:60px;height:60px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;margin-bottom:10px;">HR</div>
         <h2 style="margin:8px 0 0;color:white;font-size:20px;">منصة تحليلات الموارد البشرية</h2>
         <p style="margin:4px 0 0;opacity:0.7;font-size:13px;">رسال الود لتقنية المعلومات</p>
     </div>
     <div style="padding:28px 24px;">
-        <h3 style="color:#0E7490;margin:0 0 15px;font-size:18px;">مرحباً {emp_name},</h3>
+        <h3 style="color:#0F4C5C;margin:0 0 15px;font-size:18px;">مرحباً {emp_name},</h3>
         <p style="color:#333;line-height:1.7;font-size:14px;">تم تعيين اختبارات شخصية جديدة لك من قبل <strong style="color:#E36414;">{assigned_by}</strong>.</p>
 
         <div style="background:linear-gradient(135deg,#fff8f3,#fff);border-right:4px solid #E36414;padding:18px;margin:20px 0;border-radius:8px;">
@@ -3673,41 +3504,24 @@ def _restore_login():
     return False
 
 def login_page():
-    # Language selector on login page
-    lp_lang_opts = {"العربية 🇸🇦": "ar", "English 🇺🇸": "en"}
-    lp_col1, lp_col2, lp_col3 = st.columns([2, 1, 2])
-    with lp_col2:
-        lp_sel = st.selectbox("🌐", list(lp_lang_opts.keys()),
-            index=list(lp_lang_opts.values()).index(get_lang()),
-            label_visibility="collapsed", key="_login_lang")
-        if lp_lang_opts[lp_sel] != get_lang():
-            st.session_state['app_lang'] = lp_lang_opts[lp_sel]
-            st.rerun()
-
-    apply_direction()
-
-    st.markdown(f"""<div style='text-align:center;padding:30px 10px 20px;'>
-        <div style='background:linear-gradient(135deg,#F97316,#E9C46A);width:70px;height:70px;border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:28px;font-weight:800;color:white;'>HR</div>
-        <h2 style='color:#0E7490;margin-bottom:4px;font-weight:700;font-size:clamp(1.1rem,3vw,1.6rem);'>{_i18n('app_title')}</h2>
-        <p style='color:#64748B;font-size:clamp(11px,2vw,14px);'>{_i18n('app_subtitle')}</p>
+    st.markdown("""<div style='text-align:center;padding:30px 10px 20px;'>
+        <div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:70px;height:70px;border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:28px;font-weight:800;color:white;'>HR</div>
+        <h2 style='color:#0F4C5C;margin-bottom:4px;font-weight:700;font-size:clamp(1.1rem,3vw,1.6rem);'>منصة تحليلات الموارد البشرية</h2>
+        <p style='color:#64748B;font-size:clamp(11px,2vw,14px);'>رسال الود لتقنية المعلومات - الإصدار v5</p>
     </div>""", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([0.5,3,0.5])
     with col2:
-        login_lbl = _i18n("login")
-        forgot_lbl = "استرجاع كلمة المرور" if get_lang() == "ar" else "Reset Password"
-        login_tab, forgot_tab = st.tabs([login_lbl, forgot_lbl])
+        login_tab, forgot_tab = st.tabs(["تسجيل الدخول", "استرجاع كلمة المرور"])
 
         with login_tab:
             with st.form("login_form", clear_on_submit=False):
-                username = st.text_input(_i18n("username") + ":", key="login_user")
-                password = st.text_input(_i18n("password") + ":", type="password", key="login_pass")
+                username = st.text_input("اسم المستخدم:", key="login_user")
+                password = st.text_input("كلمة المرور:", type="password", key="login_pass")
                 lc1, lc2 = st.columns(2)
-                enter_lbl = "دخول" if get_lang() == "ar" else "Sign In"
-                guest_lbl = "دخول كزائر" if get_lang() == "ar" else "Guest Access"
                 with lc1:
-                    login_btn = st.form_submit_button(enter_lbl, type="primary", use_container_width=True)
+                    login_btn = st.form_submit_button("دخول", type="primary", use_container_width=True)
                 with lc2:
-                    guest_btn = st.form_submit_button(guest_lbl, use_container_width=True)
+                    guest_btn = st.form_submit_button("دخول كزائر", use_container_width=True)
 
                 if login_btn:
                     init_users()
@@ -4040,19 +3854,19 @@ BIG5_QUESTIONS = [
 ]
 
 BIG5_TRAITS = {
-    "E": {"name": "الانبساطية", "en": "Extraversion", "color": "#F97316",
+    "E": {"name": "الانبساطية", "en": "Extraversion", "color": "#E36414",
         "desc": "مستوى الطاقة الاجتماعية والحماس والتفاعل مع الآخرين",
         "high": "اجتماعي، نشيط، متحمس، يحب العمل الجماعي، قيادي بالتأثير",
         "low": "هادئ، متأمل، يفضل العمل الفردي، يركز بعمق، مستقل",
         "jobs_high": "المبيعات، العلاقات العامة، التدريب، إدارة الفرق",
         "jobs_low": "التحليل، البرمجة، البحث، المحاسبة"},
-    "A": {"name": "القبول", "en": "Agreeableness", "color": "#059669",
+    "A": {"name": "القبول", "en": "Agreeableness", "color": "#2D6A4F",
         "desc": "مستوى التعاون والثقة والتعاطف مع الآخرين",
         "high": "متعاون، متسامح، يثق بالآخرين، يتجنب الصراع، داعم",
         "low": "تنافسي، مباشر، ناقد، يتحدى الأفكار، مستقل الرأي",
         "jobs_high": "خدمة العملاء، الموارد البشرية، التمريض، الإرشاد",
         "jobs_low": "المحاماة، التفاوض، إدارة المخاطر، مراقبة الجودة"},
-    "C": {"name": "الإتقان", "en": "Conscientiousness", "color": "#0E7490",
+    "C": {"name": "الإتقان", "en": "Conscientiousness", "color": "#0F4C5C",
         "desc": "مستوى التنظيم والانضباط والمسؤولية والإنجاز",
         "high": "منظم، منضبط، مسؤول، يركز على التفاصيل، موثوق",
         "low": "مرن، عفوي، يتكيف بسرعة، أقل تنظيماً، مبدع",
@@ -4349,20 +4163,7 @@ def main():
 
     # Sidebar
     with st.sidebar:
-        # === Language Selector ===
-        lang_options = {"العربية 🇸🇦": "ar", "English 🇺🇸": "en"}
-        current_lang_label = "العربية 🇸🇦" if get_lang() == "ar" else "English 🇺🇸"
-        selected_lang = st.selectbox("🌐", list(lang_options.keys()),
-            index=list(lang_options.values()).index(get_lang()),
-            label_visibility="collapsed", key="_lang_selector")
-        if lang_options[selected_lang] != get_lang():
-            st.session_state['app_lang'] = lang_options[selected_lang]
-            st.rerun()
-
-        # Apply direction
-        apply_direction()
-
-        st.markdown(f"<div style='text-align:center;padding:16px 0;'><div style='background:linear-gradient(135deg,#F97316,#E9C46A);width:52px;height:52px;border-radius:12px;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:20px;font-weight:800;color:white;'>HR</div><h2 style='margin:0;font-size:15px;'>{_i18n('app_title')}</h2><p style='opacity:.6;font-size:11px;'>v5.5</p><div style='background:rgba(255,255,255,.1);border-radius:6px;padding:6px 10px;margin-top:8px;font-size:11px'>👤 {st.session_state.user_name} <span style='opacity:.6'>| {st.session_state.user_role}</span></div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align:center;padding:20px 0;'><div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:56px;height:56px;border-radius:12px;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:22px;font-weight:800;color:white;'>HR</div><h2 style='margin:0;font-size:16px;'>تحليلات الموارد البشرية</h2><p style='opacity:.6;font-size:11px;'>رسال الود لتقنية المعلومات v5</p><div style='background:rgba(255,255,255,.1);border-radius:6px;padding:6px 10px;margin-top:8px;font-size:11px'>👤 {st.session_state.user_name} <span style='opacity:.6'>| {st.session_state.user_role}</span></div></div>", unsafe_allow_html=True)
         st.markdown("---")
 
         # Filter sections by access
@@ -4409,7 +4210,7 @@ def main():
 
         # Logout button
         st.markdown("---")
-        if st.button(_i18n("logout"), use_container_width=True):
+        if st.button("🚪 تسجيل الخروج", use_container_width=True):
             # Clear login token from DB
             token = st.session_state.get('_login_token')
             if token:
@@ -4428,8 +4229,8 @@ def main():
             st.rerun()
 
         st.markdown("---")
-        st.markdown(f"##### 📁 {_i18n('upload_file')}")
-        file = st.file_uploader(_i18n("upload_file"), type=["xlsx","xls","csv"], label_visibility="collapsed", key="main_uploader")
+        st.markdown("##### 📁 ملف البيانات")
+        file = st.file_uploader("ارفع Excel", type=["xlsx","xls","csv"], label_visibility="collapsed", key="main_uploader")
         if file:
             # Store file bytes in session_state + save to DB for persistence
             file_bytes_val = file.getvalue()
@@ -4758,7 +4559,7 @@ def main():
             with r4c1:
                 if sal_col:
                     fig = px.histogram(data, x=sal_col, nbins=25, title='💰 توزيع الرواتب',
-                        color_discrete_sequence=['#0E7490'])
+                        color_discrete_sequence=['#0F4C5C'])
                     fig.add_vline(x=data[sal_col].mean(), line_dash="dash", line_color="red",
                         annotation_text=f"المتوسط: {data[sal_col].mean():,.0f}")
                     fig.add_vline(x=data[sal_col].median(), line_dash="dot", line_color="blue",
@@ -4817,7 +4618,7 @@ def main():
                     lv_data = data[level_col].value_counts().reset_index()
                     lv_data.columns = [level_col, 'العدد']
                     fig = px.funnel(lv_data, x='العدد', y=level_col, title='📊 التوزيع حسب المستوى الوظيفي',
-                        color_discrete_sequence=['#0E7490'])
+                        color_discrete_sequence=['#0F4C5C'])
                     fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380)
                     st.plotly_chart(fig, use_container_width=True)
             with r6c2:
@@ -4842,7 +4643,7 @@ def main():
                         valid['_join_month'] = valid['_join_dt'].dt.to_period('M').astype(str)
                         monthly = valid.groupby('_join_month').size().reset_index(name='العدد')
                         fig = px.area(monthly, x='_join_month', y='العدد', title='📈 اتجاه التوظيف الشهري',
-                            color_discrete_sequence=['#0E7490'])
+                            color_discrete_sequence=['#0F4C5C'])
                         fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380, xaxis_title="الشهر")
                         st.plotly_chart(fig, use_container_width=True)
             with r7c2:
@@ -5343,7 +5144,7 @@ def main():
                     if len(monthly) == 0:
                         monthly = yr.groupby(mn_col)[s_col].sum()
                     fig = go.Figure()
-                    fig.add_trace(go.Bar(x=monthly.index, y=monthly.values, marker_color='#0E7490', text=[f"{v:,.0f}" for v in monthly.values], textposition='outside'))
+                    fig.add_trace(go.Bar(x=monthly.index, y=monthly.values, marker_color='#0F4C5C', text=[f"{v:,.0f}" for v in monthly.values], textposition='outside'))
                     fig.update_layout(title=f'إجمالي الرواتب الشهرية - {year}', font=dict(family="Noto Sans Arabic"), height=400, yaxis_tickformat=',')
                     st.plotly_chart(fig, use_container_width=True)
 
@@ -5444,7 +5245,7 @@ def main():
                     ss_clean = ss.dropna(subset=['Min Salary','Max Salary'])
                     fig = go.Figure()
                     fig.add_trace(go.Bar(name='الحد الأدنى', x=ss_clean['Grade'].astype(str), y=ss_clean['Min Salary'], marker_color=CL['s']))
-                    fig.add_trace(go.Bar(name='المتوسط', x=ss_clean['Grade'].astype(str), y=ss_clean['Mid Salary'], marker_color='#F97316'))
+                    fig.add_trace(go.Bar(name='المتوسط', x=ss_clean['Grade'].astype(str), y=ss_clean['Mid Salary'], marker_color='#E36414'))
                     fig.add_trace(go.Bar(name='الحد الأقصى', x=ss_clean['Grade'].astype(str), y=ss_clean['Max Salary'], marker_color=CL['d']))
                     fig.update_layout(title='سلم الرواتب حسب الدرجة', barmode='group', font=dict(family="Noto Sans Arabic"), height=420, yaxis_tickformat=',')
                     st.plotly_chart(fig, use_container_width=True)
@@ -5493,12 +5294,12 @@ def main():
             tc1, tc2 = st.columns(2)
             with tc1:
                 fig = px.pie(tr_df, values='النسبة', names='المكون', title='توزيع Total Rewards', hole=0.4,
-                    color_discrete_sequence=['#F97316','#2A9D8F','#E9C46A','#264653','#F4A261'])
+                    color_discrete_sequence=['#E36414','#2A9D8F','#E9C46A','#264653','#F4A261'])
                 fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380)
                 st.plotly_chart(fig, use_container_width=True)
             with tc2:
                 fig = px.bar(tr_df, x='المكون', y='المبلغ', title='التوزيع بالريال', color='المكون',
-                    color_discrete_sequence=['#F97316','#2A9D8F','#E9C46A','#264653','#F4A261'])
+                    color_discrete_sequence=['#E36414','#2A9D8F','#E9C46A','#264653','#F4A261'])
                 fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380, showlegend=False)
                 st.plotly_chart(fig, use_container_width=True)
             st.dataframe(tr_df, use_container_width=True, hide_index=True)
@@ -5567,7 +5368,7 @@ def main():
             fig = go.Figure()
             fig.add_trace(go.Indicator(mode="gauge+number", value=snap[sal_col_tr].mean(),
                 title={'text': "متوسط الراتب مقارنة بالسوق"},
-                gauge={'axis':{'range':[0, snap[sal_col_tr].quantile(0.95)]}, 'bar':{'color':'#F97316'},
+                gauge={'axis':{'range':[0, snap[sal_col_tr].quantile(0.95)]}, 'bar':{'color':'#E36414'},
                     'steps':[{'range':[0,snap[sal_col_tr].quantile(0.25)],'color':'#E74C3C'},
                         {'range':[snap[sal_col_tr].quantile(0.25),snap[sal_col_tr].quantile(0.75)],'color':'#F39C12'},
                         {'range':[snap[sal_col_tr].quantile(0.75),snap[sal_col_tr].quantile(0.95)],'color':'#27AE60'}]}))
@@ -5590,7 +5391,7 @@ def main():
                     o = io.BytesIO()
                     with pd.ExcelWriter(o, engine='xlsxwriter') as w:
                         wb = w.book
-                        hdr_f = wb.add_format({'bold':True,'font_size':14,'bg_color':'#0E7490','font_color':'white','align':'center','border':1})
+                        hdr_f = wb.add_format({'bold':True,'font_size':14,'bg_color':'#0F4C5C','font_color':'white','align':'center','border':1})
                         num_f = wb.add_format({'num_format':'#,##0.00','border':1})
 
                         # Sheet 1: Dashboard summary
@@ -5930,7 +5731,7 @@ def main():
                         loc_counts = active[loc_col].value_counts().reset_index()
                         loc_counts.columns = [loc_col, 'العدد']
                         fig = px.pie(loc_counts, values='العدد', names=loc_col, title='توزيع الموظفين حسب الموقع',
-                            hole=.35, color_discrete_sequence=['#F97316','#264653','#2A9D8F','#E9C46A','#F4A261'])
+                            hole=.35, color_discrete_sequence=['#E36414','#264653','#2A9D8F','#E9C46A','#F4A261'])
                         fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
                         st.plotly_chart(fig, use_container_width=True)
                     elif nat_col:
@@ -6138,7 +5939,7 @@ def main():
                         ch7, ch8 = st.columns(2)
                         with ch7:
                             fig = px.histogram(df, x='مدة الخدمة (سنوات)', nbins=10,
-                                color_discrete_sequence=['#F97316'], title='توزيع مدة الخدمة للمغادرين')
+                                color_discrete_sequence=['#E36414'], title='توزيع مدة الخدمة للمغادرين')
                             fig.update_layout(height=380, font=dict(family="Noto Sans Arabic"),
                                 xaxis_title='سنوات الخدمة', yaxis_title='عدد الموظفين')
                             st.plotly_chart(fig, use_container_width=True)
@@ -7615,7 +7416,7 @@ def main():
                     with nc2:
                         fig = px.scatter(ndf, x='الفجوة', y='المتدربين', size='المتدربين', color='الأولوية',
                             title='مصفوفة الأولويات (الفجوة × العدد)',
-                            color_discrete_map={'حرج':'#E74C3C','عالي':'#F97316','متوسط':'#F39C12'})
+                            color_discrete_map={'حرج':'#E74C3C','عالي':'#E36414','متوسط':'#F39C12'})
                         fig.update_layout(font=dict(family="Noto Sans Arabic"), height=380)
                         st.plotly_chart(fig, use_container_width=True)
 
@@ -7851,8 +7652,8 @@ def main():
                     wb = w.book
 
                     # Header formats
-                    hdr_fmt = wb.add_format({'bold':True,'font_size':14,'bg_color':'#0E7490','font_color':'white','align':'center','valign':'vcenter','border':1})
-                    sub_fmt = wb.add_format({'bold':True,'font_size':11,'bg_color':'#F97316','font_color':'white','align':'center','border':1})
+                    hdr_fmt = wb.add_format({'bold':True,'font_size':14,'bg_color':'#0F4C5C','font_color':'white','align':'center','valign':'vcenter','border':1})
+                    sub_fmt = wb.add_format({'bold':True,'font_size':11,'bg_color':'#E36414','font_color':'white','align':'center','border':1})
                     col_fmt = wb.add_format({'bold':True,'bg_color':'#264653','font_color':'white','align':'center','border':1,'text_wrap':True})
                     num_fmt = wb.add_format({'num_format':'#,##0','align':'center','border':1})
                     pct_fmt = wb.add_format({'num_format':'0.0%','align':'center','border':1})
@@ -8203,7 +8004,7 @@ def main():
             with ch1:
                 fig = go.Figure()
                 fig.add_trace(go.Bar(x=['الحد الأدنى','المتوسط','الحد الأعلى'],
-                    y=[min_l, mid_l, max_l], marker_color=['#3498DB','#F97316','#264653'],
+                    y=[min_l, mid_l, max_l], marker_color=['#3498DB','#E36414','#264653'],
                     text=[f"{min_l:,}",f"{mid_l:,}",f"{max_l:,}"], textposition='outside'))
                 fig.update_layout(title=f'نطاق الراتب ({cur})', height=380,
                     font=dict(family="Noto Sans Arabic"), yaxis_tickformat=',')
@@ -8602,7 +8403,7 @@ def main():
                             nv = [round(r['mid_sar']/mx*100) for r in results]
                             fig = go.Figure()
                             fig.add_trace(go.Scatterpolar(r=nv+[nv[0]], theta=nm+[nm[0]],
-                                fill='toself', line_color='#F97316', fillcolor='rgba(227,100,20,0.2)'))
+                                fill='toself', line_color='#E36414', fillcolor='rgba(227,100,20,0.2)'))
                             fig.update_layout(polar=dict(radialaxis=dict(range=[0,100])),
                                 title='المقارنة النسبية', height=420, font=dict(family="Noto Sans Arabic"))
                             st.plotly_chart(fig, use_container_width=True)
@@ -9061,7 +8862,7 @@ def main():
                         vals = [s_tech, s_prof, s_lead, s_soft, s_cert, s_exp, s_edu, s_lang]
                         fig = go.Figure()
                         fig.add_trace(go.Scatterpolar(r=vals+[vals[0]], theta=dims+[dims[0]],
-                            fill='toself', line_color='#F97316', fillcolor='rgba(227,100,20,0.15)', name='المرشح'))
+                            fill='toself', line_color='#E36414', fillcolor='rgba(227,100,20,0.15)', name='المرشح'))
                         # Benchmark line
                         bench = [60,60,50,55,40,50,65,50]
                         fig.add_trace(go.Scatterpolar(r=bench+[bench[0]], theta=dims+[dims[0]],
@@ -9074,7 +8875,7 @@ def main():
                         fig = go.Figure(go.Indicator(mode="gauge+number+delta", value=s_overall,
                             title={'text':'الدرجة النهائية','font':{'size':16}},
                             delta={'reference':60,'increasing':{'color':'#27AE60'},'decreasing':{'color':'#E74C3C'}},
-                            gauge={'axis':{'range':[0,100],'tickwidth':1},'bar':{'color':'#F97316'},
+                            gauge={'axis':{'range':[0,100],'tickwidth':1},'bar':{'color':'#E36414'},
                                 'steps':[{'range':[0,30],'color':'#FADBD8'},{'range':[30,50],'color':'#FCF3CF'},
                                     {'range':[50,70],'color':'#D5F5E3'},{'range':[70,100],'color':'#ABEBC6'}],
                                 'threshold':{'line':{'color':'red','width':4},'thickness':0.75,'value':60}}))
@@ -9087,7 +8888,7 @@ def main():
                         if found_skills:
                             sk_data = pd.DataFrame([{'المهارة':n,'الوزن':info['w'],'التصنيف':info['cat']}
                                 for n,info in sorted(found_skills.items(), key=lambda x: x[1]['w'], reverse=True)[:15]])
-                            color_map = {'تقنية':'#3498DB','مهنية':'#F97316','قيادية':'#27AE60','شخصية':'#9B59B6','شهادة':'#F39C12','لغة':'#1ABC9C'}
+                            color_map = {'تقنية':'#3498DB','مهنية':'#E36414','قيادية':'#27AE60','شخصية':'#9B59B6','شهادة':'#F39C12','لغة':'#1ABC9C'}
                             fig = px.bar(sk_data, y='المهارة', x='الوزن', color='التصنيف', orientation='h',
                                 color_discrete_map=color_map, text_auto=True)
                             fig.update_layout(title='أقوى 15 مهارة حسب الوزن', height=400, yaxis={'categoryorder':'total ascending'},
@@ -9097,7 +8898,7 @@ def main():
                     with ch4:
                         score_data = pd.DataFrame({'البُعد': dims, 'الدرجة': vals, 'المعيار': bench})
                         fig = go.Figure()
-                        fig.add_trace(go.Bar(name='المرشح', x=dims, y=vals, marker_color='#F97316', text=vals, textposition='outside'))
+                        fig.add_trace(go.Bar(name='المرشح', x=dims, y=vals, marker_color='#E36414', text=vals, textposition='outside'))
                         fig.add_trace(go.Bar(name='المعيار', x=dims, y=bench, marker_color='#BDC3C7', text=bench, textposition='outside'))
                         fig.update_layout(title='المرشح مقابل المعيار', barmode='group', height=400,
                             font=dict(family="Noto Sans Arabic"), legend=dict(orientation='h',y=-0.15))
@@ -9344,7 +9145,7 @@ def main():
                         final = ai_scores[-1] if ai_scores else 0
                         fig = go.Figure(go.Indicator(mode="gauge+number", value=final,
                             title={'text':'الحكم النهائي (AI)'},
-                            gauge={'axis':{'range':[0,100]},'bar':{'color':'#F97316'},
+                            gauge={'axis':{'range':[0,100]},'bar':{'color':'#E36414'},
                                 'steps':[{'range':[0,40],'color':'#FADBD8'},{'range':[40,60],'color':'#FCF3CF'},
                                     {'range':[60,80],'color':'#D5F5E3'},{'range':[80,100],'color':'#ABEBC6'}]}))
                         fig.update_layout(height=350)
@@ -9932,7 +9733,7 @@ def main():
             if plan_rows:
                 fig = px.bar(pd.DataFrame(plan_rows), x='الاسم', y='التقدم %', color='المرحلة',
                     title='تقدم الموظفين الجدد في Onboarding',
-                    color_discrete_map={'قبل المباشرة':'#95A5A6','30 يوم':'#F97316','60 يوم':'#E9C46A','90 يوم':'#27AE60','بعد التجربة':'#2980B9'})
+                    color_discrete_map={'قبل المباشرة':'#95A5A6','30 يوم':'#E36414','60 يوم':'#E9C46A','90 يوم':'#27AE60','بعد التجربة':'#2980B9'})
                 fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
                 st.plotly_chart(fig, use_container_width=True)
 
@@ -10001,7 +9802,7 @@ def main():
                         except: pass
                     fig = px.bar(x=list(phase_counts.keys()), y=list(phase_counts.values()),
                         title='توزيع حسب المرحلة', color=list(phase_counts.keys()),
-                        color_discrete_map={"قبل المباشرة":"#95A5A6","30 يوم":"#F97316","60 يوم":"#E9C46A","90 يوم":"#27AE60","بعد التجربة":"#2980B9"})
+                        color_discrete_map={"قبل المباشرة":"#95A5A6","30 يوم":"#E36414","60 يوم":"#E9C46A","90 يوم":"#27AE60","بعد التجربة":"#2980B9"})
                     fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350, showlegend=False)
                     st.plotly_chart(fig, use_container_width=True)
 
@@ -10107,7 +9908,7 @@ def main():
                     categories = list(avg_scores.keys())
                     values = list(avg_scores.values()) + [list(avg_scores.values())[0]]
                     fig.add_trace(go.Scatterpolar(r=values, theta=categories + [categories[0]],
-                        fill='toself', line=dict(color='#F97316'), fillcolor='rgba(227,100,20,0.2)', name='المتوسط'))
+                        fill='toself', line=dict(color='#E36414'), fillcolor='rgba(227,100,20,0.2)', name='المتوسط'))
                     fig.update_layout(polar=dict(radialaxis=dict(range=[0,5])),
                         title='متوسط التقييمات (Radar)', font=dict(family="Noto Sans Arabic"), height=400)
                     st.plotly_chart(fig, use_container_width=True)
@@ -10197,14 +9998,14 @@ def main():
 
                 # Build values HTML
                 vals_html = ""
-                colors = ['#F97316','#264653','#2A9D8F','#E9C46A','#F4A261']
+                colors = ['#E36414','#264653','#2A9D8F','#E9C46A','#F4A261']
                 for i, v in enumerate(ci.get('values',[])):
-                    vals_html += f"<div style='background:white;border-radius:12px;padding:20px;border-top:4px solid {colors[i%5]};text-align:center'><h3 style='color:{colors[i%5]};margin:0'>{v['name_ar']}</h3><p style='font-size:0.85em;color:#0E7490;font-weight:600;margin:5px 0'>{v['name']}</p><p style='color:#555;font-size:0.85em;margin:0'>{v['desc']}</p></div>"
+                    vals_html += f"<div style='background:white;border-radius:12px;padding:20px;border-top:4px solid {colors[i%5]};text-align:center'><h3 style='color:{colors[i%5]};margin:0'>{v['name_ar']}</h3><p style='font-size:0.85em;color:#0F4C5C;font-weight:600;margin:5px 0'>{v['name']}</p><p style='color:#555;font-size:0.85em;margin:0'>{v['desc']}</p></div>"
 
                 # Build products HTML
                 prods_html = ""
                 for p in ci.get('products',[]):
-                    prods_html += f"<div style='background:white;border-radius:10px;padding:18px;border-right:4px solid #E36414'><h4 style='color:#0E7490;margin:0 0 5px'>{p['name']}</h4><p style='color:#555;margin:0;font-size:0.9em'>{p['desc']}</p></div>"
+                    prods_html += f"<div style='background:white;border-radius:10px;padding:18px;border-right:4px solid #E36414'><h4 style='color:#0F4C5C;margin:0 0 5px'>{p['name']}</h4><p style='color:#555;margin:0;font-size:0.9em'>{p['desc']}</p></div>"
 
                 # Build milestones HTML
                 miles_html = ""
@@ -10240,7 +10041,7 @@ body{{font-family:'Noto Sans Arabic',sans-serif;background:#0a0a1a;color:white;o
 .slide.active{{display:flex}}
 .slide::before{{content:'';position:absolute;top:0;left:0;right:0;bottom:0;z-index:0}}
 .slide>*{{position:relative;z-index:1}}
-.s-welcome::before{{background:linear-gradient(135deg,#0C4A6E,#083344)}}
+.s-welcome::before{{background:linear-gradient(135deg,#0F4C5C,#1A1A2E)}}
 .s-who::before{{background:linear-gradient(135deg,#1A1A2E,#264653)}}
 .s-vision::before{{background:linear-gradient(135deg,#264653,#0F4C5C)}}
 .s-values::before{{background:linear-gradient(135deg,#f8f9fa,#e9ecef);}} .s-values *{{color:#333}}
@@ -10250,7 +10051,7 @@ body{{font-family:'Noto Sans Arabic',sans-serif;background:#0a0a1a;color:white;o
 .s-team::before{{background:linear-gradient(135deg,#E36414,#E9C46A);}}
 .s-plan::before{{background:linear-gradient(135deg,#f8f9fa,#e9ecef);}} .s-plan *{{color:#333}}
 .s-policies::before{{background:linear-gradient(135deg,#264653,#0F4C5C)}}
-.s-contact::before{{background:linear-gradient(135deg,#0C4A6E,#083344)}}
+.s-contact::before{{background:linear-gradient(135deg,#0F4C5C,#1A1A2E)}}
 .logo{{width:70px;height:70px;background:linear-gradient(135deg,#E36414,#E9C46A);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;margin-bottom:20px}}
 h1{{font-size:2.8em;margin-bottom:10px}} h2{{font-size:2em;margin-bottom:15px}} h3{{margin-bottom:8px}}
 .subtitle{{opacity:0.7;font-size:1.1em;margin-bottom:30px}}
@@ -10278,7 +10079,7 @@ h1{{font-size:2.8em;margin-bottom:10px}} h2{{font-size:2em;margin-bottom:15px}} 
 
 {"<div class='slide s-vision'><h2>🎯 Our Purpose, Mission & Vision</h2><div style='margin:20px 0'><div style='background:rgba(255,255,255,0.1);padding:20px;border-radius:12px;margin:12px 0;border-right:4px solid #E9C46A'><h3 style='color:#E9C46A'>Purpose (Why)</h3><p>" + ci.get('purpose','') + "</p></div><div style='background:rgba(255,255,255,0.1);padding:20px;border-radius:12px;margin:12px 0;border-right:4px solid #E36414'><h3 style='color:#E36414'>Mission (What)</h3><p>" + ci.get('mission','') + "</p></div><div style='background:rgba(255,255,255,0.1);padding:20px;border-radius:12px;margin:12px 0;border-right:4px solid #2A9D8F'><h3 style='color:#2A9D8F'>Vision (Where)</h3><p>" + ci.get('vision','') + "</p></div></div></div>" if "رؤيتنا ورسالتنا" in slides_sel else ""}
 
-{"<div class='slide s-values'><h2 style='color:#0E7490'>💎 Our Values</h2><div class='grid5'>" + vals_html + "</div></div>" if "قيمنا" in slides_sel else ""}
+{"<div class='slide s-values'><h2 style='color:#0F4C5C'>💎 Our Values</h2><div class='grid5'>" + vals_html + "</div></div>" if "قيمنا" in slides_sel else ""}
 
 {"<div class='slide s-products'><h2>📦 Our Products</h2><div class='grid2' style='gap:12px'>" + prods_html + "</div></div>" if "منتجاتنا" in slides_sel else ""}
 
@@ -10288,7 +10089,7 @@ h1{{font-size:2.8em;margin-bottom:10px}} h2{{font-size:2em;margin-bottom:15px}} 
 
 {"<div class='slide s-team'><h2>👥 Your Team</h2><div class='grid2'><div class='stat'><div class='lbl'>Department</div><div class='num' style='font-size:1.3em'>" + plan['dept'] + "</div></div><div class='stat'><div class='lbl'>Manager</div><div class='num' style='font-size:1.3em'>" + plan.get('manager','') + "</div></div><div class='stat'><div class='lbl'>Start Date</div><div class='num' style='font-size:1.3em'>" + plan['start_date'] + "</div></div><div class='stat'><div class='lbl'>Type</div><div class='num' style='font-size:1.3em'>" + plan.get('type','Full-Time') + "</div></div></div></div>" if "فريقك" in slides_sel else ""}
 
-{"<div class='slide s-plan'><h2 style='color:#0E7490'>📋 Your 30/60/90 Day Plan</h2><div style='max-height:70vh;overflow-y:auto'>" + tasks_html + "</div></div>" if "خطة 30/60/90" in slides_sel else ""}
+{"<div class='slide s-plan'><h2 style='color:#0F4C5C'>📋 Your 30/60/90 Day Plan</h2><div style='max-height:70vh;overflow-y:auto'>" + tasks_html + "</div></div>" if "خطة 30/60/90" in slides_sel else ""}
 
 {"<div class='slide s-policies'><h2>📌 Key Policies</h2><div class='grid2'>" + "".join([f"<div class='stat'><div class='lbl'>{k}</div><div style='font-size:1em;margin-top:6px'>{v}</div></div>" for k,v in ci.get('work_policies',{}).items()]) + "</div></div>" if "سياسات" in slides_sel else ""}
 
@@ -11326,9 +11127,9 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                 st.markdown("---")
                 for idx, msg in enumerate(st.session_state.labor_chat):
                     if msg['role'] == 'user':
-                        st.markdown(f"<div class='chat-user'>👤 {msg['content']}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='background:#1e3a5f;color:white;padding:12px;border-radius:10px;margin:8px 0'>👤 {msg['content']}</div>", unsafe_allow_html=True)
                     else:
-                        st.markdown(f"<div class='chat-ai-legal'>⚖️ {msg['content']}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='background:#f0f4f8;color:#333;padding:12px;border-radius:10px;margin:8px 0;border-right:4px solid #0F4C5C'>⚖️ {msg['content']}</div>", unsafe_allow_html=True)
                         fc1, fc2, fc3 = st.columns([1,1,8])
                         q_text = st.session_state.labor_chat[idx-1]['content'] if idx > 0 else ""
                         q_hash = hashlib.md5(q_text.encode()).hexdigest()[:10] if q_text else ""
@@ -11485,9 +11286,9 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                 st.markdown("---")
                 for idx, msg in enumerate(st.session_state.hr_chat):
                     if msg['role'] == 'user':
-                        st.markdown(f"<div class='chat-user'>👤 {msg['content']}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='background:#1e3a5f;color:white;padding:12px;border-radius:10px;margin:8px 0'>👤 {msg['content']}</div>", unsafe_allow_html=True)
                     else:
-                        st.markdown(f"<div class='chat-ai-hr'>📚 {msg['content']}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='background:#f0faf5;color:#333;padding:12px;border-radius:10px;margin:8px 0;border-right:4px solid #2A9D8F'>📚 {msg['content']}</div>", unsafe_allow_html=True)
                         fc1, fc2, fc3 = st.columns([1,1,8])
                         q_text = st.session_state.hr_chat[idx-1]['content'] if idx > 0 else ""
                         q_hash = hashlib.md5(q_text.encode()).hexdigest()[:10] if q_text else ""
@@ -11859,7 +11660,7 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                     daily[day] = daily.get(day, 0) + 1
                 if daily:
                     fig = px.bar(x=list(daily.keys()), y=list(daily.values()),
-                        title='📈 استخدام المستشار الذكي يومياً', color_discrete_sequence=['#0E7490'])
+                        title='📈 استخدام المستشار الذكي يومياً', color_discrete_sequence=['#0F4C5C'])
                     fig.update_layout(font=dict(family="Noto Sans Arabic"), height=300)
                     st.plotly_chart(fig, use_container_width=True)
 
@@ -12138,7 +11939,7 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
             dims = list(scores.keys())
             vals = list(scores.values()) + [list(scores.values())[0]]
             fig.add_trace(go.Scatterpolar(r=vals, theta=dims + [dims[0]], fill='toself',
-                line=dict(color='#F97316'), fillcolor='rgba(227,100,20,0.2)', name='التقييم الحالي'))
+                line=dict(color='#E36414'), fillcolor='rgba(227,100,20,0.2)', name='التقييم الحالي'))
             # Add benchmark
             fig.add_trace(go.Scatterpolar(r=[4]*len(dims)+[4], theta=dims+[dims[0]], fill='toself',
                 line=dict(color='#2A9D8F', dash='dash'), fillcolor='rgba(42,157,143,0.1)', name='المستوى المستهدف'))
@@ -12202,7 +12003,7 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                     st.plotly_chart(fig, use_container_width=True)
                 with oc2:
                     fig = px.funnel(dc.head(10), x='العدد', y=dept_col_od, title='حجم الأقسام (Funnel)',
-                        color_discrete_sequence=['#0E7490'])
+                        color_discrete_sequence=['#0F4C5C'])
                     fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
                     st.plotly_chart(fig, use_container_width=True)
 
@@ -12393,14 +12194,14 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
             bc1, bc2 = st.columns(2)
             with bc1:
                 fig = go.Figure()
-                fig.add_trace(go.Bar(name='القيمة الفعلية', x=benchmarks['المؤشر'], y=benchmarks['القيمة'], marker_color='#F97316'))
+                fig.add_trace(go.Bar(name='القيمة الفعلية', x=benchmarks['المؤشر'], y=benchmarks['القيمة'], marker_color='#E36414'))
                 fig.add_trace(go.Bar(name='المعيار العالمي', x=benchmarks['المؤشر'], y=benchmarks['المعيار العالمي'], marker_color='#2A9D8F'))
                 fig.update_layout(title='المؤشرات مقارنة بالمعايير العالمية', barmode='group', font=dict(family="Noto Sans Arabic"), height=400)
                 st.plotly_chart(fig, use_container_width=True)
             with bc2:
                 fig = px.pie(values=[m_voluntary, m_separations-m_voluntary, m_end_count],
                     names=['استقالة','إنهاء','باقين'], title='توزيع حالات الموظفين', hole=0.4,
-                    color_discrete_sequence=['#F97316','#E74C3C','#2A9D8F'])
+                    color_discrete_sequence=['#E36414','#E74C3C','#2A9D8F'])
                 fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
                 st.plotly_chart(fig, use_container_width=True)
 
@@ -12530,7 +12331,7 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
 
                     fig = go.Figure()
                     fig.add_trace(go.Bar(name='الحالي', x=['شهري','سنوي'], y=[current_payroll, current_payroll*12], marker_color='#2A9D8F'))
-                    fig.add_trace(go.Bar(name=f'بعد زيادة {pct_increase}%', x=['شهري','سنوي'], y=[new_payroll, new_payroll*12], marker_color='#F97316'))
+                    fig.add_trace(go.Bar(name=f'بعد زيادة {pct_increase}%', x=['شهري','سنوي'], y=[new_payroll, new_payroll*12], marker_color='#E36414'))
                     fig.update_layout(title='أثر الزيادة على الرواتب', barmode='group', font=dict(family="Noto Sans Arabic"), height=400, yaxis_tickformat=',')
                     st.plotly_chart(fig, use_container_width=True)
 
@@ -12637,7 +12438,7 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                     st.dataframe(risk_df.head(20), use_container_width=True, hide_index=True)
 
                     fig = px.histogram(risk_df, x='مؤشر الخطر', nbins=10, title='توزيع مؤشر خطر الاستقالة',
-                        color_discrete_sequence=['#0E7490'])
+                        color_discrete_sequence=['#0F4C5C'])
                     fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350)
                     st.plotly_chart(fig, use_container_width=True)
 
@@ -12697,7 +12498,7 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                                 # Simple quantile-based clustering
                                 clean['_Cluster'] = pd.qcut(scaled[:,0], q=3, labels=['مجموعة أ','مجموعة ب','مجموعة ج'], duplicates='drop')
                                 fig = px.scatter(clean, x=num_cols[0], y=num_cols[1] if len(num_cols)>1 else num_cols[0],
-                                    color='_Cluster', title='تصنيف الموظفين', color_discrete_sequence=['#F97316','#2A9D8F','#264653'])
+                                    color='_Cluster', title='تصنيف الموظفين', color_discrete_sequence=['#E36414','#2A9D8F','#264653'])
                                 fig.update_layout(font=dict(family="Noto Sans Arabic"), height=400)
                                 st.plotly_chart(fig, use_container_width=True)
                                 export_widget(clean, "تصنيف_الموظفين", "clus1")
@@ -12767,7 +12568,7 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                     st.plotly_chart(fig, use_container_width=True)
                 with sc2:
                     fig = px.histogram(res_df, x='الدرجة', nbins=10, title='توزيع درجات المشاعر',
-                        color_discrete_sequence=['#0E7490'])
+                        color_discrete_sequence=['#0F4C5C'])
                     fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350)
                     st.plotly_chart(fig, use_container_width=True)
 
@@ -13119,7 +12920,7 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
 
                         # Chart 2: Salary distribution
                         if sal_col:
-                            fig = px.histogram(emp, x=sal_col, nbins=20, color_discrete_sequence=['#0E7490'])
+                            fig = px.histogram(emp, x=sal_col, nbins=20, color_discrete_sequence=['#0F4C5C'])
                             fig.update_layout(title='Salary Distribution', template='plotly_dark',
                                 paper_bgcolor='#1e1e2e', plot_bgcolor='#1e1e2e', height=350,
                                 font=dict(color='white'), margin=dict(l=10,r=10,t=40,b=10))
@@ -13224,7 +13025,7 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 *{{margin:0;padding:0;box-sizing:border-box}}
 body{{font-family:'Inter',sans-serif;background:white;color:#e0e0e0;padding:0}}
-.header{{background:linear-gradient(135deg,#0C4A6E,#083344);padding:30px 40px;border-bottom:3px solid #E36414}}
+.header{{background:linear-gradient(135deg,#0F4C5C,#1A1A2E);padding:30px 40px;border-bottom:3px solid #E36414}}
 .header h1{{font-size:1.8em;color:white;margin-bottom:5px}}
 .header .sub{{color:rgba(255,255,255,0.6);font-size:0.9em}}
 .header .logo{{float:right;width:50px;height:50px;background:linear-gradient(135deg,#E36414,#E9C46A);border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800;color:white;font-size:18px}}
@@ -13251,7 +13052,7 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
 .dot{{width:6px;height:6px;background:#2A9D8F;border-radius:50%;margin-top:8px;flex-shrink:0}}
 .insight strong{{color:#E9C46A}}
 .footer{{text-align:center;padding:20px;color:rgba(255,255,255,0.3);font-size:0.75em;border-top:1px solid rgba(255,255,255,0.05);margin-top:30px}}
-@media print{{body{{background:white;color:#333}} .kpi{{border-color:#0E7490}} .kpi .value{{color:#0E7490}} .section h2{{color:#0E7490}} th{{color:#0E7490}}}}
+@media print{{body{{background:white;color:#333}} .kpi{{border-color:#0F4C5C}} .kpi .value{{color:#0F4C5C}} .section h2{{color:#0F4C5C}} th{{color:#0F4C5C}}}}
 </style>
 </head>
 <body>
@@ -13302,11 +13103,11 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                             pdf_html = pdf_html.replace("color:'#e0e0e0'","color:'#333'").replace("color:#e0e0e0","color:#333")
                             # Add print CSS
                             pdf_css = """<style>@media print{body{background:white!important;color:#333!important}
-                            .kpi{border-color:#0E7490!important;background:#f8f9fa!important}
-                            .kpi .value{color:#0E7490!important} .kpi .label{color:#555!important}
+                            .kpi{border-color:#0F4C5C!important;background:#f8f9fa!important}
+                            .kpi .value{color:#0F4C5C!important} .kpi .label{color:#555!important}
                             .header{background:#0F4C5C!important;-webkit-print-color-adjust:exact}
                             .chart{break-inside:avoid;page-break-inside:avoid}
-                            .section h2{color:#0E7490!important}}</style>"""
+                            .section h2{color:#0F4C5C!important}}</style>"""
                             pdf_html = pdf_html.replace('</head>', pdf_css + '</head>')
                             # Auto-print script
                             pdf_html = pdf_html.replace('</body>', '</body>')
@@ -13320,7 +13121,7 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                             ox = io.BytesIO()
                             with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
                                 wb = w.book
-                                hdr_f = wb.add_format({'bold':True,'font_size':12,'bg_color':'#0E7490','font_color':'white','align':'center','border':1})
+                                hdr_f = wb.add_format({'bold':True,'font_size':12,'bg_color':'#0F4C5C','font_color':'white','align':'center','border':1})
                                 sub_f = wb.add_format({'bold':True,'font_size':10,'bg_color':'#264653','font_color':'white','align':'center','border':1})
                                 num_f = wb.add_format({'num_format':'#,##0.00','border':1,'align':'center'})
                                 pct_f = wb.add_format({'num_format':'0.0%','border':1,'align':'center'})
@@ -13329,7 +13130,7 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                                 # ===== Sheet 1: Dashboard =====
                                 ws1 = wb.add_worksheet('Dashboard')
                                 ws1.set_column('A:A', 25); ws1.set_column('B:G', 18)
-                                ws1.set_tab_color('#F97316')
+                                ws1.set_tab_color('#E36414')
                                 ws1.merge_range('A1:F1', rpt_title, hdr_f)
                                 ws1.merge_range('A2:F2', f'{rpt_company} | {rpt_period} | {datetime.now().strftime("%Y-%m-%d")}', sub_f)
 
@@ -13355,7 +13156,7 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                                     # Chart 1: Dept headcount bar
                                     chart1 = wb.add_chart({'type':'bar'})
                                     chart1.add_series({'name':'Headcount','categories':['Dashboard',7,0,6+len(dept_counts),0],
-                                        'values':['Dashboard',7,1,6+len(dept_counts),1],'fill':{'color':'#0E7490'}})
+                                        'values':['Dashboard',7,1,6+len(dept_counts),1],'fill':{'color':'#0F4C5C'}})
                                     chart1.set_title({'name':'Headcount by Department'})
                                     chart1.set_style(10); chart1.set_size({'width':520,'height':320})
                                     chart1.set_legend({'none':True})
@@ -13365,7 +13166,7 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                                     if sal_col:
                                         chart2 = wb.add_chart({'type':'column'})
                                         chart2.add_series({'name':'Avg Salary','categories':['Dashboard',7,0,6+len(dept_counts),0],
-                                            'values':['Dashboard',7,2,6+len(dept_counts),2],'fill':{'color':'#083344'}})
+                                            'values':['Dashboard',7,2,6+len(dept_counts),2],'fill':{'color':'#1A1A2E'}})
                                         chart2.set_title({'name':'Average Salary by Department'})
                                         chart2.set_style(10); chart2.set_size({'width':520,'height':320})
                                         chart2.set_legend({'none':True})
@@ -13424,7 +13225,7 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                                 # Salary histogram data
                                 if sal_col:
                                     ws3 = wb.add_worksheet('Salary Analysis')
-                                    ws3.set_tab_color('#F97316')
+                                    ws3.set_tab_color('#E36414')
                                     sal_stats = [('Average', emp[sal_col].mean()), ('Median', emp[sal_col].median()),
                                         ('Min', emp[sal_col].min()), ('Max', emp[sal_col].max()),
                                         ('Std Dev', emp[sal_col].std()), ('Total', emp[sal_col].sum())]
@@ -13441,7 +13242,7 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                                         ws3.write(9+j, 1, cnt, wb.add_format({'border':1,'align':'center'}))
                                     chart6 = wb.add_chart({'type':'column'})
                                     chart6.add_series({'name':'Distribution','categories':['Salary Analysis',9,0,8+len(bands),0],
-                                        'values':['Salary Analysis',9,1,8+len(bands),1],'fill':{'color':'#083344'}})
+                                        'values':['Salary Analysis',9,1,8+len(bands),1],'fill':{'color':'#1A1A2E'}})
                                     chart6.set_title({'name':'Salary Distribution'})
                                     chart6.set_size({'width':600,'height':350}); chart6.set_legend({'none':True})
                                     ws3.insert_chart('D1', chart6)
@@ -13458,7 +13259,7 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                                             ws3.write(r+1+j, 2, round(row['mean'],0), num_f)
                                             ws3.write(r+1+j, 3, round(row['max'],0), num_f)
                                         chart7 = wb.add_chart({'type':'column'})
-                                        for ci, (col_name, color) in enumerate([('Min','#3498DB'),('Avg','#F97316'),('Max','#27AE60')]):
+                                        for ci, (col_name, color) in enumerate([('Min','#3498DB'),('Avg','#E36414'),('Max','#27AE60')]):
                                             chart7.add_series({'name':col_name,'categories':['Salary Analysis',r+1,0,r+len(dept_sal),0],
                                                 'values':['Salary Analysis',r+1,1+ci,r+len(dept_sal),1+ci],'fill':{'color':color}})
                                         chart7.set_title({'name':'Salary Range by Department (Min/Avg/Max)'})
@@ -14278,7 +14079,7 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                     save_test_result(result)
                     st.markdown("---")
                     type_info = MBTI_TYPES.get(mbti_type, {"name": mbti_type, "desc": "", "strengths": "", "careers": ""})
-                    st.markdown(f"<div style='text-align:center;padding:20px;background:linear-gradient(135deg,#0C4A6E,#083344);border-radius:14px;color:white;margin-bottom:20px'><h1 style='color:white;font-size:48px;margin:0'>{mbti_type}</h1><h3 style='color:#E9C46A;margin:8px 0'>{type_info['name']}</h3><p style='opacity:.8;margin:0'>{type_info['desc']}</p></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='text-align:center;padding:20px;background:linear-gradient(135deg,#0F4C5C,#1A1A2E);border-radius:14px;color:white;margin-bottom:20px'><h1 style='color:white;font-size:48px;margin:0'>{mbti_type}</h1><h3 style='color:#E9C46A;margin:8px 0'>{type_info['name']}</h3><p style='opacity:.8;margin:0'>{type_info['desc']}</p></div>", unsafe_allow_html=True)
                     # Dimension bars
                     for dim_pair in ["EI","SN","TF","JP"]:
                         a, b = dim_pair[0], dim_pair[1]
