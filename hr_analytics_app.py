@@ -10590,25 +10590,25 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                         # Search KB for relevant reference material
                         kb_ref = search_kb(pending_q, LABOR_KB, max_results=2)
 
-                        sys_p = f"""أنت مستشار قانوني سعودي متخصص في نظام العمل المعدّل 2025.
+                        sys_p = "أنت مستشار قانوني سعودي. أجب حصرياً من المرجع المرفق مع السؤال. لا تضف معلومات من خارجه. أجب بنفس لغة السؤال. اذكر رقم المادة."
 
-اقرأ السؤال بتمعّن. افهم مَن يسأل وماذا حصل له. ثم أجب من المعلومات المرجعية أدناه.
+                        # Put reference IN the user message so model sees it last
+                        if kb_ref:
+                            user_msg = f"""السؤال: {pending_q}
 
-{f'معلومات مرجعية من نظام العمل:{chr(10)}{kb_ref}' if kb_ref else 'لا توجد معلومات مرجعية محددة. أجب من معرفتك بنظام العمل السعودي.'}
+المرجع القانوني (أجب منه فقط):
+{kb_ref}
 
-تعليمات:
-- أجب بإيجاز ودقة بناءً على المعلومات المرجعية أعلاه
-- اذكر رقم المادة مع كل حكم
-- لا تختلق مواد أو أرقام
-- إذا لم تجد الإجابة في المرجع اكتب "يحتاج مراجعة النص الرسمي"
-- أجب بنفس لغة السؤال"""
+أجب على السؤال أعلاه بناءً على المرجع القانوني فقط. لا تذكر معلومات غير موجودة في المرجع."""
+                        else:
+                            user_msg = f"السؤال: {pending_q}\n\nلا يوجد مرجع محدد. أجب من معرفتك بنظام العمل السعودي المعدّل 2025 مع ذكر أرقام المواد."
 
                         # Inject learning from past feedback
                         learn_ctx = get_learned_context(pending_q, "legal")
                         if learn_ctx:
                             sys_p += "\n" + learn_ctx
 
-                        response, error = call_ai_api(sys_p, f"السؤال: {pending_q}", model_type="labor_law")
+                        response, error = call_ai_api(sys_p, user_msg, model_type="labor_law")
                         if response and len(response) > 20:
                             response = verify_and_correct_response(response, "legal")
                             auto_learn_from_answer(pending_q, response, "legal")
@@ -10700,27 +10700,26 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                         except: pass
 
                         ref_text = ""
-                        if kb_ref: ref_text += f"معلومات مرجعية:\n{kb_ref}\n"
-                        if rag_ctx: ref_text += f"\nمرجع إضافي:\n{rag_ctx[:1000]}\n"
+                        if kb_ref: ref_text += kb_ref
+                        if rag_ctx: ref_text += "\n" + rag_ctx[:1000]
 
-                        sys_p = f"""أنت مستشار موارد بشرية خبير (PHRi/SPHRi/SHRM/CIPD/APTD).
+                        sys_p = "أنت مستشار موارد بشرية خبير (PHRi/SPHRi/SHRM/CIPD/APTD). أجب حصرياً من المرجع المرفق. لا تذكر مواد قانونية. أجب بنفس لغة السؤال."
 
-اقرأ السؤال بتمعّن. افهم ما يحتاجه السائل. ثم أجب من المعلومات المرجعية أدناه.
+                        if ref_text:
+                            user_msg = f"""السؤال: {pending_q}
 
-{ref_text if ref_text else 'لا توجد معلومات مرجعية محددة.'}
+المرجع المهني (أجب منه فقط):
+{ref_text}
 
-تعليمات:
-- أجب بإيجاز مع ذكر الإطار المنهجي
-- لا تذكر مواد قانونية
-- لا تختلق مصطلحات
-- أجب بنفس لغة السؤال"""
+أجب على السؤال بناءً على المرجع أعلاه فقط."""
+                        else:
+                            user_msg = f"السؤال: {pending_q}\n\nأجب من معرفتك بأطر PHRi/SHRM/CIPD/APTD."
 
-                        # Inject learning from past feedback
                         learn_ctx = get_learned_context(pending_q, "hr")
                         if learn_ctx:
                             sys_p += "\n" + learn_ctx
 
-                        response, error = call_ai_api(sys_p, f"السؤال: {pending_q}", model_type="hr")
+                        response, error = call_ai_api(sys_p, user_msg, model_type="hr")
                         if response and len(response) > 20:
                             auto_learn_from_answer(pending_q, response, "hr")
                             st.session_state.hr_chat = [{"role":"user","content":pending_q},{"role":"assistant","content":response}]
