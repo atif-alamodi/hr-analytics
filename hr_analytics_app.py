@@ -642,7 +642,7 @@ def _init_knowledge():
 def _init_learning():
     return LearningSystem()
 
-st.set_page_config(page_title="تحليلات HR | رسال الود", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="تحليلات HR | رسال الود", page_icon="hr_favicon.png", layout="wide", initial_sidebar_state="expanded")
 
 # ===== DATABASE LAYER (Cloud + Local) =====
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hr_personality.db")
