@@ -4453,10 +4453,80 @@ def main():
         data = sal_df if len(sal_df)>0 else emp
         snap = sal_snapshot if len(sal_snapshot)>0 else (data if len(data)>0 else pd.DataFrame())
 
-        # Auto-detect columns for Total Rewards
-        sal_col_tr = next((c for c in snap.select_dtypes('number').columns if any(x in c.lower() for x in ['gross','إجمالي','total sal','net'])), None) if len(snap)>0 else None
-        basic_col_tr = next((c for c in snap.select_dtypes('number').columns if any(x in c.lower() for x in ['basic','أساسي','base'])), None) if len(snap)>0 else None
-        dept_col_tr = next((c for c in snap.columns if any(x in c.lower() for x in ['dept','قسم','department','القطاع'])), None) if len(snap)>0 else None
+        # ============================================================
+        # COMPREHENSIVE COLUMN DETECTION for Total Rewards
+        # Uses find_col() with 50+ patterns to match any uploaded file
+        # ============================================================
+        def tr_find_col(*keywords):
+            """Find column by flexible keyword matching (case-insensitive, partial)."""
+            if len(snap) == 0: return None
+            for c in snap.columns:
+                cl = c.lower().strip()
+                if any(k in cl for k in keywords): return c
+            return None
+
+        def tr_find_num_col(*keywords):
+            """Find numeric column by flexible keyword matching."""
+            if len(snap) == 0: return None
+            for c in snap.select_dtypes('number').columns:
+                cl = c.lower().strip()
+                if any(k in cl for k in keywords): return c
+            return None
+
+        # --- Salary columns ---
+        sal_col_tr = tr_find_num_col('gross','إجمالي','total sal','net sal','الراتب الإجمالي','إجمالي الراتب','salary','راتب','أجر','الراتب')
+        basic_col_tr = tr_find_num_col('basic','أساسي','base','الراتب الأساسي','الأساسي')
+        net_col_tr = tr_find_num_col('net','صافي','net sal','صافي الراتب','الصافي')
+        housing_col_tr = tr_find_num_col('housing','سكن','بدل السكن','بدل سكن','housing allow')
+        transport_col_tr = tr_find_num_col('transport','نقل','بدل النقل','بدل نقل','مواصلات','transportation')
+        overtime_col_tr = tr_find_num_col('overtime','إضافي','ساعات إضافية','عمل إضافي','تكلفة الإضافي','بدل إضافي')
+        bonus_col_tr = tr_find_num_col('bonus','مكافأ','حوافز','حافز','incentive','reward')
+        deduction_col_tr = tr_find_num_col('deduction','خصم','استقطاع','حسم','خصومات')
+        gosi_col_tr = tr_find_num_col('gosi','تأمين','تأمينات','اشتراك','social insurance')
+        allowance_col_tr = tr_find_num_col('allow','بدل','بدلات','other allow','بدلات أخرى','بدل خاص')
+
+        # --- If no salary col found, try largest numeric column ---
+        if sal_col_tr is None and len(snap) > 0:
+            num_cols = snap.select_dtypes('number').columns
+            if len(num_cols) > 0:
+                means = {c: snap[c].mean() for c in num_cols if snap[c].mean() > 500}
+                if means: sal_col_tr = max(means, key=means.get)
+
+        # --- Categorical columns ---
+        dept_col_tr = tr_find_col('dept','قسم','department','القطاع','الإدارة','section','division','القسم','الادارة','إدارة')
+        nat_col_tr = tr_find_col('nat','جنسية','nationality','الجنسية','country','بلد')
+        gender_col_tr = tr_find_col('gender','جنس','الجنس','sex')
+        name_col_tr = tr_find_col('name','اسم','الاسم','employee','الموظف','employee name','اسم الموظف')
+        title_col_tr = tr_find_col('title','المسمى','الوظيفة','وظيفة','job title','job','المسمى الوظيفي','position','منصب')
+        level_col_tr = tr_find_col('level','مستوى','grade','درجة','المستوى','الدرجة','rank','band','الفئة الوظيفية')
+        status_col_tr = tr_find_col('status','حالة','الحالة','employment status')
+        type_col_tr = tr_find_col('employment type','نوع التوظيف','نوع العقد','contract','نوع العمل','دوام','full time','part time')
+        join_col_tr = tr_find_col('join','hiring','التحاق','مباشرة','hire','تاريخ التعيين','تاريخ المباشرة','start date','date of join')
+        age_col_tr = tr_find_col('age','عمر','العمر','age group','الفئة العمرية')
+        gen_col_tr = tr_find_col('الجيل','generation','gen ','جيل')
+        year_col_tr = tr_find_col('سنة الراتب','salary year','year','السنة','العام')
+        month_col_tr = tr_find_col('شهر الراتب','salary month','month','الشهر')
+        quarter_col_tr = tr_find_col('الربع','quarter','ربع')
+
+        # --- Auto-detect all salary component columns ---
+        sal_component_patterns = ['الراتب الأساسي','بدل السكن','بدل النقل','بدل خاص','بدل معيشة','بدل جوال','بدلات أخرى',
+            'basic','housing','transport','special','living','mobile','other allow',
+            'بدل طعام','بدل هاتف','بدل تعليم','بدل إنتقال','بدل وقود','food','phone','education','fuel']
+        available_components = []
+        for pat in sal_component_patterns:
+            col = tr_find_num_col(pat.lower())
+            if col and col not in available_components and col != sal_col_tr and col != net_col_tr:
+                available_components.append(col)
+
+        # --- Auto-detect deduction columns ---
+        deduction_patterns = ['خصم','استقطاع','deduction','gosi','تأمين','ضريبة','tax','سلف','حسم','قرض','غياب']
+        deduction_cols_tr = []
+        for pat in deduction_patterns:
+            for c in snap.select_dtypes('number').columns if len(snap)>0 else []:
+                if pat in c.lower() and c not in deduction_cols_tr:
+                    deduction_cols_tr.append(c)
+
+        total_emp_tr = snap[name_col_tr].nunique() if name_col_tr and len(snap)>0 else len(snap)
 
         if page == "💰 لوحة الرواتب":
             hdr("💰 لوحة تحليل الرواتب والتعويضات","تحليل شامل لتكاليف الرواتب والبدلات والاستقطاعات")
@@ -4464,15 +4534,20 @@ def main():
             if len(snap) == 0:
                 st.info("📁 ارفع ملف الرواتب من القائمة الجانبية"); return
 
-            # Auto-detect all salary columns
-            sal_col = next((c for c in ['الراتب الإجمالي','Gross Salary','إجمالي الراتب'] if has(snap,c)), None)
-            basic_col = next((c for c in ['الراتب الأساسي','Basic Salary','Basic'] if has(snap,c)), None)
-            net_col = next((c for c in ['صافي الراتب','Net Salary','Net'] if has(snap,c)), None)
-            dept_col = next((c for c in ['القسم','Department','القطاع','Division'] if has(snap,c)), None)
-            nat_col = next((c for c in ['الجنسية','Nationality'] if has(snap,c)), None)
-            gender_col = next((c for c in ['الجنس','Gender'] if has(snap,c)), None)
-            name_col = next((c for c in ['الاسم','Employee Name','Name'] if has(snap,c)), None)
-            total_emp = snap[name_col].nunique() if name_col else len(snap)
+            # Use detected columns
+            sal_col = sal_col_tr
+            basic_col = basic_col_tr
+            net_col = net_col_tr
+            dept_col = dept_col_tr
+            nat_col = nat_col_tr
+            gender_col = gender_col_tr
+            name_col = name_col_tr
+            total_emp = total_emp_tr
+
+            if not sal_col:
+                st.warning("⚠️ لم يتم العثور على عمود رواتب. تأكد من أن الملف يحتوي عمود بأحد هذه الأسماء: Gross Salary, إجمالي الراتب, الراتب الإجمالي, salary, راتب, أجر")
+                st.info(f"📋 الأعمدة الموجودة في الملف: {', '.join(snap.columns.tolist())}")
+                return
 
             # ===== ROW 1: Executive KPIs =====
             k1,k2,k3,k4,k5,k6 = st.columns(6)
@@ -4485,9 +4560,6 @@ def main():
 
             # ===== ROW 2: Salary Components Breakdown =====
             st.markdown("---")
-            sal_components = ['الراتب الأساسي','بدل السكن','بدل النقل','بدل خاص','بدل معيشة','بدل جوال','بدلات أخرى']
-            available_components = [c for c in sal_components if has(snap,c)]
-
             if available_components:
                 st.markdown("### 📊 تركيبة الراتب (Salary Components)")
                 comp_data = {c: snap[c].sum() for c in available_components}
@@ -4605,10 +4677,9 @@ def main():
                     st.plotly_chart(fig, use_container_width=True)
 
             # ===== ROW 6: Deductions & Net =====
-            deduction_cols = [c for c in snap.columns if any(x in c.lower() for x in ['خصم','استقطاع','deduction','gosi','تأمين'])]
-            if deduction_cols and sal_col:
+            if deduction_cols_tr and sal_col:
                 st.markdown("### 📉 الاستقطاعات والصافي")
-                ded_data = {c: snap[c].sum() for c in deduction_cols}
+                ded_data = {c: snap[c].sum() for c in deduction_cols_tr}
                 ded_df = pd.DataFrame(list(ded_data.items()), columns=['الاستقطاع','الإجمالي'])
                 c1,c2 = st.columns(2)
                 with c1:
@@ -4668,39 +4739,51 @@ def main():
             hdr("📈 تحليل الرواتب الشهري والربعي")
             if len(sal_df)==0: st.info("📁 ارفع ملف رواتب شهري (من القائمة الجانبية)"); return
 
-            if has(sal_df,'سنة الراتب'):
-                year = st.selectbox("📅 السنة:", sorted(sal_df['سنة الراتب'].unique(), reverse=True))
-                yr = sal_df[sal_df['سنة الراتب']==year]
+            yr_col = year_col_tr or tr_find_col('سنة','year')
+            mn_col = month_col_tr or tr_find_col('شهر','month')
+            qr_col = quarter_col_tr or tr_find_col('ربع','quarter')
+            s_col = sal_col_tr
+            nm_col = name_col_tr or tr_find_col('اسم','name','employee')
 
-                if has(yr,'شهر الراتب') and has(yr,'الراتب الإجمالي'):
+            if yr_col and has(sal_df, yr_col):
+                year = st.selectbox("📅 السنة:", sorted(sal_df[yr_col].unique(), reverse=True))
+                yr = sal_df[sal_df[yr_col]==year]
+
+                if mn_col and has(yr, mn_col) and s_col and has(yr, s_col):
                     months_order = ['January','February','March','April','May','June','July','August','September','October','November','December']
-                    monthly = yr.groupby('شهر الراتب')['الراتب الإجمالي'].sum().reindex(months_order).dropna()
+                    monthly = yr.groupby(mn_col)[s_col].sum().reindex(months_order).dropna()
+                    if len(monthly) == 0:
+                        monthly = yr.groupby(mn_col)[s_col].sum()
                     fig = go.Figure()
                     fig.add_trace(go.Bar(x=monthly.index, y=monthly.values, marker_color='#0F4C5C', text=[f"{v:,.0f}" for v in monthly.values], textposition='outside'))
                     fig.update_layout(title=f'إجمالي الرواتب الشهرية - {year}', font=dict(family="Noto Sans Arabic"), height=400, yaxis_tickformat=',')
                     st.plotly_chart(fig, use_container_width=True)
 
-                if has(yr,'الربع') and has(yr,'الراتب الإجمالي'):
-                    quarterly = yr.groupby('الربع')['الراتب الإجمالي'].sum()
+                if qr_col and has(yr, qr_col) and s_col and has(yr, s_col):
+                    quarterly = yr.groupby(qr_col)[s_col].sum()
                     c1,c2 = st.columns(2)
                     with c1:
-                        fig = px.bar(quarterly.reset_index(), x='الربع', y='الراتب الإجمالي', title=f'الرواتب ربع السنوية - {year}', color='الربع', color_discrete_sequence=[CL['p'],CL['a'],CL['s'],'#64748B'])
+                        fig = px.bar(quarterly.reset_index(), x=qr_col, y=s_col, title=f'الرواتب ربع السنوية - {year}', color=qr_col, color_discrete_sequence=[CL['p'],CL['a'],CL['s'],'#64748B'])
                         fig.update_layout(font=dict(family="Noto Sans Arabic"),height=350,yaxis_tickformat=','); st.plotly_chart(fig,use_container_width=True)
                     with c2:
-                        # Headcount trend by month
-                        hc_monthly = yr.groupby('شهر الراتب')['الاسم'].nunique().reindex(months_order).dropna() if has(yr,'الاسم') else None
-                        if hc_monthly is not None:
-                            fig = go.Figure()
-                            fig.add_trace(go.Scatter(x=hc_monthly.index, y=hc_monthly.values, mode='lines+markers', line=dict(color=CL['a'],width=3), fill='tozeroy', fillcolor='rgba(227,100,20,0.1)'))
-                            fig.update_layout(title=f'عدد الموظفين شهرياً - {year}', font=dict(family="Noto Sans Arabic"),height=350)
-                            st.plotly_chart(fig, use_container_width=True)
+                        if mn_col and nm_col and has(yr, nm_col):
+                            hc_monthly = yr.groupby(mn_col)[nm_col].nunique().reindex(months_order).dropna() if mn_col else None
+                            if hc_monthly is not None and len(hc_monthly) > 0:
+                                fig = go.Figure()
+                                fig.add_trace(go.Scatter(x=hc_monthly.index, y=hc_monthly.values, mode='lines+markers', line=dict(color=CL['a'],width=3), fill='tozeroy', fillcolor='rgba(227,100,20,0.1)'))
+                                fig.update_layout(title=f'عدد الموظفين شهرياً - {year}', font=dict(family="Noto Sans Arabic"),height=350)
+                                st.plotly_chart(fig, use_container_width=True)
 
                 # Overtime analysis
-                if has(yr,'ساعات إضافية') and has(yr,'تكلفة الإضافي'):
+                ot_hours = tr_find_num_col('ساعات إضافية','overtime hours','extra hours')
+                ot_cost = tr_find_num_col('تكلفة الإضافي','overtime cost','overtime pay')
+                if ot_hours and has(yr, ot_hours) and ot_cost and has(yr, ot_cost):
                     st.markdown("### ⏰ تحليل الساعات الإضافية")
                     c1,c2 = st.columns(2)
-                    with c1: st.metric("🕐 إجمالي الساعات", f"{yr['ساعات إضافية'].sum():,.0f}")
-                    with c2: st.metric("💰 تكلفة الإضافي", f"{yr['تكلفة الإضافي'].sum():,.0f} ريال")
+                    with c1: st.metric("🕐 إجمالي الساعات", f"{yr[ot_hours].sum():,.0f}")
+                    with c2: st.metric("💰 تكلفة الإضافي", f"{yr[ot_cost].sum():,.0f} ريال")
+            else:
+                st.warning("⚠️ لم يتم العثور على عمود سنة الراتب. تأكد من أن الملف يحتوي أعمدة: سنة الراتب/Year، شهر الراتب/Month")
 
 
 
@@ -4712,48 +4795,52 @@ def main():
             tabs = st.tabs(["👫 الجنس","🎂 الأجيال","📊 المستويات","📋 نوع التوظيف"])
 
             with tabs[0]:
-                if has(data,'الجنس'):
-                    gc = data['الجنس'].value_counts().reset_index(); gc.columns=['الجنس','العدد']
+                g_col = gender_col_tr
+                if g_col and has(data, g_col):
+                    gc = data[g_col].value_counts().reset_index(); gc.columns=['الجنس','العدد']
                     c1,c2 = st.columns(2)
                     with c1:
                         fig = px.pie(gc, values='العدد', names='الجنس', title='التوزيع حسب الجنس', hole=.4, color_discrete_map={'Male':CL['p'],'Female':CL['a']})
                         fig.update_layout(font=dict(family="Noto Sans Arabic"),height=350); st.plotly_chart(fig,use_container_width=True)
                     with c2:
-                        if has(data,'الراتب الإجمالي'):
-                            gs = data.groupby('الجنس')['الراتب الإجمالي'].agg(['mean','median']).reset_index()
+                        if sal_col_tr and has(data, sal_col_tr):
+                            gs = data.groupby(g_col)[sal_col_tr].agg(['mean','median']).reset_index()
                             gs.columns = ['الجنس','المتوسط','الوسيط']
                             st.dataframe(gs, use_container_width=True, hide_index=True)
-                else: st.info("لا يوجد عمود جنس")
+                else: st.info("لا يوجد عمود جنس في البيانات المرفوعة")
 
             with tabs[1]:
-                if has(data,'الجيل'):
-                    gc2 = data['الجيل'].value_counts().reset_index(); gc2.columns=['الجيل','العدد']
-                    fig = px.bar(gc2, x='الجيل', y='العدد', title='التوزيع حسب الجيل', color='الجيل', color_discrete_sequence=CL['dept'])
+                g2_col = gen_col_tr or tr_find_col('الفئة العمرية','age group','فئة عمرية')
+                if g2_col and has(data, g2_col):
+                    gc2 = data[g2_col].value_counts().reset_index(); gc2.columns=['الجيل','العدد']
+                    fig = px.bar(gc2, x='الجيل', y='العدد', title=f'التوزيع حسب {g2_col}', color='الجيل', color_discrete_sequence=CL['dept'])
                     fig.update_layout(font=dict(family="Noto Sans Arabic"),height=350); st.plotly_chart(fig,use_container_width=True)
-                elif has(data,'الفئة العمرية'):
-                    ac = data['الفئة العمرية'].value_counts().reset_index(); ac.columns=['الفئة','العدد']
-                    fig = px.bar(ac, x='الفئة', y='العدد', title='التوزيع حسب الفئة العمرية', color='الفئة', color_discrete_sequence=CL['dept'])
+                elif age_col_tr and has(data, age_col_tr):
+                    ac = data[age_col_tr].value_counts().reset_index(); ac.columns=['الفئة','العدد']
+                    fig = px.bar(ac, x='الفئة', y='العدد', title=f'التوزيع حسب {age_col_tr}', color='الفئة', color_discrete_sequence=CL['dept'])
                     fig.update_layout(font=dict(family="Noto Sans Arabic"),height=350); st.plotly_chart(fig,use_container_width=True)
-                else: st.info("لا يوجد بيانات أجيال")
+                else: st.info("لا يوجد بيانات أجيال أو فئات عمرية")
 
             with tabs[2]:
-                if has(data,'المستوى'):
-                    lc = data['المستوى'].value_counts().reset_index(); lc.columns=['المستوى','العدد']
+                l_col = level_col_tr
+                if l_col and has(data, l_col):
+                    lc = data[l_col].value_counts().reset_index(); lc.columns=['المستوى','العدد']
                     c1,c2 = st.columns(2)
                     with c1:
-                        fig = px.pie(lc, values='العدد', names='المستوى', title='التوزيع حسب المستوى', hole=.35, color_discrete_sequence=CL['dept'])
+                        fig = px.pie(lc, values='العدد', names='المستوى', title=f'التوزيع حسب {l_col}', hole=.35, color_discrete_sequence=CL['dept'])
                         fig.update_layout(font=dict(family="Noto Sans Arabic"),height=350); st.plotly_chart(fig,use_container_width=True)
                     with c2:
-                        if has(data,'الراتب الإجمالي'):
-                            ls = data.groupby('المستوى')['الراتب الإجمالي'].mean().reset_index().sort_values('الراتب الإجمالي',ascending=True)
-                            fig = px.bar(ls, x='الراتب الإجمالي', y='المستوى', orientation='h', title='متوسط الراتب حسب المستوى', color='الراتب الإجمالي', color_continuous_scale='teal')
+                        if sal_col_tr and has(data, sal_col_tr):
+                            ls = data.groupby(l_col)[sal_col_tr].mean().reset_index().sort_values(sal_col_tr,ascending=True)
+                            fig = px.bar(ls, x=sal_col_tr, y=l_col, orientation='h', title=f'متوسط الراتب حسب {l_col}', color=sal_col_tr, color_continuous_scale='teal')
                             fig.update_layout(font=dict(family="Noto Sans Arabic"),height=350,xaxis_tickformat=','); st.plotly_chart(fig,use_container_width=True)
-                else: st.info("لا يوجد عمود مستوى")
+                else: st.info("لا يوجد عمود مستوى أو درجة وظيفية")
 
             with tabs[3]:
-                if has(data,'نوع التوظيف'):
-                    ec = data['نوع التوظيف'].value_counts().reset_index(); ec.columns=['النوع','العدد']
-                    fig = px.pie(ec, values='العدد', names='النوع', title='أنواع التوظيف', hole=.35, color_discrete_sequence=CL['sal'])
+                t_col = type_col_tr
+                if t_col and has(data, t_col):
+                    ec = data[t_col].value_counts().reset_index(); ec.columns=['النوع','العدد']
+                    fig = px.pie(ec, values='العدد', names='النوع', title=f'أنواع التوظيف ({t_col})', hole=.35, color_discrete_sequence=CL['sal'])
                     fig.update_layout(font=dict(family="Noto Sans Arabic"),height=350); st.plotly_chart(fig,use_container_width=True)
                 else: st.info("لا يوجد عمود نوع التوظيف")
 
