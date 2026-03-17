@@ -13,7 +13,7 @@ import io, math, json, sqlite3, os, smtplib, re
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import openpyxl
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from dateutil.relativedelta import relativedelta
 import hashlib, urllib.request
 
@@ -758,6 +758,361 @@ def init_db():
     conn.commit()
     conn.close()
 
+# =====================================================
+# SaaS INFRASTRUCTURE - Multi-tenancy, Billing, PDPL
+# =====================================================
+
+def init_saas_tables():
+    """Initialize SaaS tables for multi-tenancy, subscriptions, rate limiting, PDPL, branding."""
+    conn = get_conn()
+    c = conn.cursor()
+    serial = _serial()
+
+    # === Company/Tenant table ===
+    c.execute(f'''CREATE TABLE IF NOT EXISTS companies (
+        id {serial},
+        company_id TEXT UNIQUE NOT NULL,
+        name_ar TEXT NOT NULL,
+        name_en TEXT,
+        cr_number TEXT,
+        industry TEXT,
+        city TEXT,
+        country TEXT DEFAULT 'SA',
+        employee_count INTEGER DEFAULT 0,
+        admin_email TEXT,
+        admin_phone TEXT,
+        plan TEXT DEFAULT 'trial',
+        plan_start TEXT,
+        plan_end TEXT,
+        max_users INTEGER DEFAULT 5,
+        max_ai_calls INTEGER DEFAULT 100,
+        is_active INTEGER DEFAULT 1,
+        logo_url TEXT,
+        primary_color TEXT DEFAULT '#0F4C5C',
+        secondary_color TEXT DEFAULT '#E36414',
+        created_at TEXT,
+        updated_at TEXT
+    )''')
+
+    # === Subscription plans ===
+    c.execute(f'''CREATE TABLE IF NOT EXISTS subscription_plans (
+        plan_id TEXT PRIMARY KEY,
+        name_ar TEXT, name_en TEXT,
+        price_monthly REAL, price_yearly REAL,
+        max_users INTEGER, max_employees INTEGER,
+        max_ai_calls_monthly INTEGER,
+        features_json TEXT,
+        is_active INTEGER DEFAULT 1
+    )''')
+
+    # === Rate limiting ===
+    c.execute(f'''CREATE TABLE IF NOT EXISTS rate_limits (
+        id {serial},
+        company_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        action_type TEXT NOT NULL,
+        action_date TEXT NOT NULL,
+        count INTEGER DEFAULT 1
+    )''')
+
+    # === Audit log ===
+    c.execute(f'''CREATE TABLE IF NOT EXISTS audit_log (
+        id {serial},
+        company_id TEXT,
+        user_id TEXT,
+        action TEXT NOT NULL,
+        target TEXT,
+        details TEXT,
+        ip_address TEXT,
+        created_at TEXT NOT NULL
+    )''')
+
+    # === PDPL Consent tracking ===
+    c.execute(f'''CREATE TABLE IF NOT EXISTS pdpl_consent (
+        id {serial},
+        company_id TEXT,
+        user_id TEXT NOT NULL,
+        consent_type TEXT NOT NULL,
+        consent_given INTEGER DEFAULT 0,
+        consent_date TEXT,
+        consent_version TEXT DEFAULT '1.0',
+        ip_address TEXT,
+        withdrawn_date TEXT
+    )''')
+
+    # === Company branding ===
+    c.execute(f'''CREATE TABLE IF NOT EXISTS company_branding (
+        company_id TEXT PRIMARY KEY,
+        logo_base64 TEXT,
+        primary_color TEXT DEFAULT '#0F4C5C',
+        secondary_color TEXT DEFAULT '#E36414',
+        accent_color TEXT DEFAULT '#2A9D8F',
+        font_family TEXT DEFAULT 'Noto Sans Arabic',
+        custom_css TEXT,
+        footer_text TEXT
+    )''')
+
+    # Insert default subscription plans
+    p = _ph()
+    for plan in [
+        ('trial', 'تجريبي', 'Trial', 0, 0, 3, 50, 50, '{"ai_advisor":true,"calculator":true,"analytics":false,"export":false}'),
+        ('basic', 'أساسي', 'Basic', 299, 2990, 5, 100, 200, '{"ai_advisor":true,"calculator":true,"analytics":true,"export":true,"cv_analysis":false}'),
+        ('pro', 'احترافي', 'Professional', 699, 6990, 15, 500, 1000, '{"ai_advisor":true,"calculator":true,"analytics":true,"export":true,"cv_analysis":true,"salary_benchmark":true}'),
+        ('enterprise', 'المؤسسات', 'Enterprise', 1499, 14990, 999, 9999, 5000, '{"ai_advisor":true,"calculator":true,"analytics":true,"export":true,"cv_analysis":true,"salary_benchmark":true,"api_access":true,"custom_branding":true}'),
+    ]:
+        try:
+            c.execute(f"INSERT INTO subscription_plans (plan_id, name_ar, name_en, price_monthly, price_yearly, max_users, max_employees, max_ai_calls_monthly, features_json) VALUES ({p},{p},{p},{p},{p},{p},{p},{p},{p})", plan)
+        except: pass
+
+    conn.commit()
+    conn.close()
+
+
+# === Multi-tenancy helpers ===
+
+def get_company_id():
+    """Get current user's company ID from session."""
+    return st.session_state.get('company_id', 'default')
+
+def set_company_context(company_id):
+    """Set company context for current session."""
+    st.session_state['company_id'] = company_id
+
+def register_company(name_ar, name_en, cr_number, admin_email, city, industry, plan='trial'):
+    """Register a new company/tenant."""
+    import uuid
+    company_id = f"co_{uuid.uuid4().hex[:12]}"
+    conn = get_conn(); c = conn.cursor(); p = _ph()
+    try:
+        c.execute(f'''INSERT INTO companies
+            (company_id, name_ar, name_en, cr_number, admin_email, city, industry, plan, plan_start, plan_end, created_at, updated_at)
+            VALUES ({p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p})''',
+            (company_id, name_ar, name_en or '', cr_number or '', admin_email,
+             city or 'جدة', industry or 'تقنية المعلومات', plan,
+             datetime.now().strftime("%Y-%m-%d"),
+             (datetime.now() + timedelta(days=30 if plan == 'trial' else 365)).strftime("%Y-%m-%d"),
+             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+             datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit(); conn.close()
+        return company_id
+    except Exception as e:
+        conn.close()
+        return None
+
+def get_company_info(company_id=None):
+    """Get company info."""
+    cid = company_id or get_company_id()
+    conn = get_conn(); c = conn.cursor(); p = _ph()
+    c.execute(f"SELECT * FROM companies WHERE company_id = {p}", (cid,))
+    row = c.fetchone()
+    if row:
+        cols = [d[0] for d in c.description]
+        conn.close()
+        return dict(zip(cols, row))
+    conn.close()
+    return None
+
+def get_company_plan_limits(company_id=None):
+    """Get plan limits for company."""
+    cid = company_id or get_company_id()
+    conn = get_conn(); c = conn.cursor(); p = _ph()
+    c.execute(f'''SELECT sp.* FROM subscription_plans sp
+        JOIN companies co ON co.plan = sp.plan_id
+        WHERE co.company_id = {p}''', (cid,))
+    row = c.fetchone()
+    if row:
+        cols = [d[0] for d in c.description]
+        conn.close()
+        return dict(zip(cols, row))
+    conn.close()
+    return {"max_users": 5, "max_employees": 50, "max_ai_calls_monthly": 50}
+
+
+# === Rate Limiting ===
+
+def check_rate_limit(action_type="ai_call", limit=None):
+    """Check if user/company has exceeded rate limit. Returns (allowed, remaining)."""
+    cid = get_company_id()
+    uid = st.session_state.get('username', 'anonymous')
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    if limit is None:
+        plan = get_company_plan_limits(cid)
+        limit = plan.get('max_ai_calls_monthly', 50)
+
+    # Get this month's usage
+    month_start = datetime.now().strftime("%Y-%m-01")
+    conn = get_conn(); c = conn.cursor(); p = _ph()
+    c.execute(f"SELECT COALESCE(SUM(count),0) FROM rate_limits WHERE company_id={p} AND action_type={p} AND action_date >= {p}",
+        (cid, action_type, month_start))
+    used = c.fetchone()[0]
+    conn.close()
+
+    remaining = max(0, limit - used)
+    return remaining > 0, remaining
+
+def record_usage(action_type="ai_call"):
+    """Record a rate-limited action."""
+    cid = get_company_id()
+    uid = st.session_state.get('username', 'anonymous')
+    today = datetime.now().strftime("%Y-%m-%d")
+    conn = get_conn(); c = conn.cursor(); p = _ph()
+    try:
+        c.execute(f"INSERT INTO rate_limits (company_id, user_id, action_type, action_date, count) VALUES ({p},{p},{p},{p},1)",
+            (cid, uid, action_type, today))
+        conn.commit()
+    except: pass
+    conn.close()
+
+
+# === Audit Log ===
+
+def log_audit(action, target="", details=""):
+    """Log an auditable action."""
+    cid = get_company_id()
+    uid = st.session_state.get('username', 'anonymous')
+    conn = get_conn(); c = conn.cursor(); p = _ph()
+    try:
+        c.execute(f"INSERT INTO audit_log (company_id, user_id, action, target, details, created_at) VALUES ({p},{p},{p},{p},{p},{p})",
+            (cid, uid, action, target, details[:500] if details else '', datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+    except: pass
+    conn.close()
+
+
+# === PDPL (Saudi Personal Data Protection Law) ===
+
+PDPL_PRIVACY_POLICY = """
+## سياسة الخصوصية وحماية البيانات الشخصية
+### وفقاً لنظام حماية البيانات الشخصية السعودي (PDPL)
+
+**1. جمع البيانات:**
+نجمع بيانات الموظفين (الاسم، الراتب، القسم، إلخ) لأغراض تحليل الموارد البشرية فقط.
+
+**2. استخدام البيانات:**
+- تحليلات الموارد البشرية والتقارير
+- حسابات المستحقات والرواتب
+- الاستشارات القانونية المدعومة بالذكاء الاصطناعي
+- لا نبيع أو نشارك بياناتك مع أطراف ثالثة
+
+**3. تخزين البيانات:**
+- البيانات مشفرة ومخزنة في خوادم آمنة
+- كل شركة معزولة بيانياً (Multi-tenant)
+- نسخ احتياطية يومية
+
+**4. حقوقك (PDPL المادة 4):**
+- حق الوصول لبياناتك الشخصية
+- حق تصحيح البيانات غير الدقيقة
+- حق حذف البيانات (حق النسيان)
+- حق سحب الموافقة في أي وقت
+- حق الاعتراض على المعالجة
+
+**5. الذكاء الاصطناعي:**
+- نستخدم AI لتحليل البيانات وتقديم الاستشارات
+- لا يتم اتخاذ قرارات توظيف آلية بدون مراجعة بشرية
+- يمكنك طلب شرح لأي قرار مدعوم بالذكاء الاصطناعي
+
+**6. فترة الاحتفاظ:**
+- بيانات الموظفين النشطين: طوال فترة الاشتراك
+- بيانات الموظفين السابقين: سنة واحدة بعد المغادرة
+- سجلات التدقيق: 3 سنوات
+
+**7. التواصل:**
+لأي استفسار حول بياناتك: privacy@hr-analytics.sa
+"""
+
+def check_pdpl_consent(consent_type="data_processing"):
+    """Check if user has given PDPL consent."""
+    uid = st.session_state.get('username', 'anonymous')
+    cid = get_company_id()
+    conn = get_conn(); c = conn.cursor(); p = _ph()
+    c.execute(f"SELECT consent_given FROM pdpl_consent WHERE user_id={p} AND company_id={p} AND consent_type={p} AND withdrawn_date IS NULL",
+        (uid, cid, consent_type))
+    row = c.fetchone()
+    conn.close()
+    return row and row[0] == 1
+
+def record_pdpl_consent(consent_type="data_processing", given=True):
+    """Record PDPL consent."""
+    uid = st.session_state.get('username', 'anonymous')
+    cid = get_company_id()
+    conn = get_conn(); c = conn.cursor(); p = _ph()
+    try:
+        if given:
+            c.execute(f"INSERT INTO pdpl_consent (company_id, user_id, consent_type, consent_given, consent_date, consent_version) VALUES ({p},{p},{p},1,{p},'1.0')",
+                (cid, uid, consent_type, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        else:
+            c.execute(f"UPDATE pdpl_consent SET withdrawn_date={p} WHERE user_id={p} AND company_id={p} AND consent_type={p} AND withdrawn_date IS NULL",
+                (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), uid, cid, consent_type))
+        conn.commit()
+    except: pass
+    conn.close()
+
+def request_data_deletion(user_id=None):
+    """Process PDPL data deletion request (Right to be Forgotten)."""
+    uid = user_id or st.session_state.get('username', 'anonymous')
+    cid = get_company_id()
+    log_audit("pdpl_deletion_request", uid, f"Data deletion requested by {uid}")
+    # Mark consent as withdrawn
+    record_pdpl_consent("data_processing", given=False)
+    return True
+
+
+# === Company Branding ===
+
+def get_company_branding(company_id=None):
+    """Get company's custom branding (colors, logo)."""
+    cid = company_id or get_company_id()
+    conn = get_conn(); c = conn.cursor(); p = _ph()
+    c.execute(f"SELECT * FROM company_branding WHERE company_id = {p}", (cid,))
+    row = c.fetchone()
+    if row:
+        cols = [d[0] for d in c.description]
+        conn.close()
+        return dict(zip(cols, row))
+    conn.close()
+    return {"primary_color": "#0F4C5C", "secondary_color": "#E36414", "accent_color": "#2A9D8F", "font_family": "Noto Sans Arabic"}
+
+def save_company_branding(primary_color, secondary_color, accent_color, logo_base64=None, footer_text=None):
+    """Save company branding."""
+    cid = get_company_id()
+    conn = get_conn(); c = conn.cursor(); p = _ph()
+    try:
+        if _is_cloud_db():
+            c.execute(f"INSERT INTO company_branding (company_id, primary_color, secondary_color, accent_color, logo_base64, footer_text) VALUES ({p},{p},{p},{p},{p},{p}) ON CONFLICT (company_id) DO UPDATE SET primary_color={p}, secondary_color={p}, accent_color={p}, logo_base64={p}, footer_text={p}",
+                (cid, primary_color, secondary_color, accent_color, logo_base64 or '', footer_text or '',
+                 primary_color, secondary_color, accent_color, logo_base64 or '', footer_text or ''))
+        else:
+            c.execute("INSERT OR REPLACE INTO company_branding (company_id, primary_color, secondary_color, accent_color, logo_base64, footer_text) VALUES (?,?,?,?,?,?)",
+                (cid, primary_color, secondary_color, accent_color, logo_base64 or '', footer_text or ''))
+        conn.commit()
+    except: pass
+    conn.close()
+    log_audit("branding_update", cid, f"Colors: {primary_color}/{secondary_color}/{accent_color}")
+
+
+# === SaaS Dashboard (Admin) ===
+
+def get_saas_stats():
+    """Get SaaS-level statistics."""
+    conn = get_conn(); c = conn.cursor()
+    stats = {}
+    try:
+        c.execute("SELECT COUNT(*) FROM companies WHERE is_active = 1")
+        stats['active_companies'] = c.fetchone()[0]
+        c.execute("SELECT plan, COUNT(*) FROM companies GROUP BY plan")
+        stats['plans'] = dict(c.fetchall())
+        c.execute("SELECT COUNT(*) FROM users_store")
+        stats['total_users'] = c.fetchone()[0]
+        month_start = datetime.now().strftime("%Y-%m-01")
+        c.execute(f"SELECT COUNT(*) FROM rate_limits WHERE action_date >= {_ph()}", (month_start,))
+        stats['ai_calls_this_month'] = c.fetchone()[0]
+        c.execute(f"SELECT COUNT(*) FROM audit_log WHERE created_at >= {_ph()}", (month_start,))
+        stats['audit_entries_this_month'] = c.fetchone()[0]
+    except: pass
+    conn.close()
+    return stats
+
 def db_save_result(result, created_by=""):
     """Save a test result to database"""
     conn = get_conn()
@@ -1211,6 +1566,9 @@ def generate_employee_pdf(result):
 
 # Initialize database on startup
 init_db()
+try:
+    init_saas_tables()
+except: pass
 
 # ===== STYLES =====
 st.markdown("""
@@ -3973,8 +4331,27 @@ def main():
                     for s in xl.sheet_names:
                         try:
                             df_s = smart_read(xl, s)
-                            if len(df_s) > 500 and any(c.lower() in ['salary month','gross salary','شهر الراتب'] for c in df_s.columns):
-                                sal_df = norm_cols(df_s)
+                            # Flexible salary sheet detection: any sheet with salary-like columns
+                            col_names_lower = [c.lower() for c in df_s.columns]
+                            has_salary_cols = any(any(kw in cl for kw in [
+                                'salary','gross','net','basic','راتب','أجر','إجمالي','صافي','أساسي',
+                                'الراتب','wage','pay','compensation','تعويض','بدل','allowance',
+                                'earnings','دخل','مرتب','payroll'
+                            ]) for cl in col_names_lower)
+                            has_month_cols = any(any(kw in cl for kw in [
+                                'month','شهر','سنة','year','period','فترة','تاريخ الراتب'
+                            ]) for cl in col_names_lower)
+
+                            # Salary sheet: has salary columns + either monthly data (any size) or enough rows
+                            if has_salary_cols and (has_month_cols or len(df_s) >= 10):
+                                df_s_norm = norm_cols(df_s)
+                                # If it has monthly columns, it's definitely salary data
+                                if has_month_cols and len(df_s) > len(sal_df):
+                                    sal_df = df_s_norm
+                                # If no month but many rows with salary, still use it
+                                elif len(df_s) > len(sal_df) and len(sal_df) == 0:
+                                    sal_df = df_s_norm
+
                             df_s = norm_cols(df_s)
                             all_sheets[s] = df_s
                             if len(emp)==0 and len(df_s)>5:
@@ -4006,18 +4383,30 @@ def main():
     # If salary data found, also create a snapshot (latest month)
     sal_snapshot = pd.DataFrame()
     if len(sal_df) > 0:
-        if has(sal_df, 'سنة الراتب'):
-            latest_year = sal_df['سنة الراتب'].max()
-            yr_data = sal_df[sal_df['سنة الراتب']==latest_year]
-            if has(yr_data, 'شهر الراتب'):
+        # Flexible year/month column detection
+        yr_col_detect = next((c for c in sal_df.columns if any(k in c.lower() for k in ['سنة الراتب','salary year','year','السنة','العام'])), None)
+        mn_col_detect = next((c for c in sal_df.columns if any(k in c.lower() for k in ['شهر الراتب','salary month','month','الشهر'])), None)
+        nm_col_detect = next((c for c in sal_df.columns if any(k in c.lower() for k in ['name','اسم','الاسم','employee','الموظف'])), None)
+
+        if yr_col_detect:
+            latest_year = sal_df[yr_col_detect].max()
+            yr_data = sal_df[sal_df[yr_col_detect]==latest_year]
+            if mn_col_detect:
                 months_order = ['January','February','March','April','May','June','July','August','September','October','November','December']
-                available = yr_data['شهر الراتب'].unique()
+                available = yr_data[mn_col_detect].unique()
                 for m in reversed(months_order):
                     if m in available:
-                        sal_snapshot = yr_data[yr_data['شهر الراتب']==m]
+                        sal_snapshot = yr_data[yr_data[mn_col_detect]==m]
                         break
+                # If no English month names match, take last month value
+                if len(sal_snapshot) == 0:
+                    last_month = yr_data[mn_col_detect].iloc[-1] if len(yr_data) > 0 else None
+                    if last_month is not None:
+                        sal_snapshot = yr_data[yr_data[mn_col_detect]==last_month]
         if len(sal_snapshot)==0:
-            sal_snapshot = sal_df.drop_duplicates(subset=['الاسم'] if has(sal_df,'الاسم') else sal_df.columns[0], keep='last')
+            # Deduplicate by name or first column
+            dedup_col = nm_col_detect if nm_col_detect else sal_df.columns[0]
+            sal_snapshot = sal_df.drop_duplicates(subset=[dedup_col], keep='last')
 
     # Auto-save monthly snapshot
     if len(emp) > 0 and '_snapshot_saved' not in st.session_state:
@@ -5010,8 +5399,8 @@ def main():
                         ws1.set_column('A:Z', 18)
                         ws1.merge_range('B2:F2', 'Salary Analysis', hdr_f)
                         r = 4
-                        sal_col = next((c for c in ['الراتب الإجمالي','Gross Salary'] if has(snap,c)), None)
-                        dept_col = next((c for c in ['القسم','Department','القطاع'] if has(snap,c)), None)
+                        sal_col = sal_col_tr
+                        dept_col = dept_col_tr
                         if sal_col:
                             stats = [('Total Employees', snap.shape[0]), ('Total Monthly Payroll', f"{snap[sal_col].sum():,.2f}"),
                                 ('Average Salary', f"{snap[sal_col].mean():,.2f}"), ('Median Salary', f"{snap[sal_col].median():,.2f}"),
@@ -5021,7 +5410,7 @@ def main():
                                 ws1.write(r+i, 2, str(val), wb.add_format({'border':1}))
 
                         # Sheet 2: Analysis (monthly/quarterly)
-                        month_col = next((c for c in ['Salary Month','الشهر'] if has(data,c)), None)
+                        month_col = month_col_tr
                         if sal_col and month_col:
                             monthly = data.groupby(month_col)[sal_col].sum().reset_index()
                             monthly.columns = ['Month','Total Gross Salary']
@@ -10830,7 +11219,14 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                         if learn_ctx:
                             sys_p += "\n" + learn_ctx
 
-                        # Step 7: Call AI
+                        # Step 7: Call AI (with rate limiting)
+                        allowed, remaining = check_rate_limit("ai_call")
+                        if not allowed:
+                            st.session_state.labor_chat = [{"role":"user","content":pending_q},
+                                {"role":"assistant","content":"⚠️ تم تجاوز الحد الشهري لاستخدام الذكاء الاصطناعي. يرجى ترقية خطة الاشتراك أو الانتظار للشهر القادم."}]
+                            st.rerun()
+                        record_usage("ai_call")
+                        log_audit("ai_legal_query", pending_q[:100])
                         response, error = call_ai_api(sys_p, user_msg, model_type="labor_law")
 
                         if response and len(response) > 20:
@@ -10981,7 +11377,14 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                         if learn_ctx:
                             sys_p += "\n" + learn_ctx
 
-                        # Step 7: Call AI
+                        # Step 7: Call AI (with rate limiting)
+                        allowed, remaining = check_rate_limit("ai_call")
+                        if not allowed:
+                            st.session_state.hr_chat = [{"role":"user","content":pending_q},
+                                {"role":"assistant","content":"⚠️ تم تجاوز الحد الشهري لاستخدام الذكاء الاصطناعي. يرجى ترقية خطة الاشتراك أو الانتظار للشهر القادم."}]
+                            st.rerun()
+                        record_usage("ai_call")
+                        log_audit("ai_hr_query", pending_q[:100])
                         response, error = call_ai_api(sys_p, user_msg, model_type="hr")
 
                         if response and len(response) > 20:
