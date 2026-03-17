@@ -1816,7 +1816,7 @@ def get_lang():
     """Get current language from session state."""
     return st.session_state.get('app_lang', 'ar')
 
-def tr(key, **kwargs):
+def _i18n(key, **kwargs):
     """Translate a key to the current language. Falls back to Arabic then key."""
     lang = get_lang()
     entry = TRANSLATIONS.get(key, {})
@@ -3688,8 +3688,8 @@ def login_page():
 
     st.markdown(f"""<div style='text-align:center;padding:30px 10px 20px;'>
         <div style='background:linear-gradient(135deg,#F97316,#E9C46A);width:70px;height:70px;border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:28px;font-weight:800;color:white;'>HR</div>
-        <h2 style='color:#0E7490;margin-bottom:4px;font-weight:700;font-size:clamp(1.1rem,3vw,1.6rem);'>{tr('app_title')}</h2>
-        <p style='color:#64748B;font-size:clamp(11px,2vw,14px);'>{tr('app_subtitle')}</p>
+        <h2 style='color:#0E7490;margin-bottom:4px;font-weight:700;font-size:clamp(1.1rem,3vw,1.6rem);'>{_i18n('app_title')}</h2>
+        <p style='color:#64748B;font-size:clamp(11px,2vw,14px);'>{_i18n('app_subtitle')}</p>
     </div>""", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([0.5,3,0.5])
     with col2:
@@ -4362,7 +4362,7 @@ def main():
         # Apply direction
         apply_direction()
 
-        st.markdown(f"<div style='text-align:center;padding:16px 0;'><div style='background:linear-gradient(135deg,#F97316,#E9C46A);width:52px;height:52px;border-radius:12px;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:20px;font-weight:800;color:white;'>HR</div><h2 style='margin:0;font-size:15px;'>{tr('app_title')}</h2><p style='opacity:.6;font-size:11px;'>v5.5</p><div style='background:rgba(255,255,255,.1);border-radius:6px;padding:6px 10px;margin-top:8px;font-size:11px'>👤 {st.session_state.user_name} <span style='opacity:.6'>| {st.session_state.user_role}</span></div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align:center;padding:16px 0;'><div style='background:linear-gradient(135deg,#F97316,#E9C46A);width:52px;height:52px;border-radius:12px;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:20px;font-weight:800;color:white;'>HR</div><h2 style='margin:0;font-size:15px;'>{_i18n('app_title')}</h2><p style='opacity:.6;font-size:11px;'>v5.5</p><div style='background:rgba(255,255,255,.1);border-radius:6px;padding:6px 10px;margin-top:8px;font-size:11px'>👤 {st.session_state.user_name} <span style='opacity:.6'>| {st.session_state.user_role}</span></div></div>", unsafe_allow_html=True)
         st.markdown("---")
 
         # Filter sections by access
@@ -4428,7 +4428,7 @@ def main():
             st.rerun()
 
         st.markdown("---")
-        st.markdown(f"##### 📁 {tr('upload_file')}")
+        st.markdown(f"##### 📁 {_i18n('upload_file')}")
         file = st.file_uploader(tr("upload_file"), type=["xlsx","xls","csv"], label_visibility="collapsed", key="main_uploader")
         if file:
             # Store file bytes in session_state + save to DB for persistence
