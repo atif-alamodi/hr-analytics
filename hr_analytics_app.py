@@ -9517,7 +9517,7 @@ def main():
                     "work_policies": {
                         "hours": "8:00 AM - 5:00 PM (Sunday - Thursday)",
                         "leave": "21 days annual leave (Saudi Labor Law)",
-                        "probation": "90 days",
+                        "probation": "180 days (as per Royal Decree M/44, 2025)",
                         "insurance": "Medical insurance from Day 1",
                         "locations": "Jeddah (HQ), Riyadh, Cairo",
                     },
