@@ -10528,7 +10528,7 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
             # === DISPLAY ANSWER AT TOP (before form) ===
             if st.session_state.labor_chat:
                 # Scroll to top when answer is shown
-                st.markdown('<script>window.parent.document.querySelector("section.main").scrollTo(0,0);</script>', unsafe_allow_html=True)
+                st.components.v1.html('<script>window.parent.document.querySelector("section.main").scrollTo({top:0,behavior:"smooth"});</script>',height=0)
                 st.markdown("---")
                 for idx, msg in enumerate(st.session_state.labor_chat):
                     if msg['role'] == 'user':
@@ -10639,7 +10639,7 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
 
             # === DISPLAY ANSWER AT TOP (before form) ===
             if st.session_state.hr_chat:
-                st.markdown('<script>window.parent.document.querySelector("section.main").scrollTo(0,0);</script>', unsafe_allow_html=True)
+                st.components.v1.html('<script>window.parent.document.querySelector("section.main").scrollTo({top:0,behavior:"smooth"});</script>',height=0)
                 st.markdown("---")
                 for idx, msg in enumerate(st.session_state.hr_chat):
                     if msg['role'] == 'user':
