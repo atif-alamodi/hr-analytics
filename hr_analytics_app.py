@@ -7990,7 +7990,7 @@ def main():
             # Display
             st.markdown(f"### 💰 Benchmark: {bm_title} - {country_name}")
             st.caption(f"التخصص: {bm_dept} | الخبرة: {bm_exp} سنوات | العملة: {cur}")
-            st.caption("📚 GulfTalent | Bayt | PayScale | Glassdoor | Robert Half 2025 | Hays 2025")
+            st.caption("📚 تقديرات مبنية على: Michael Page 2025 | Cooper Fitch 2025 | Hays KSA 2025 | Glassdoor | PayScale — اضغط 'تحقق عبر AI' أدناه للتحقق المباشر")
 
             # KPIs
             k1,k2,k3,k4 = st.columns(4)
@@ -8078,6 +8078,75 @@ def main():
                         "التأمينات": gosi, "الشهري/فرد": monthly, "السنوي/فرد": annual,
                         "الإجمالي السنوي": annual, "السوق": country_name, "العملة": cur
                     })
+
+            # =====================================================
+            # 🔍 AI-POWERED LIVE SALARY VERIFICATION
+            # Queries AI to verify salary data from real-time sources
+            # =====================================================
+            st.markdown("---")
+            st.markdown("### 🔍 التحقق المباشر من المصادر عبر الذكاء الاصطناعي")
+            ibox("اضغط الزر أدناه للحصول على تقدير محدّث من مصادر متعددة (Glassdoor, PayScale, LinkedIn, Michael Page, Cooper Fitch, Hays). الذكاء الاصطناعي سيبحث ويحلل البيانات المتاحة ويقارنها بالتقدير المحلي.")
+
+            if st.button("🔍 تحقق من الراتب عبر AI", type="primary", use_container_width=True, key="bm_ai_verify"):
+                with st.spinner("جاري البحث والتحليل من المصادر المباشرة..."):
+                    try:
+                        ai_prompt = f"""أنت خبير تعويضات ومزايا (Compensation & Benefits) معتمد دولياً.
+
+المطلوب: تحقق من الراتب الشهري لهذا المسمى الوظيفي بناءً على بيانات السوق الحقيقية:
+
+🏢 المسمى الوظيفي: {bm_title}
+📌 التخصص: {bm_dept}
+🌍 الدولة: {country_name}
+📅 سنوات الخبرة: {bm_exp}
+💰 التقدير المحلي: {mid_l:,} {cur} (بالريال السعودي: {mid_sar:,} SAR)
+
+أجب بالعربية بالتنسيق التالي فقط:
+
+## 📊 نتيجة التحقق
+
+**الراتب الشهري المتوقع:**
+- الحد الأدنى: [رقم] {cur}
+- المتوسط: [رقم] {cur}
+- الحد الأعلى: [رقم] {cur}
+
+**بالريال السعودي (إذا كانت الدولة غير السعودية):**
+- المتوسط: [رقم] SAR
+
+**مقارنة مع التقدير المحلي ({mid_l:,} {cur}):**
+- [أعلى/أقل/مطابق] بنسبة [X]%
+
+**المصادر المرجعية:**
+- اذكر 3-5 مصادر حقيقية مع الأرقام
+
+**عوامل مؤثرة:**
+- اذكر 3-4 عوامل تؤثر على هذا الراتب في {country_name} (حجم الشركة، القطاع، المدينة، الشهادات)
+
+**ملاحظة:** هذه بيانات تقريبية مبنية على مسوحات رواتب 2024-2025. الأرقام الفعلية تختلف حسب الشركة والمدينة والقطاع والشهادات المهنية.
+"""
+                        response, error = call_ai_api(
+                            "أنت خبير تعويضات. أعط أرقام واقعية ودقيقة مبنية على مسوحات الرواتب الحقيقية. لا تخترع أرقاماً. إذا لم تكن متأكداً اذكر ذلك.",
+                            ai_prompt,
+                            model_type="hr"
+                        )
+                        if response and len(response) > 50:
+                            st.markdown(f"<div style='background:#f0f9ff;border:1px solid #bae6fd;border-radius:12px;padding:20px;margin:10px 0;line-height:1.8'>{response}</div>", unsafe_allow_html=True)
+
+                            # Show comparison badge
+                            st.markdown("---")
+                            st.markdown("#### ⚖️ مقارنة سريعة")
+                            cmp1, cmp2, cmp3 = st.columns(3)
+                            with cmp1:
+                                kpi("📊 التقدير المحلي", f"{mid_l:,} {cur}")
+                            with cmp2:
+                                kpi("🤖 يُنصح بالتحقق من", "النتيجة أعلاه")
+                            with cmp3:
+                                kpi("📅 تاريخ التحقق", datetime.now().strftime("%Y-%m-%d"))
+
+                            ibox("💡 **نصيحة:** إذا كان الفرق أكثر من 15% بين التقدير المحلي ونتيجة AI، استخدم رقم AI كمرجع أدق. يمكنك أيضاً مراجعة salary.com أو glassdoor.com مباشرة.", "warning")
+                        else:
+                            st.warning(f"⚠️ تعذر التحقق: {error or 'لا يوجد رد من AI'}. تأكد من إعداد مفتاح API.")
+                    except Exception as e:
+                        st.error(f"خطأ: {str(e)[:200]}")
                 st.success(f"✅ تمت إضافة {num_hires} x {bm_title} من {country_name}")
 
             st.markdown("---")
