@@ -8556,6 +8556,115 @@ def main():
                             file_name=f"Salary_{job_title}_{datetime.now().strftime('%Y%m%d')}.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
+            # =====================================================
+            # 🔍 AI LIVE SALARY VERIFICATION (Global Salary Page)
+            # =====================================================
+            st.markdown("---")
+            st.markdown("### 🔍 التحقق المباشر من الراتب عبر الذكاء الاصطناعي")
+            ibox("الذكاء الاصطناعي سيبحث في المصادر المتاحة ويقدم تقدير محدّث للراتب مع المصادر والروابط.")
+
+            ai_v1, ai_v2, ai_v3 = st.columns(3)
+            with ai_v1:
+                ai_country = st.selectbox("🌍 الدولة:", list(COUNTRIES.keys()), key="ai_verify_country")
+            with ai_v2:
+                ai_job = st.text_input("💼 المسمى الوظيفي:", placeholder="مثال: أخصائي تسويق رقمي", key="ai_verify_job")
+            with ai_v3:
+                ai_exp = st.slider("📅 سنوات الخبرة:", 0, 25, 3, key="ai_verify_exp")
+
+            if st.button("🔍 تحقق من المصادر المباشرة", type="primary", use_container_width=True, key="ai_global_verify"):
+                if ai_job.strip():
+                    with st.spinner("جاري البحث والتحليل..."):
+                        try:
+                            ai_country_name = ai_country.split(' ',1)[1] if ' ' in ai_country else ai_country
+                            ai_cur = COUNTRIES[ai_country]['currency']
+                            verify_prompt = f"""أنت خبير تعويضات ومزايا دولي. ابحث وقدم تقدير دقيق للراتب:
+
+🏢 المسمى: {ai_job}
+🌍 الدولة: {ai_country_name}
+📅 الخبرة: {ai_exp} سنوات
+💱 العملة: {ai_cur}
+
+أجب بالعربية بالتنسيق:
+
+## 💰 تقدير الراتب الشهري
+
+**{ai_job} في {ai_country_name} ({ai_exp} سنوات خبرة):**
+- الحد الأدنى: [رقم] {ai_cur}
+- المتوسط: [رقم] {ai_cur}
+- الحد الأعلى: [رقم] {ai_cur}
+- بالريال السعودي: [رقم] SAR (المتوسط)
+
+## 📚 المصادر المرجعية
+اذكر 3-5 مصادر حقيقية ومواقع يمكن الرجوع إليها مثل:
+- Glassdoor ({ai_country_name})
+- LinkedIn Salary
+- PayScale
+- Michael Page / Hays / Robert Walters
+- مصادر محلية للدولة
+
+## 📈 العوامل المؤثرة
+- حجم الشركة
+- القطاع (بنوك، تقنية، حكومي)
+- المدينة
+- الشهادات المهنية
+
+## 🔗 روابط للاطلاع
+اذكر 3-4 روابط مباشرة لمواقع يمكن للمستخدم زيارتها للتحقق بنفسه
+"""
+                            response, error = call_ai_api(
+                                "أنت خبير تعويضات دولي. أعط أرقام واقعية دقيقة مبنية على مسوحات رواتب 2024-2025. اذكر المصادر الحقيقية والروابط.",
+                                verify_prompt, model_type="hr"
+                            )
+                            if response and len(response) > 50:
+                                st.markdown(f"<div style='background:#f0f9ff;border:1px solid #bae6fd;border-radius:12px;padding:20px;margin:10px 0;line-height:1.8'>{response}</div>", unsafe_allow_html=True)
+                                st.caption(f"📅 تاريخ التحقق: {datetime.now().strftime('%Y-%m-%d %H:%M')} | ⚠️ الأرقام تقريبية وتختلف حسب الشركة والقطاع والمدينة")
+                            else:
+                                st.warning(f"⚠️ تعذر التحقق: {error or 'لا يوجد رد'}. تأكد من إعداد مفتاح API.")
+                        except Exception as e:
+                            st.error(f"خطأ: {str(e)[:200]}")
+                else:
+                    st.warning("اكتب المسمى الوظيفي أولاً")
+
+            # =====================================================
+            # ⚠️ MINISTERIAL DECISIONS (Saudi-specific)
+            # =====================================================
+            st.markdown("---")
+            st.markdown("### ⚠️ ملاحظة مهمة: القرارات الوزارية والحدود الدنيا للأجور")
+            st.markdown("""
+<div style='background:linear-gradient(135deg,#FFF7ED,#FEF3C7);border:1px solid #F59E0B;border-radius:12px;padding:20px;margin:10px 0;line-height:2.0;font-size:14px'>
+
+**📋 بعض المهن والمستويات الوظيفية لها حدود دنيا للأجور منصوص عليها في قرارات وزارية يجب الرجوع إليها:**
+
+**🇸🇦 السعودية - احتساب نطاقات:**
+- أقل من **3,000** ريال: لا يُحتسب في التوطين
+- من **3,000** إلى **4,000** ريال: يُحتسب **بنصف عامل**
+- **4,000** ريال فأكثر: يُحتسب **عامل كامل**
+
+**💼 مهن التوطين الإلزامي:** خدمة العملاء (100%) | المبيعات (40%) | المهن المحاسبية | مهن السلامة والصحة المهنية
+
+**⚠️ كل دولة لها تشريعات مختلفة للحد الأدنى للأجور. تأكد من الرجوع للجهات الرسمية في الدولة المعنية.**
+
+</div>
+""", unsafe_allow_html=True)
+
+            st.markdown("#### 🔗 روابط رسمية للتحقق من الحدود الدنيا:")
+            gov_links = [
+                ("🇸🇦 وزارة الموارد البشرية (السعودية)", "https://hrsd.gov.sa", "القرارات الوزارية والتعاميم"),
+                ("🇸🇦 منصة قوى", "https://qiwa.sa", "التنقل الوظيفي والعلاقة التعاقدية"),
+                ("🇸🇦 المرصد الوطني للعمل", "https://lmi.sa", "بيانات سوق العمل السعودي"),
+                ("🇸🇦 التأمينات الاجتماعية", "https://www.gosi.gov.sa", "الاشتراكات والأجور المسجلة"),
+                ("🇸🇦 الهيئة العامة للإحصاء", "https://www.stats.gov.sa", "إحصاءات العمل والأجور"),
+                ("🌍 منظمة العمل الدولية ILO", "https://ilostat.ilo.org/data/country-profiles/", "بيانات الأجور لكل دول العالم"),
+                ("🌍 Trading Economics", "https://tradingeconomics.com/country-list/minimum-wages", "الحد الأدنى للأجور عالمياً"),
+                ("🌍 Glassdoor Salaries", "https://www.glassdoor.com/Salaries/", "رواتب حسب الوظيفة والدولة"),
+                ("🌍 PayScale", "https://www.payscale.com/research/", "مسوحات رواتب عالمية"),
+                ("🌍 Salary Expert", "https://www.salaryexpert.com/", "تقارير رواتب تفصيلية"),
+            ]
+            for icon_name, url, desc in gov_links:
+                st.markdown(f"- [{icon_name}]({url}) - {desc}")
+
+            ibox("**💡 نصيحة:** الأرقام المعروضة تقديرية. لتحديد راتب دقيق: 1) تحقق من القرارات الوزارية للدولة المعنية 2) استخدم زر التحقق عبر AI أعلاه 3) راجع المصادر المباشرة عبر الروابط.", "warning")
+
         elif page == "📊 متابعة التوظيف":
             hdr("📊 متابعة عمليات التوظيف", "تتبع مراحل التوظيف والتكاليف والوقت المستغرق")
 
