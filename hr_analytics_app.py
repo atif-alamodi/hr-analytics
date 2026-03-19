@@ -8144,7 +8144,20 @@ def main():
 
                             ibox("💡 **نصيحة:** إذا كان الفرق أكثر من 15% بين التقدير المحلي ونتيجة AI، استخدم رقم AI كمرجع أدق. يمكنك أيضاً مراجعة salary.com أو glassdoor.com مباشرة.", "warning")
                         else:
-                            st.warning(f"⚠️ تعذر التحقق: {error or 'لا يوجد رد من AI'}. تأكد من إعداد مفتاح API.")
+                            st.markdown(f"""
+<div style='background:#FEF3C7;border:1px solid #F59E0B;border-radius:12px;padding:20px;margin:10px 0;line-height:2.0'>
+
+**⚠️ لاستخدام التحقق عبر AI، تحتاج مفتاح API مجاني:**
+
+1. ادخل [Google AI Studio](https://aistudio.google.com/apikey) وسجّل بحساب Google
+2. اضغط "Create API Key" - مجاني 100%
+3. انسخ المفتاح والصقه في ⚙️ **الإعدادات** → مفتاح Gemini
+
+</div>
+
+**🔗 تحقق يدوياً:**
+- [Glassdoor](https://www.glassdoor.com/Salaries/) | [PayScale](https://www.payscale.com/research/) | [LinkedIn Salary](https://www.linkedin.com/salary/) | [Salary Expert](https://www.salaryexpert.com/) | [Bayt.com](https://www.bayt.com/en/salaries/)
+""", unsafe_allow_html=True)
                     except Exception as e:
                         st.error(f"خطأ: {str(e)[:200]}")
                 st.success(f"✅ تمت إضافة {num_hires} x {bm_title} من {country_name}")
@@ -8619,7 +8632,39 @@ def main():
                                 st.markdown(f"<div style='background:#f0f9ff;border:1px solid #bae6fd;border-radius:12px;padding:20px;margin:10px 0;line-height:1.8'>{response}</div>", unsafe_allow_html=True)
                                 st.caption(f"📅 تاريخ التحقق: {datetime.now().strftime('%Y-%m-%d %H:%M')} | ⚠️ الأرقام تقريبية وتختلف حسب الشركة والقطاع والمدينة")
                             else:
-                                st.warning(f"⚠️ تعذر التحقق: {error or 'لا يوجد رد'}. تأكد من إعداد مفتاح API.")
+                                # === SMART FALLBACK: Direct source links when AI unavailable ===
+                                ai_country_clean = ai_country_name.replace(' ','')
+                                job_encoded = ai_job.replace(' ','+')
+                                st.markdown(f"""
+<div style='background:#FEF3C7;border:1px solid #F59E0B;border-radius:12px;padding:20px;margin:10px 0;line-height:2.0'>
+
+**⚠️ لاستخدام التحقق عبر AI، تحتاج مفتاح API مجاني. اتبع هذه الخطوات:**
+
+1. ادخل [Google AI Studio](https://aistudio.google.com/apikey) وسجّل بحساب Google
+2. اضغط "Create API Key" - مجاني 100%
+3. انسخ المفتاح والصقه في ⚙️ **الإعدادات** → مفتاح Gemini
+
+**⏱️ يستغرق أقل من دقيقة!**
+
+</div>
+
+---
+
+**🔗 في هذه الأثناء، تحقق يدوياً من هذه المصادر المباشرة:**
+
+""", unsafe_allow_html=True)
+                                direct_links = [
+                                    f"🔍 [Glassdoor - {ai_job} in {ai_country_name}](https://www.glassdoor.com/Salaries/index.htm?typedKeyword={job_encoded}&locKeyword={ai_country_clean})",
+                                    f"🔍 [LinkedIn Salary - {ai_job}](https://www.linkedin.com/salary/search?keywords={job_encoded})",
+                                    f"🔍 [PayScale - {ai_job}](https://www.payscale.com/research/SA/Job={job_encoded}/Salary)",
+                                    f"🔍 [Salary Expert - {ai_country_name}](https://www.salaryexpert.com/salary/browse/countries)",
+                                    f"🔍 [Indeed Salaries](https://www.indeed.com/career/salaries?q={job_encoded})",
+                                    f"🔍 [Bayt.com رواتب](https://www.bayt.com/en/salaries/)",
+                                    f"🔍 [GulfTalent Salaries](https://www.gulftalent.com/salaries)",
+                                ]
+                                for link in direct_links:
+                                    st.markdown(link)
+                                st.markdown(f"\n📅 *اضغط على أي رابط للبحث مباشرة عن راتب **{ai_job}** في **{ai_country_name}***")
                         except Exception as e:
                             st.error(f"خطأ: {str(e)[:200]}")
                 else:
