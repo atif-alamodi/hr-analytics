@@ -4485,7 +4485,26 @@ def main():
                     if means: sal_col = max(means, key=means.get)
             status_col = find_col('status','حالة','الحالة')
             loc_col = find_col('location','موقع','مدينة','city','المدينة','المقر')
-            gender_col = find_col('gender','جنس','الجنس')
+            gender_col = None
+            for c, cl in cols_lower.items():
+                if c == nat_col: continue  # Skip nationality column!
+                if any(k == cl or (k in cl and 'جنسية' not in cl and 'nationality' not in cl) for k in ['gender','جنس','الجنس','sex']):
+                    # VALIDATE content: must contain gender values, not nationality names
+                    if len(data) > 0:
+                        sample_vals = set(data[c].dropna().astype(str).str.strip().str.lower().unique()[:20])
+                        gender_values = {'male','female','ذكر','أنثى','m','f','ذكور','إناث','رجل','امرأة','انثى'}
+                        nationality_indicators = {'سعودي','مصري','هندي','باكستاني','فلبيني','أردني','يمني','سوداني','بنغلاديشي','سوري','saudi','egyptian','indian','pakistani','filipino'}
+                        # If any value matches nationality → skip this column
+                        if sample_vals & nationality_indicators:
+                            continue
+                        # If any value matches gender → use this column
+                        if sample_vals & gender_values:
+                            gender_col = c; break
+                        # If column has only 2-3 unique values and none match nationality → likely gender
+                        if len(sample_vals) <= 4 and not (sample_vals & nationality_indicators):
+                            gender_col = c; break
+                    else:
+                        gender_col = c; break
             type_col = find_col('employment type','نوع التوظيف','نوع العقد','contract','type')
             level_col = find_col('level','مستوى','grade','درجة','المستوى','الدرجة')
             age_col = find_col('age','عمر','العمر','age group')
@@ -4885,6 +4904,12 @@ def main():
         dept_col_tr = tr_find_col('dept','قسم','department','القطاع','الإدارة','section','division','القسم','الادارة','إدارة')
         nat_col_tr = tr_find_col('nat','جنسية','nationality','الجنسية','country','بلد')
         gender_col_tr = tr_find_col('gender','جنس','الجنس','sex')
+        # Validate gender column content (must be Male/Female, not nationality names)
+        if gender_col_tr and len(snap) > 0:
+            g_vals = set(snap[gender_col_tr].dropna().astype(str).str.strip().str.lower().unique()[:20])
+            nationality_names = {'سعودي','مصري','هندي','باكستاني','فلبيني','أردني','يمني','سوداني','saudi','egyptian','indian','pakistani'}
+            if g_vals & nationality_names:
+                gender_col_tr = None  # This is nationality, not gender
         name_col_tr = tr_find_col('name','اسم','الاسم','employee','الموظف','employee name','اسم الموظف')
         title_col_tr = tr_find_col('title','المسمى','الوظيفة','وظيفة','job title','job','المسمى الوظيفي','position','منصب')
         level_col_tr = tr_find_col('level','مستوى','grade','درجة','المستوى','الدرجة','rank','band','الفئة الوظيفية')
