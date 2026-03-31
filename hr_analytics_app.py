@@ -1583,8 +1583,7 @@ st.markdown("""
 [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
 [data-testid="stSidebar"] h4, [data-testid="stSidebar"] h5,
 [data-testid="stSidebar"] p, [data-testid="stSidebar"] span,
-[data-testid="stSidebar"] .stButton button{color:white !important;background:rgba(255,255,255,0.1) !important;border:1px solid rgba(255,255,255,0.25) !important;border-radius:8px !important;font-weight:600 !important;min-height:42px !important}
-[data-testid="stSidebar"] .stButton button:hover{background:rgba(255,255,255,0.2) !important;border-color:rgba(255,255,255,0.4) !important}
+[data-testid="stSidebar"] .stButton button{color:white !important}
 /* Keep sidebar inputs/selects readable */
 [data-testid="stSidebar"] input, [data-testid="stSidebar"] select,
 [data-testid="stSidebar"] textarea, [data-testid="stSidebar"] .stSelectbox div[data-baseweb] {color:#333 !important}
