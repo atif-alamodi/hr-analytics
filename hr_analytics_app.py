@@ -5013,7 +5013,9 @@ def main():
         elif page == "🤖 المحلل الذكي":
             hdr("🤖 المحلل الذكي","يبحث في كل الأوراق")
             data = sal_snapshot if len(sal_snapshot)>0 else emp
-            if len(data)==0: st.info("📁 ارفع ملف"); return
+            if len(data)==0:
+                st.info("📁 ارفع ملف بيانات من القائمة الجانبية لتتمكن من التصدير")
+                return
             q = st.text_input("💬 اكتب سؤالك:", placeholder="ما نسبة السعودة؟ كم عدد الأقسام؟")
             if st.button("🔍 تحليل",type="primary",use_container_width=True) and q:
                 ql = q.lower()
@@ -5147,7 +5149,17 @@ def main():
             hdr("💰 لوحة تحليل الرواتب والتعويضات","تحليل شامل لتكاليف الرواتب والبدلات والاستقطاعات")
 
             if len(snap) == 0:
-                st.info("📁 ارفع ملف الرواتب من القائمة الجانبية"); return
+                st.info("📁 ارفع ملف رواتب من القائمة الجانبية")
+                st.markdown("""
+**📋 الأعمدة المطلوبة في ملف الرواتب:**
+- الراتب: `Gross Salary` أو `الراتب الإجمالي` أو `salary` أو `إجمالي` أو `net` أو `صافي`
+- الأساسي: `Basic Salary` أو `الراتب الأساسي` أو `basic`
+- القسم: `Department` أو `القسم` أو `الإدارة`
+- الاسم: `Name` أو `الاسم` أو `Employee`
+- الجنسية: `Nationality` أو `الجنسية` (اختياري)
+- الجنس: `Gender` أو `الجنس` (اختياري - ذكر/أنثى)
+""")
+                return
 
             # Use detected columns
             sal_col = sal_col_tr
@@ -5352,7 +5364,16 @@ def main():
 
         elif page == "📈 تحليل شهري/ربعي":
             hdr("📈 تحليل الرواتب الشهري والربعي")
-            if len(sal_df)==0: st.info("📁 ارفع ملف رواتب شهري (من القائمة الجانبية)"); return
+            if len(sal_df)==0:
+                st.info("📁 ارفع ملف رواتب شهري من القائمة الجانبية")
+                st.markdown("""
+**📋 هذا التبويب يحتاج ملف رواتب شهري يحتوي:**
+- `سنة الراتب` أو `Salary Year` أو `Year`
+- `شهر الراتب` أو `Salary Month` أو `Month`
+- `الراتب الإجمالي` أو `Gross Salary`
+- `الاسم` أو `Employee Name` (اختياري - لتتبع عدد الموظفين)
+""")
+                return
 
             yr_col = year_col_tr or tr_find_col('سنة','year')
             mn_col = month_col_tr or tr_find_col('شهر','month')
@@ -5404,7 +5425,10 @@ def main():
 
         elif page == "🏷️ تحليل حسب الفئات":
             hdr("🏷️ تحليل حسب الفئات","الجنس، الجيل، المستوى، نوع التوظيف")
-            if len(sal_df)==0 and n==0: st.info("📁 ارفع ملف"); return
+            if len(sal_df)==0 and n==0:
+                st.info("📁 ارفع ملف بيانات موظفين أو رواتب")
+                st.markdown("**يحتاج هذا التبويب:** ملف يحتوي أعمدة تصنيفية مثل: الجنس (Gender) / المستوى (Level/Grade) / نوع التوظيف / الفئة العمرية")
+                return
             data = sal_snapshot if len(sal_snapshot)>0 else emp
 
             tabs = st.tabs(["👫 الجنس","🎂 الأجيال","📊 المستويات","📋 نوع التوظيف"])
@@ -5484,7 +5508,10 @@ def main():
             export_widget(snap if len(snap)>0 else None, "سلم_الرواتب", "slsc")
         elif page == "🎁 لوحة Total Rewards":
             hdr("🎁 لوحة Total Rewards الشاملة","Compensation + Benefits + Work-Life + Performance + Development")
-            if len(snap) == 0: st.info("📁 ارفع ملف بيانات الموظفين"); return
+            if len(snap) == 0:
+                st.info("📁 ارفع ملف بيانات الموظفين من القائمة الجانبية للاطلاع على لوحة Total Rewards")
+                st.markdown("**يحتاج هذا التبويب:** ملف يحتوي أعمدة رواتب (Gross/Basic/Net) + أسماء + أقسام")
+                return
 
             st.markdown("### 📊 مكونات Total Rewards (WorldatWork Model)")
             ibox("**نموذج WorldatWork:** Total Rewards = Compensation + Benefits + Work-Life Effectiveness + Recognition + Development")
@@ -5535,7 +5562,10 @@ def main():
             export_widget({"Total Rewards": tr_df, "بيانات الموظفين": snap} if len(snap)>0 else tr_df, "Total_Rewards", "tr1")
         elif page == "💰 هيكل الرواتب":
             hdr("💰 هيكل الرواتب والعدالة","Salary Structure & Pay Equity")
-            if len(snap)==0: st.info("📁 ارفع ملف"); return
+            if len(snap)==0:
+                st.info("📁 ارفع ملف رواتب للاطلاع على هيكل الرواتب والعدالة الداخلية")
+                st.markdown("**يحتاج هذا التبويب:** ملف يحتوي عمود راتب (Gross/Net/Basic) + عمود قسم (Department)")
+                return
             if sal_col_tr:
                 st.markdown("### 📊 نطاقات الرواتب (Salary Bands)")
                 snap['_SalBand'] = pd.cut(snap[sal_col_tr], bins=[0,3000,5000,8000,12000,18000,30000,50000,999999],
@@ -5590,7 +5620,10 @@ def main():
             export_widget(benefits_data if len(benefits_data)>0 else None, "المزايا_والتأمينات", "bnft")
         elif page == "📊 تحليل التنافسية":
             hdr("📊 تحليل التنافسية","Market Competitiveness")
-            if len(snap)==0 or not sal_col_tr: st.info("📁 ارفع ملف رواتب"); return
+            if len(snap)==0 or not sal_col_tr:
+                st.info("📁 ارفع ملف رواتب لتحليل التنافسية")
+                st.markdown("**يحتاج هذا التبويب:** ملف يحتوي عمود راتب إجمالي (Gross Salary) على الأقل")
+                return
             fig = go.Figure()
             fig.add_trace(go.Indicator(mode="gauge+number", value=snap[sal_col_tr].mean(),
                 title={'text': "متوسط الراتب مقارنة بالسوق"},
@@ -5608,7 +5641,9 @@ def main():
             hdr("📥 تصدير تقرير الرواتب","Excel تقرير شامل للرواتب والتعويضات")
             data = sal_df if len(sal_df)>0 else (sal_snapshot if len(sal_snapshot)>0 else emp)
             snap = sal_snapshot if len(sal_snapshot)>0 else data
-            if len(data)==0: st.info("📁 ارفع ملف"); return
+            if len(data)==0:
+                st.info("📁 ارفع ملف بيانات من القائمة الجانبية لتتمكن من التصدير")
+                return
 
             exp_format = st.radio("صيغة التصدير:", ["📊 Excel شامل","📄 CSV","📝 HTML"], horizontal=True, key="sal_exp_fmt")
 
@@ -6482,7 +6517,8 @@ def main():
             hdr("📋 سجل بيانات الموظفين","Employee Data Registry - عرض وتصفية")
             data = sal_snapshot if len(sal_snapshot)>0 else emp
             if len(data) == 0:
-                st.info("📁 ارفع ملف بيانات الموظفين")
+                st.info("📁 ارفع ملف بيانات الموظفين من القائمة الجانبية")
+                st.markdown("**💡 يعرض هذا التبويب:** جدول تفاعلي مع فلاتر حسب القسم والحالة والجنسية")
                 return
             dept_col = next((c for c in ['Department','القسم','القطاع'] if has(data,c)), None)
             status_col = next((c for c in ['Status','الحالة'] if has(data,c)), None)
@@ -6512,7 +6548,7 @@ def main():
             hdr("📥 تصدير تقرير Headcount","تصدير Excel مطابق لنموذج HR Headcount Report")
             data = sal_snapshot if len(sal_snapshot)>0 else emp
             if len(data) == 0:
-                st.info("📁 ارفع ملف بيانات الموظفين أولاً")
+                st.info("📁 ارفع ملف بيانات الموظفين أولاً لتصدير تقرير Headcount")
                 return
 
             dept_col = next((c for c in ['Department','القسم','القطاع'] if has(data,c)), None)
@@ -6589,11 +6625,27 @@ def main():
                     type="primary", use_container_width=True)
 
         elif page == "📊 تحليل الأداء":
+            if n == 0 and len(sal_df) == 0:
+                hdr("📊 تحليل الأداء","تحليل بيانات الأداء الوظيفي وتقييمات الموظفين")
+                st.info("📁 لا توجد بيانات أداء محمّلة")
+                st.markdown("""
+**📋 هذا التبويب يحتاج ملف تقييمات أداء يحتوي:**
+- `الاسم` أو `Employee Name`
+- `القسم` أو `Department`
+- `التقييم` أو `Rating` أو `Performance Score` (رقم 1-5 أو نسبة)
+- `الفترة` أو `Period` (اختياري)
+- `المدير` أو `Manager` (اختياري)
+
+**💡 نصيحة:** يمكنك رفع ملف الأداء من القائمة الجانبية. إذا كان ملف الموظفين يحتوي عمود تقييم، سيتم عرضه تلقائياً.
+""")
+                return
             hdr("📊 تحليل الأداء","تحليل إنتاجية وأداء الموظفين")
 
             data = sal_snapshot if len(sal_snapshot)>0 else emp
 
-            if len(data)==0: st.info("📁 ارفع ملف"); return
+            if len(data)==0:
+                st.info("📁 ارفع ملف بيانات من القائمة الجانبية لتتمكن من التصدير")
+                return
 
             # Productivity metrics from salary data
             if has(data,'الراتب الإجمالي'):
@@ -9681,6 +9733,29 @@ def main():
         elif page == "🎤 تحليل المقابلات":
             hdr("🎤 تحليل المقابلات والاختبارات بالذكاء الاصطناعي","تحليل ذكي للأسئلة والإجابات مع موائمة السيرة الذاتية")
 
+            # File upload for interview data
+            intv_file = st.file_uploader("📁 ارفع ملف مقابلات (Excel/CSV - اختياري):", type=["xlsx","xls","csv"], key="intv_file_upload")
+            if intv_file:
+                try:
+                    intv_data = pd.read_excel(intv_file) if intv_file.name.endswith(('xlsx','xls')) else pd.read_csv(intv_file)
+                    st.success(f"✅ تم تحميل {len(intv_data)} سجل | الأعمدة: {', '.join(intv_data.columns[:8])}")
+                    st.dataframe(intv_data.head(10), use_container_width=True, hide_index=True)
+                    if st.button("🤖 تحليل ذكي لبيانات المقابلات", type="primary", key="intv_file_analyze"):
+                        with st.spinner("جاري التحليل..."):
+                            sample = intv_data.head(20).to_string()
+                            try:
+                                resp, err = call_ai_api(
+                                    "حلل بيانات المقابلات التالية بالعربية. قدم: ملخص إحصائي، أبرز الأنماط، نقاط القوة والضعف، توصيات لتحسين عملية المقابلات.",
+                                    f"بيانات المقابلات:\n{sample[:3000]}\n\nالأعمدة: {list(intv_data.columns)}\nعدد السجلات: {len(intv_data)}",
+                                    model_type="hr"
+                                )
+                                if resp: st.markdown(resp)
+                                elif err: st.warning(f"AI غير متاح: {err}")
+                            except: st.warning("تعذر التحليل. تأكد من إعداد مفتاح API.")
+                except Exception as e:
+                    st.error(f"خطأ في قراءة الملف: {e}")
+            st.markdown("---")
+
             st.markdown("### ❓ الأسئلة")
             questions_text = st.text_area("أدخل الأسئلة (سؤال واحد في كل سطر):", height=150, key="intv_q",
                 placeholder="1. لماذا تريد العمل في مجال الموارد البشرية؟\n2. كيف تتعامل مع موظف ذو أداء ضعيف؟\n3. ما خبرتك في أنظمة الرواتب؟")
@@ -9863,6 +9938,63 @@ def main():
                 }
                 st.session_state.ats_candidates.append(candidate)
                 st.success(f"✅ تم إضافة {cand_name} (درجة AI: {ai_score}/100)")
+
+            # ===== BATCH CV UPLOAD (up to 30 CVs) =====
+            st.markdown("---")
+            st.markdown("### 📄 رفع سير ذاتية دفعة واحدة (حتى 30 ملف)")
+            ibox("ارفع عدة سير ذاتية دفعة واحدة. سيتم تحليلها ومقارنتها بالمتطلبات والوصف الوظيفي أعلاه تلقائياً بالذكاء الاصطناعي.")
+            batch_cvs = st.file_uploader("ارفع السير الذاتية:", type=["pdf","docx","txt"],
+                accept_multiple_files=True, key="batch_cv_upload")
+            if batch_cvs and len(batch_cvs) > 30:
+                st.error("⚠️ الحد الأقصى 30 سيرة ذاتية في كل مرة")
+                batch_cvs = batch_cvs[:30]
+            if batch_cvs and st.button(f"🤖 تحليل {len(batch_cvs)} سيرة ذاتية", type="primary", use_container_width=True, key="batch_analyze"):
+                progress = st.progress(0)
+                for idx, cv_file in enumerate(batch_cvs):
+                    progress.progress((idx+1)/len(batch_cvs), text=f"تحليل {idx+1}/{len(batch_cvs)}: {cv_file.name}")
+                    cv_text = ""
+                    try:
+                        if cv_file.name.endswith('.txt'):
+                            cv_text = cv_file.read().decode('utf-8', errors='ignore')
+                        elif cv_file.name.endswith('.docx'):
+                            try:
+                                from docx import Document as DocxDoc
+                                doc = DocxDoc(io.BytesIO(cv_file.read()))
+                                cv_text = "\n".join([p.text for p in doc.paragraphs])
+                            except: cv_text = f"[ملف DOCX: {cv_file.name}]"
+                        elif cv_file.name.endswith('.pdf'):
+                            try:
+                                import pdfplumber
+                                with pdfplumber.open(io.BytesIO(cv_file.read())) as pdf:
+                                    cv_text = "\n".join([p.extract_text() or '' for p in pdf.pages[:5]])
+                            except: cv_text = f"[ملف PDF: {cv_file.name}]"
+                    except: cv_text = f"[ملف: {cv_file.name}]"
+
+                    # Extract name from filename or content
+                    fname = cv_file.name.rsplit('.',1)[0].replace('_',' ').replace('-',' ')
+                    ai_score = 50
+                    ai_note = ""
+                    if cv_text and ats_req:
+                        try:
+                            sc_prompt = f"قيّم هذا المرشح من 100. أعط رقماً واحداً فقط ثم سبب مختصر (سطر واحد).\nالسيرة: {cv_text[:2000]}\nالمتطلبات: {ats_req[:500]}\nالأهداف: {ats_company[:200]}"
+                            sc_resp, _ = call_ai_api(sc_prompt, sc_prompt, model_type="hr")
+                            if sc_resp:
+                                nums = re.findall(r'\b(\d{1,3})\b', sc_resp)
+                                valid = [int(n) for n in nums if 10 <= int(n) <= 100]
+                                if valid: ai_score = valid[0]
+                                ai_note = sc_resp[:200]
+                        except: pass
+                    st.session_state.ats_candidates.append({
+                        "الاسم": fname, "البريد": "", "الجوال": "",
+                        "المصدر": "رفع دفعة", "الخبرة": 0, "الراتب المتوقع": 0,
+                        "المرحلة": "فرز أولي", "الدرجة AI": ai_score,
+                        "ملاحظات AI": ai_note, "ملاحظات": f"ملف: {cv_file.name}",
+                        "تاريخ التقديم": datetime.now().strftime("%Y-%m-%d"),
+                        "الوظيفة": ats_title,
+                    })
+                progress.empty()
+                st.success(f"✅ تم تحليل {len(batch_cvs)} سيرة ذاتية وإضافتها للنظام")
+                st.rerun()
 
             # Display candidates
             if st.session_state.ats_candidates:
@@ -12458,7 +12590,10 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
             export_widget(gap_df, "تشخيص_المنظمة_OD", "od1")
         elif page == "📊 تحليل OD":
             hdr("📊 تحليل التطوير المؤسسي","Workforce Analytics for OD Planning")
-            if len(data)==0: st.info("📁 ارفع ملف"); return
+            if len(data)==0:
+                st.info("📁 ارفع ملف بيانات من القائمة الجانبية")
+                st.markdown("**💡 المطلوب:** ملف Excel يحتوي بيانات موظفين (أسماء، أقسام، رواتب، حالة)")
+                return
 
             n = len(data)
             nat_col = next((c for c in data.columns if any(x in c.lower() for x in ['nat','جنسية'])), None)
@@ -12633,7 +12768,10 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
         # ===== PAGE 1: HR Metrics =====
         if page == "📊 مؤشرات HR المتقدمة":
             hdr("📊 مؤشرات الموارد البشرية المتقدمة","Turnover Rate + Time-to-Hire + Cost-per-Hire + Absenteeism")
-            if len(data)==0: st.info("📁 ارفع ملف بيانات"); return
+            if len(data)==0:
+                st.info("📁 ارفع ملف بيانات من القائمة الجانبية")
+                st.markdown("**💡 المطلوب:** ملف Excel أو CSV يحتوي بيانات الموظفين")
+                return
 
             st.markdown("### ⚙️ إدخال بيانات المؤشرات")
             mc1, mc2, mc3, mc4 = st.columns(4)
@@ -12797,7 +12935,8 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                 export_widget(alerts_df, "التنبيهات_الذكية", "alrt")
 
             else:
-                st.info("📁 ارفع ملف بيانات لتفعيل التنبيهات")
+                st.info("📁 ارفع ملف بيانات لتفعيل التنبيهات الذكية")
+                st.markdown("**💡 التنبيهات تتضمن:** انتهاء العقود، فترات التجربة، نطاقات السعودة، تفاوت الرواتب، الغياب")
 
         # ===== PAGE 3: What-If Scenarios =====
         elif page == "🔮 سيناريوهات What-If":
@@ -12880,7 +13019,8 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                     with wc2: kpi("💰 للفرد", f"{per_emp:,.0f}")
                     with wc3: kpi("📈 ROI المتوقع", f"{roi_estimate:,.0f}")
             else:
-                st.info("📁 ارفع ملف بيانات لتفعيل السيناريوهات")
+                st.info("📁 ارفع ملف بيانات لتفعيل سيناريوهات What-If")
+                st.markdown("**💡 السيناريوهات تتضمن:** تأثير زيادة الرواتب، تغيير عدد الموظفين، محاكاة التوظيف/الفصل")
 
         # ===== PAGE 4: Predictive Analytics =====
         elif page == "🤖 التحليل التنبؤي":
@@ -13003,6 +13143,7 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                         st.info("يلزم عمودين رقميين على الأقل")
             else:
                 st.info("📁 ارفع ملف بيانات للتحليل التنبؤي")
+                st.markdown("**💡 التحليل التنبؤي يشمل:** توقع الدوران الوظيفي، التنبؤ بتكاليف الرواتب، تحليل مخاطر المغادرة")
 
         # ===== PAGE 5: Sentiment Analysis =====
         elif page == "💬 تحليل المشاعر":
@@ -13352,7 +13493,7 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                         st.error(f"خطأ: {e}")
                         st.info("حاول سؤال آخر أو تأكد من البيانات")
             else:
-                ibox("ارفع ملف بيانات من القائمة الجانبية أولاً.", "warning")
+                ibox("📁 ارفع ملف Excel أو CSV من القائمة الجانبية. المحلل الذكي يستخدم الذكاء الاصطناعي لتحليل أي بيانات تلقائياً.", "warning")
 
 
     # =========================================
@@ -13852,7 +13993,7 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
                                 help="افتح Power BI Desktop > Get Data > Excel > اختر هذا الملف")
 
             else:
-                ibox("ارفع ملف بيانات أولاً من القائمة الجانبية.", "warning")
+                ibox("📁 ارفع ملف بيانات (Excel أو CSV) من القائمة الجانبية. المنصة تدعم: بيانات الموظفين، الرواتب، الأداء، والمزيد.", "warning")
 
         elif page == "📝 تقرير Word":
             hdr("📝 تصدير تقرير Word احترافي", "مستند Word منسق بشكل احترافي")
@@ -14174,6 +14315,49 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
 
         elif page == "📊 تحليل النتائج":
             hdr("📊 تحليل نتائج الاستبيانات")
+
+            # File upload for external survey data
+            st.markdown("### 📁 رفع ملف استبيان للتحليل")
+            survey_file = st.file_uploader("ارفع ملف استبيان (Excel/CSV):", type=["xlsx","xls","csv"], key="survey_file_upload")
+            if survey_file:
+                try:
+                    sv_data = pd.read_excel(survey_file) if survey_file.name.endswith(('xlsx','xls')) else pd.read_csv(survey_file)
+                    st.success(f"✅ تم تحميل {len(sv_data)} استجابة | الأعمدة: {', '.join(sv_data.columns[:8])}")
+                    st.dataframe(sv_data.head(15), use_container_width=True, hide_index=True)
+
+                    # Auto-analyze numeric columns
+                    num_cols = sv_data.select_dtypes('number').columns.tolist()
+                    if num_cols:
+                        st.markdown("### 📊 التحليل الإحصائي التلقائي")
+                        desc = sv_data[num_cols].describe().round(2)
+                        st.dataframe(desc, use_container_width=True)
+
+                        # Charts
+                        avg_vals = sv_data[num_cols].mean().sort_values()
+                        fig = px.bar(x=avg_vals.values, y=avg_vals.index, orientation='h',
+                            title='متوسط التقييم لكل سؤال/بُعد', text_auto='.2f',
+                            color=avg_vals.values, color_continuous_scale='RdYlGn')
+                        fig.update_layout(font=dict(family="Noto Sans Arabic"), height=max(300, len(num_cols)*35), coloraxis_showscale=False)
+                        st.plotly_chart(fig, use_container_width=True)
+
+                    if st.button("🤖 تحليل ذكي بالذكاء الاصطناعي", type="primary", key="sv_ai_analyze"):
+                        with st.spinner("جاري التحليل الذكي للاستبيان..."):
+                            try:
+                                sample = sv_data.head(30).to_string()
+                                stats = sv_data.describe().to_string() if len(sv_data.select_dtypes('number').columns) > 0 else "لا توجد أعمدة رقمية"
+                                resp, err = call_ai_api(
+                                    "أنت خبير في تحليل الاستبيانات المؤسسية. حلل بدقة بالعربية.",
+                                    f"حلل نتائج هذا الاستبيان:\n\nالأعمدة: {list(sv_data.columns)}\nعدد الاستجابات: {len(sv_data)}\n\nالإحصائيات:\n{stats[:1500]}\n\nعيّنة:\n{sample[:2000]}\n\nقدم:\n1. ملخص تنفيذي\n2. أبرز النتائج الإيجابية والسلبية\n3. نقاط القوة والضعف المؤسسية\n4. مقارنة بين الأقسام (إذا وُجدت)\n5. توصيات عملية للتحسين\n6. مخاطر يجب الانتباه لها",
+                                    model_type="hr"
+                                )
+                                if resp: st.markdown(resp)
+                                elif err: st.warning(f"AI غير متاح: {err}")
+                            except: st.warning("تعذر التحليل.")
+                except Exception as e:
+                    st.error(f"خطأ في قراءة الملف: {e}")
+
+            st.markdown("---")
+            st.markdown("### 📋 نتائج الاستبيانات المسجّلة في المنصة")
 
             if st.session_state.survey_responses:
                 responses = st.session_state.survey_responses
