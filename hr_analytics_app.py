@@ -5011,40 +5011,176 @@ def main():
 
 
         elif page == "🤖 المحلل الذكي":
-            hdr("🤖 المحلل الذكي","يبحث في كل الأوراق")
-            data = sal_snapshot if len(sal_snapshot)>0 else emp
+            hdr("🤖 المحلل الذكي","تحليل ذكي لأي ملف بيانات بالذكاء الاصطناعي")
+
+            # In-page file upload
+            analyzer_file = st.file_uploader("📁 ارفع ملف للتحليل (أو استخدم الملف المرفوع من القائمة الجانبية):",
+                type=["xlsx","xls","csv"], key="analyzer_file_upload")
+
+            if analyzer_file:
+                try:
+                    if analyzer_file.name.endswith('.csv'):
+                        data = pd.read_csv(analyzer_file)
+                    else:
+                        data = pd.read_excel(analyzer_file)
+                    st.success(f"✅ تم تحميل {len(data)} سجل | {len(data.columns)} عمود")
+                except Exception as e:
+                    st.error(f"خطأ في قراءة الملف: {e}")
+                    data = pd.DataFrame()
+            else:
+                data = sal_snapshot if len(sal_snapshot)>0 else emp
+
             if len(data)==0:
-                st.info("📁 ارفع ملف بيانات من القائمة الجانبية لتتمكن من التصدير")
+                ibox("📁 ارفع ملف Excel أو CSV من الزر أعلاه أو من القائمة الجانبية. المحلل الذكي يستخدم الذكاء الاصطناعي لتحليل أي بيانات تلقائياً.", "warning")
                 return
-            q = st.text_input("💬 اكتب سؤالك:", placeholder="ما نسبة السعودة؟ كم عدد الأقسام؟")
-            if st.button("🔍 تحليل",type="primary",use_container_width=True) and q:
-                ql = q.lower()
-                a = ""
-                total = len(data)
-                if any(w in ql for w in ['سعود','جنسي','national','saudi']):
-                    if has(data,'الجنسية'):
-                        sa = data[data['الجنسية'].isin(['Saudi','سعودي','سعودية'])]
-                        a = f"نسبة السعودة: {round(len(sa)/total*100,1)}% ({len(sa)} من {total})\n\n"
-                        for nat,cnt in data['الجنسية'].value_counts().items():
-                            a += f"  - {nat}: {cnt} ({round(cnt/total*100,1)}%)\n"
-                    else: a = "لا يوجد عمود جنسية. أضف Nationality أو الجنسية للملف."
-                elif any(w in ql for w in ['قسم','أقسام','department','division']):
-                    dc = data['القسم'].value_counts() if has(data,'القسم') else (data['القطاع'].value_counts() if has(data,'القطاع') else None)
-                    if dc is not None:
-                        a = f"عدد الأقسام: {len(dc)}\n\n"
-                        for d,c in dc.items(): a += f"  - {d}: {c} ({round(c/total*100,1)}%)\n"
-                elif any(w in ql for w in ['راتب','رواتب','salary','تكلف']):
-                    if has(data,'الراتب الإجمالي'):
-                        a = f"إجمالي الرواتب الشهرية: {data['الراتب الإجمالي'].sum():,.0f} ريال\nمتوسط: {data['الراتب الإجمالي'].mean():,.0f}\nالأعلى: {data['الراتب الإجمالي'].max():,.0f}\nالأقل: {data['الراتب الإجمالي'].min():,.0f}"
-                    elif has(data,'الراتب الأساسي'):
-                        a = f"متوسط الراتب الأساسي: {data['الراتب الأساسي'].mean():,.0f} ريال"
-                    else: a = "لا يوجد بيانات رواتب."
-                else:
-                    a = f"الموظفين: {total}\n"
-                    for c in data.columns[:10]:
-                        if data[c].dtype == 'object': a += f"{c}: {data[c].nunique()} قيمة فريدة\n"
-                    a += f"\nالأعمدة: {', '.join(data.columns[:15])}"
-                st.info(a if a else "جرب سؤال آخر")
+
+            # Show data preview
+            with st.expander(f"📋 معاينة البيانات ({len(data)} سجل × {len(data.columns)} عمود)", expanded=False):
+                st.dataframe(data.head(20), use_container_width=True, hide_index=True)
+                st.caption(f"الأعمدة: {', '.join(data.columns)}")
+
+            # Auto-summary KPIs
+            total = len(data)
+            num_cols = data.select_dtypes('number').columns.tolist()
+            cat_cols = data.select_dtypes('object').columns.tolist()
+            sk1, sk2, sk3, sk4 = st.columns(4)
+            with sk1: kpi("📊 السجلات", f"{total:,}")
+            with sk2: kpi("📋 الأعمدة", str(len(data.columns)))
+            with sk3: kpi("🔢 أعمدة رقمية", str(len(num_cols)))
+            with sk4: kpi("📝 أعمدة نصية", str(len(cat_cols)))
+
+            st.markdown("---")
+
+            # Quick analysis tools
+            st.markdown("### 🔧 أدوات التحليل السريع")
+            tool_tab1, tool_tab2, tool_tab3 = st.tabs(["💬 اسأل AI", "📊 تحليل تلقائي", "🔍 تحليل عمود"])
+
+            with tool_tab1:
+                q = st.text_input("💬 اكتب سؤالك عن البيانات:", placeholder="ما نسبة السعودة؟ كم متوسط الرواتب؟ ما أكبر قسم؟", key="smart_q")
+                if st.button("🤖 تحليل بالذكاء الاصطناعي", type="primary", use_container_width=True, key="smart_ai_btn") and q:
+                    with st.spinner("جاري التحليل الذكي..."):
+                        # Build data context
+                        stats_str = data.describe(include='all').to_string()[:2000] if len(data) > 0 else ""
+                        sample_str = data.head(10).to_string()[:1500]
+                        cols_info = ", ".join([f"{c}({data[c].dtype})" for c in data.columns[:20]])
+
+                        ai_prompt = f"""حلل هذه البيانات وأجب على السؤال بالعربية بدقة شديدة.
+
+السؤال: {q}
+
+معلومات الملف:
+- عدد السجلات: {total}
+- الأعمدة: {cols_info}
+
+الإحصائيات:
+{stats_str}
+
+عيّنة من البيانات:
+{sample_str}
+
+تعليمات:
+- أجب بناءً على البيانات الفعلية فقط
+- استخدم الأرقام الدقيقة من البيانات
+- إذا السؤال يتطلب حسابات، احسبها
+- قدم رسوم بيانية مقترحة إذا مناسب
+- اذكر أي ملاحظات أو anomalies في البيانات"""
+
+                        try:
+                            response, error = call_ai_api(
+                                "أنت محلل بيانات HR خبير. حلل البيانات بدقة شديدة واعط أرقام حقيقية.",
+                                ai_prompt, model_type="hr"
+                            )
+                            if response:
+                                st.markdown(response)
+                            elif error:
+                                # Fallback to local analysis
+                                st.warning(f"AI غير متاح ({error}). جاري التحليل المحلي...")
+                                ql = q.lower()
+                                a = ""
+                                if any(w in ql for w in ['سعود','جنسي','national','saudi']):
+                                    nat_c = next((c for c in data.columns if any(x in c.lower() for x in ['nat','جنسية'])), None)
+                                    if nat_c:
+                                        sa = data[data[nat_c].astype(str).str.contains('Saudi|سعودي', case=False, na=False)]
+                                        a = f"نسبة السعودة: {round(len(sa)/total*100,1)}% ({len(sa)} من {total})\n\n"
+                                        for nat,cnt in data[nat_c].value_counts().head(10).items():
+                                            a += f"  - {nat}: {cnt} ({round(cnt/total*100,1)}%)\n"
+                                elif any(w in ql for w in ['قسم','أقسام','department']):
+                                    dept_c = next((c for c in data.columns if any(x in c.lower() for x in ['dept','قسم','department'])), None)
+                                    if dept_c:
+                                        dc = data[dept_c].value_counts()
+                                        a = f"عدد الأقسام: {len(dc)}\n\n"
+                                        for d,c2 in dc.items(): a += f"  - {d}: {c2} ({round(c2/total*100,1)}%)\n"
+                                elif any(w in ql for w in ['راتب','رواتب','salary','أجر']):
+                                    sal_c = next((c for c in num_cols if any(x in c.lower() for x in ['salary','راتب','gross','إجمالي','net','صافي'])), None)
+                                    if sal_c:
+                                        a = f"إحصائيات {sal_c}:\n- الإجمالي: {data[sal_c].sum():,.0f}\n- المتوسط: {data[sal_c].mean():,.0f}\n- الأعلى: {data[sal_c].max():,.0f}\n- الأقل: {data[sal_c].min():,.0f}\n- الوسيط: {data[sal_c].median():,.0f}"
+                                else:
+                                    a = f"الملف يحتوي {total} سجل في {len(data.columns)} عمود.\n\n"
+                                    for c in cat_cols[:5]:
+                                        a += f"- {c}: {data[c].nunique()} قيمة فريدة\n"
+                                    for c in num_cols[:5]:
+                                        a += f"- {c}: متوسط {data[c].mean():,.1f}\n"
+                                st.info(a if a else "جرب سؤال آخر")
+                        except Exception as e:
+                            st.error(f"خطأ: {str(e)[:200]}")
+
+            with tool_tab2:
+                if st.button("📊 تحليل تلقائي شامل", type="primary", use_container_width=True, key="auto_analyze"):
+                    st.markdown("### 📊 التحليل التلقائي")
+
+                    # Numeric columns summary
+                    if num_cols:
+                        st.markdown("#### 🔢 ملخص الأعمدة الرقمية")
+                        st.dataframe(data[num_cols].describe().round(2), use_container_width=True)
+
+                        # Distribution charts
+                        for col in num_cols[:4]:
+                            fig = px.histogram(data, x=col, nbins=20, title=f'توزيع {col}',
+                                color_discrete_sequence=['#0E7490'])
+                            fig.update_layout(font=dict(family="Noto Sans Arabic"), height=300)
+                            st.plotly_chart(fig, use_container_width=True)
+
+                    # Categorical columns summary
+                    if cat_cols:
+                        st.markdown("#### 📝 ملخص الأعمدة النصية")
+                        for col in cat_cols[:6]:
+                            vc = data[col].value_counts().head(10)
+                            if len(vc) > 1 and len(vc) <= 20:
+                                fig = px.bar(x=vc.index.astype(str), y=vc.values, title=f'توزيع {col}',
+                                    labels={'x':col,'y':'العدد'}, color_discrete_sequence=['#F97316'])
+                                fig.update_layout(font=dict(family="Noto Sans Arabic"), height=300)
+                                st.plotly_chart(fig, use_container_width=True)
+
+                    # Correlation matrix
+                    if len(num_cols) >= 2:
+                        st.markdown("#### 🔗 مصفوفة الارتباط")
+                        corr = data[num_cols].corr().round(2)
+                        fig = px.imshow(corr, text_auto=True, title='مصفوفة الارتباط',
+                            color_continuous_scale='RdBu_r')
+                        fig.update_layout(height=400)
+                        st.plotly_chart(fig, use_container_width=True)
+
+            with tool_tab3:
+                col_to_analyze = st.selectbox("اختر عمود للتحليل:", data.columns.tolist(), key="col_analyze")
+                if st.button("🔍 تحليل العمود", type="primary", key="analyze_col_btn"):
+                    col_data = data[col_to_analyze]
+                    if col_data.dtype in ['int64','float64']:
+                        st.markdown(f"#### 📊 تحليل {col_to_analyze}")
+                        mc1, mc2, mc3, mc4 = st.columns(4)
+                        with mc1: kpi("المتوسط", f"{col_data.mean():,.1f}")
+                        with mc2: kpi("الوسيط", f"{col_data.median():,.1f}")
+                        with mc3: kpi("الأعلى", f"{col_data.max():,.1f}")
+                        with mc4: kpi("الأقل", f"{col_data.min():,.1f}")
+                        fig = px.box(data, y=col_to_analyze, title=f'Box Plot: {col_to_analyze}')
+                        fig.update_layout(height=350)
+                        st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        vc = col_data.value_counts().head(15)
+                        st.markdown(f"#### 📝 توزيع {col_to_analyze} ({col_data.nunique()} قيمة فريدة)")
+                        fig = px.pie(values=vc.values, names=vc.index.astype(str), title=f'توزيع {col_to_analyze}', hole=0.4)
+                        fig.update_layout(height=400)
+                        st.plotly_chart(fig, use_container_width=True)
+                        st.dataframe(vc.reset_index().rename(columns={'index':col_to_analyze, col_to_analyze:'العدد'}), hide_index=True)
 
         elif page == "📋 البيانات":
             hdr("📋 البيانات")
@@ -5088,6 +5224,24 @@ def main():
         sal_col_tr = tr_find_num_col('gross','إجمالي','total sal','net sal','الراتب الإجمالي','إجمالي الراتب','salary','راتب','أجر','الراتب')
         basic_col_tr = tr_find_num_col('basic','أساسي','base','الراتب الأساسي','الأساسي')
         net_col_tr = tr_find_num_col('net','صافي','net sal','صافي الراتب','الصافي')
+
+        # SMART FALLBACK: If no salary column found, pick the numeric column with highest mean (likely salary)
+        if not sal_col_tr and len(snap) > 0:
+            num_cols_snap = snap.select_dtypes('number').columns.tolist()
+            if num_cols_snap:
+                # Find columns with mean between 1000-200000 (likely salary in SAR)
+                sal_candidates = {}
+                for c in num_cols_snap:
+                    avg = snap[c].mean()
+                    if 1000 <= avg <= 200000:
+                        sal_candidates[c] = avg
+                if sal_candidates:
+                    sal_col_tr = max(sal_candidates, key=sal_candidates.get)
+                    if not basic_col_tr and len(sal_candidates) > 1:
+                        # Second highest might be basic salary
+                        sorted_cands = sorted(sal_candidates.items(), key=lambda x: x[1], reverse=True)
+                        if len(sorted_cands) >= 2 and sorted_cands[1][1] > 500:
+                            basic_col_tr = sorted_cands[1][0]
         housing_col_tr = tr_find_num_col('housing','سكن','بدل السكن','بدل سكن','housing allow')
         transport_col_tr = tr_find_num_col('transport','نقل','بدل النقل','بدل نقل','مواصلات','transportation')
         overtime_col_tr = tr_find_num_col('overtime','إضافي','ساعات إضافية','عمل إضافي','تكلفة الإضافي','بدل إضافي')
@@ -5162,6 +5316,7 @@ def main():
                 return
 
             # Use detected columns
+
             sal_col = sal_col_tr
             basic_col = basic_col_tr
             net_col = net_col_tr
@@ -10049,20 +10204,52 @@ def main():
                     st.session_state.ats_candidates = []
 
         elif page == "📥 تصدير التوظيف":
-            hdr("📥 تصدير بيانات التوظيف")
-            ox = io.BytesIO()
-            with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
-                if st.session_state.recruit_plans:
-                    pd.DataFrame(st.session_state.recruit_plans).to_excel(w, sheet_name='خطة التوظيف', index=False)
-                    ws = w.sheets['خطة التوظيف']; ws.right_to_left()
-                if st.session_state.recruit_tracking:
-                    pd.DataFrame(st.session_state.recruit_tracking).to_excel(w, sheet_name='متابعة التوظيف', index=False)
-                    ws = w.sheets['متابعة التوظيف']; ws.right_to_left()
-                if not st.session_state.recruit_plans and not st.session_state.recruit_tracking:
-                    pd.DataFrame({"ملاحظة": ["لا توجد بيانات"]}).to_excel(w, sheet_name='فارغ', index=False)
-            st.download_button("📥 تحميل Excel", data=ox.getvalue(),
-                file_name=f"Recruitment_{datetime.now().strftime('%Y%m%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary", use_container_width=True)
+            hdr("📥 تصدير بيانات التوظيف","تصدير خطة التوظيف + متابعة العمليات + بيانات المتقدمين ATS")
+
+            has_plans = bool(st.session_state.recruit_plans)
+            has_tracking = bool(st.session_state.recruit_tracking)
+            has_ats = bool(st.session_state.get('ats_candidates'))
+
+            if not has_plans and not has_tracking and not has_ats:
+                ibox("لا توجد بيانات توظيف للتصدير بعد. استخدم الصفحات التالية لإضافة بيانات:", "warning")
+                st.markdown("""
+- **📋 تخطيط التوظيف:** لإنشاء خطة التوظيف
+- **🤖 Benchmark ذكاء اصطناعي:** لإضافة وظائف للخطة
+- **📊 متابعة التوظيف:** لتسجيل عمليات التوظيف الجارية
+- **📋 ATS تتبع المتقدمين:** لإضافة مرشحين وتحليل سيرهم الذاتية
+""")
+            else:
+                # Summary KPIs
+                ek1, ek2, ek3 = st.columns(3)
+                with ek1: kpi("📋 خطة التوظيف", f"{len(st.session_state.recruit_plans)} وظيفة" if has_plans else "فارغة")
+                with ek2: kpi("📊 متابعة التوظيف", f"{len(st.session_state.recruit_tracking)} عملية" if has_tracking else "فارغة")
+                with ek3: kpi("👥 ATS المتقدمين", f"{len(st.session_state.get('ats_candidates',[]))} مرشح" if has_ats else "فارغة")
+
+                ox = io.BytesIO()
+                with pd.ExcelWriter(ox, engine='xlsxwriter') as w:
+                    if has_plans:
+                        pd.DataFrame(st.session_state.recruit_plans).to_excel(w, sheet_name='خطة التوظيف', index=False)
+                        w.sheets['خطة التوظيف'].right_to_left()
+                    if has_tracking:
+                        pd.DataFrame(st.session_state.recruit_tracking).to_excel(w, sheet_name='متابعة التوظيف', index=False)
+                        w.sheets['متابعة التوظيف'].right_to_left()
+                    if has_ats:
+                        pd.DataFrame(st.session_state.ats_candidates).to_excel(w, sheet_name='ATS المتقدمين', index=False)
+                        w.sheets['ATS المتقدمين'].right_to_left()
+                    if not has_plans and not has_tracking and not has_ats:
+                        pd.DataFrame({"ملاحظة": ["لا توجد بيانات"]}).to_excel(w, sheet_name='فارغ', index=False)
+
+                st.download_button("📥 تحميل ملف Excel شامل", data=ox.getvalue(),
+                    file_name=f"Recruitment_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary", use_container_width=True)
+
+                # Preview
+                if has_plans:
+                    with st.expander("📋 معاينة خطة التوظيف"):
+                        st.dataframe(pd.DataFrame(st.session_state.recruit_plans), use_container_width=True, hide_index=True)
+                if has_ats:
+                    with st.expander("👥 معاينة ATS المتقدمين"):
+                        st.dataframe(pd.DataFrame(st.session_state.ats_candidates), use_container_width=True, hide_index=True)
 
 
     # =========================================
