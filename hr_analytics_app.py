@@ -5183,13 +5183,23 @@ def main():
                         st.dataframe(vc.reset_index().rename(columns={'index':col_to_analyze, col_to_analyze:'العدد'}), hide_index=True)
 
         elif page == "📋 البيانات":
-            hdr("📋 البيانات")
-            if not all_sheets and n==0: st.info("📁 ارفع ملف"); return
+            hdr("📋 عرض البيانات الخام","جميع أوراق الملف المرفوع")
+            if not all_sheets and n==0:
+                st.info("📁 ارفع ملف Excel أو CSV من القائمة الجانبية لعرض البيانات")
+                return
             if all_sheets:
                 sn = st.selectbox("الورقة:", list(all_sheets.keys()))
-                st.dataframe(all_sheets[sn], use_container_width=True, hide_index=True, height=600)
+                sheet_data = all_sheets[sn]
+                st.caption(f"📊 {len(sheet_data)} سجل × {len(sheet_data.columns)} عمود")
+                st.dataframe(sheet_data, use_container_width=True, hide_index=True, height=600)
+                # Quick stats
+                with st.expander("📊 إحصائيات سريعة"):
+                    st.dataframe(sheet_data.describe(include='all').T, use_container_width=True)
             elif n>0:
+                st.caption(f"📊 {len(emp)} سجل × {len(emp.columns)} عمود")
                 st.dataframe(emp, use_container_width=True, hide_index=True, height=600)
+                with st.expander("📊 إحصائيات سريعة"):
+                    st.dataframe(emp.describe(include='all').T, use_container_width=True)
 
 
     # =========================================
@@ -13355,9 +13365,10 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                     texts = []; st.info("لا توجد أعمدة نصية")
 
             if texts and st.button("💬 تحليل المشاعر", type="primary", key="sent_btn"):
+                analysis_mode = st.session_state.get('_sent_mode', 'local')
                 # Simple keyword-based sentiment
-                positive_kw = ['ممتاز','رائع','جيد','محفز','فرص','نمو','تطوير','ابتكار','excellent','great','good','growth']
-                negative_kw = ['سيء','ضعيف','مشكلة','غير مناسب','نقص','ضغط','تأخر','bad','poor','problem','pressure']
+                positive_kw = ['ممتاز','رائع','جيد','محفز','فرص','نمو','تطوير','ابتكار','excellent','great','good','growth','happy','satisfied','سعيد','راضي','مرتاح','مميز','أفضل','best','love','أحب']
+                negative_kw = ['سيء','ضعيف','مشكلة','غير مناسب','نقص','ضغط','تأخر','bad','poor','problem','pressure','unhappy','frustrated','محبط','زعلان','تعب','إرهاق','ظلم','unfair','hate','أكره','terrible']
                 neutral_kw = ['عادي','متوسط','مقبول','normal','average','ok']
 
                 results = []
@@ -13396,6 +13407,20 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                     st.plotly_chart(fig, use_container_width=True)
 
                 export_widget(res_df, "تحليل_المشاعر", "sent1")
+
+                # AI Deep Analysis
+                if st.button("🤖 تحليل عميق بالذكاء الاصطناعي", key="sent_ai_deep"):
+                    with st.spinner("جاري التحليل العميق..."):
+                        try:
+                            all_texts = "\n".join([f"- {t}" for t in texts[:30]])
+                            resp, err = call_ai_api(
+                                "أنت خبير تحليل مشاعر الموظفين. حلل بدقة بالعربية.",
+                                f"حلل مشاعر هذه النصوص من موظفين:\n{all_texts}\n\nقدم:\n1. التصنيف العام (إيجابي/سلبي/محايد) مع النسب\n2. أبرز المواضيع الإيجابية (3-5)\n3. أبرز الشكاوى والمخاوف (3-5)\n4. مقترحات تحسين بيئة العمل (5 مقترحات عملية)\n5. مؤشر رضا الموظفين من 100\n6. أولوية التدخل: ما الذي يحتاج إصلاح فوري؟",
+                                model_type="hr"
+                            )
+                            if resp: st.markdown(resp)
+                            elif err: st.warning(f"AI غير متاح: {err}")
+                        except: st.warning("تعذر التحليل")
 
         # ===== PAGE 6: Audit Log =====
         elif page == "📋 سجل التدقيق":
@@ -13669,12 +13694,28 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                                 st.write(f"  {i}. **{c}** ({emp[c].dtype})")
 
                         else:
-                            st.warning("💡 حاول صياغة السؤال بطريقة مختلفة. أمثلة:")
-                            st.write("- ما متوسط الرواتب حسب القسم؟")
-                            st.write("- أعلى 10 رواتب")
-                            st.write("- عدد الموظفين حسب الجنسية")
-                            st.write("- توزيع الأعمار")
-                            st.write("- مجموع الرواتب")
+                            # AI Fallback for complex questions
+                            st.info("💡 السؤال يحتاج تحليل ذكي...")
+                            try:
+                                cols_info = ", ".join([f"{c}({emp[c].dtype})" for c in emp.columns[:20]])
+                                sample = emp.head(5).to_string()[:1000]
+                                stats = emp.describe().to_string()[:1000] if len(num_cols) > 0 else ""
+                                resp, err = call_ai_api(
+                                    "أنت محلل بيانات. أجب عن السؤال بناءً على البيانات المتاحة بالعربية. اعط أرقام دقيقة.",
+                                    f"السؤال: {q}\n\nالأعمدة: {cols_info}\nالسجلات: {len(emp)}\n\nإحصائيات:\n{stats}\n\nعيّنة:\n{sample}",
+                                    model_type="hr"
+                                )
+                                if resp:
+                                    st.markdown(resp)
+                                elif err:
+                                    st.warning("💡 حاول صياغة السؤال بطريقة مختلفة. أمثلة:")
+                                    st.write("- ما متوسط الرواتب حسب القسم؟")
+                                    st.write("- أعلى 10 رواتب")
+                                    st.write("- عدد الموظفين حسب الجنسية")
+                                    st.write("- توزيع الأعمار")
+                                    st.write("- مجموع الرواتب")
+                            except:
+                                st.warning("💡 حاول صياغة السؤال بطريقة مختلفة: متوسط الرواتب، أعلى 10، عدد حسب القسم...")
 
                     except Exception as e:
                         st.error(f"خطأ: {e}")
