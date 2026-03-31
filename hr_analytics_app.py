@@ -1618,6 +1618,36 @@ st.markdown("""
 [data-testid="stSidebar"] .stRadio > div > label:hover{background:rgba(255,255,255,0.1)}
 /* Fix expander in dark sidebar */
 [data-testid="stSidebar"] .streamlit-expanderHeader{color:white !important}
+/* File uploader in sidebar - make it visible on dark background */
+[data-testid="stSidebar"] [data-testid="stFileUploader"] {
+    background: rgba(255,255,255,0.08) !important;
+    border-radius: 10px !important;
+    padding: 8px !important;
+    border: 1px dashed rgba(255,255,255,0.25) !important;
+}
+[data-testid="stSidebar"] [data-testid="stFileUploader"] label {
+    color: white !important;
+}
+[data-testid="stSidebar"] [data-testid="stFileUploader"] section {
+    background: rgba(255,255,255,0.06) !important;
+    border: 1px dashed rgba(255,255,255,0.2) !important;
+    border-radius: 8px !important;
+}
+[data-testid="stSidebar"] [data-testid="stFileUploader"] section > div {
+    color: rgba(255,255,255,0.7) !important;
+}
+[data-testid="stSidebar"] [data-testid="stFileUploader"] button {
+    background: rgba(255,255,255,0.15) !important;
+    color: white !important;
+    border: 1px solid rgba(255,255,255,0.3) !important;
+    border-radius: 6px !important;
+}
+[data-testid="stSidebar"] [data-testid="stFileUploader"] button:hover {
+    background: rgba(255,255,255,0.25) !important;
+}
+[data-testid="stSidebar"] small, [data-testid="stSidebar"] [data-testid="stFileUploader"] small {
+    color: rgba(255,255,255,0.5) !important;
+}
 
 /* ===== RESPONSIVE DESIGN ===== */
 /* Tablet */
@@ -3510,13 +3540,55 @@ def login_page():
         <p style='color:#64748B;font-size:clamp(11px,2vw,14px);'>رسال الود لتقنية المعلومات - الإصدار v5</p>
     </div>""", unsafe_allow_html=True)
 
-    # Fix button visibility
+    # Fix button visibility on login page
     st.markdown("""<style>
-    .stForm button[kind="formSubmit"] {background:#0E7490 !important;color:white !important;border:none !important;border-radius:8px !important;padding:10px 20px !important;font-weight:600 !important;font-size:14px !important}
-    .stForm button[kind="formSubmit"]:hover {background:#0C5A72 !important}
-    .stForm button:not([kind="formSubmit"]) {background:#E2E8F0 !important;color:#1E293B !important;border:1px solid #CBD5E1 !important;border-radius:8px !important;padding:10px 20px !important;font-weight:600 !important}
-    .stForm button:not([kind="formSubmit"]):hover {background:#CBD5E1 !important}
-    @media (max-width:768px) {.stForm button {width:100% !important;margin-bottom:6px !important}}
+    /* ALL form buttons - make visible */
+    .stForm [data-testid="stFormSubmitButton"] button {
+        background: #0E7490 !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 8px !important;
+        padding: 12px 24px !important;
+        font-weight: 700 !important;
+        font-size: 15px !important;
+        min-height: 45px !important;
+    }
+    .stForm [data-testid="stFormSubmitButton"] button:hover {
+        background: #0C5A72 !important;
+        box-shadow: 0 4px 12px rgba(14,116,144,0.3) !important;
+    }
+    /* Secondary buttons in forms */
+    .stForm [data-testid="stFormSubmitButton"]:nth-of-type(2) button {
+        background: #E2E8F0 !important;
+        color: #1E293B !important;
+        border: 2px solid #94A3B8 !important;
+    }
+    .stForm [data-testid="stFormSubmitButton"]:nth-of-type(2) button:hover {
+        background: #CBD5E1 !important;
+    }
+    /* Fallback: target ALL buttons inside stForm */
+    .stForm button {
+        color: #1E293B !important;
+        min-height: 42px !important;
+        font-weight: 600 !important;
+    }
+    .stForm button[kind="primary"], .stForm button[type="primary"] {
+        background: #0E7490 !important;
+        color: white !important;
+    }
+    /* Registration form button */
+    [data-testid="stFormSubmitButton"] button {
+        min-height: 42px !important;
+        font-weight: 600 !important;
+        font-size: 14px !important;
+    }
+    @media (max-width:768px) {
+        .stForm button, [data-testid="stFormSubmitButton"] button {
+            width: 100% !important;
+            margin-bottom: 8px !important;
+            font-size: 14px !important;
+        }
+    }
     </style>""", unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns([0.5,3,0.5])
