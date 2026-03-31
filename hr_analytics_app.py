@@ -13600,14 +13600,31 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
         elif page == "🤖 أسئلة ذكية":
             hdr("🤖 المحلل الذكي", "اطرح أسئلة عن بياناتك بالعربي أو الإنجليزي")
 
-            if len(emp) > 0:
-                st.success(f"📂 البيانات جاهزة: {len(emp):,} صف × {len(emp.columns)} عمود")
+            # In-page file upload
+            sq_file = st.file_uploader("📁 ارفع ملف للتحليل (أو استخدم الملف المرفوع من القائمة الجانبية):",
+                type=["xlsx","xls","csv"], key="sq_file_upload")
+
+            sq_data = pd.DataFrame()
+            if sq_file:
+                try:
+                    sq_data = pd.read_excel(sq_file) if sq_file.name.endswith(('xlsx','xls')) else pd.read_csv(sq_file)
+                    st.success(f"✅ تم تحميل {len(sq_data)} سجل | {len(sq_data.columns)} عمود")
+                except Exception as e:
+                    st.error(f"خطأ في قراءة الملف: {e}")
+            elif len(emp) > 0:
+                sq_data = emp.copy()
+                st.success(f"📂 البيانات من القائمة الجانبية: {len(emp):,} صف × {len(emp.columns)} عمود")
+
+            if len(sq_data) > 0:
+                # Show columns info
+                with st.expander("📋 الأعمدة المتاحة"):
+                    st.caption(", ".join(sq_data.columns))
 
                 q = st.text_input("💬 اسأل عن بياناتك:", placeholder="مثال: كم متوسط الرواتب حسب القسم؟ أو ما أعلى 5 رواتب؟", key="ga_q")
 
                 if q:
-                    num_cols = emp.select_dtypes('number').columns.tolist()
-                    cat_cols = [c for c in emp.columns if emp[c].dtype=='object' and emp[c].nunique() < 50 and emp[c].nunique() > 1]
+                    num_cols = sq_data.select_dtypes('number').columns.tolist()
+                    cat_cols = [c for c in sq_data.columns if sq_data[c].dtype=='object' and sq_data[c].nunique() < 50 and sq_data[c].nunique() > 1]
                     ql = q.lower()
 
                     try:
@@ -13626,34 +13643,34 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                                         matched_cat = cc; break
 
                                 if matched_cat:
-                                    result = emp.groupby(matched_cat)[matched_num].mean().sort_values(ascending=False)
+                                    result = sq_data.groupby(matched_cat)[matched_num].mean().sort_values(ascending=False)
                                     st.dataframe(result.reset_index().rename(columns={matched_num: f"متوسط {matched_num}"}), use_container_width=True, hide_index=True)
                                     fig = px.bar(x=result.index, y=result.values, title=f"متوسط {matched_num} حسب {matched_cat}", text_auto=".1f")
                                     fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350)
                                     st.plotly_chart(fig, use_container_width=True)
                                 else:
                                     for nc in num_cols:
-                                        st.metric(nc, f"{emp[nc].mean():,.2f}")
+                                        st.metric(nc, f"{sq_data[nc].mean():,.2f}")
 
                         elif any(w in ql for w in ['أعلى','top','highest','أكبر','max']):
                             n = 5
                             for w in ql.split():
                                 try: n = int(w); break
                                 except: pass
-                            sort_col = num_cols[0] if num_cols else emp.columns[0]
+                            sort_col = num_cols[0] if num_cols else sq_data.columns[0]
                             for nc in num_cols:
                                 if nc.lower() in ql: sort_col = nc; break
-                            st.dataframe(emp.nlargest(n, sort_col), use_container_width=True, hide_index=True)
+                            st.dataframe(sq_data.nlargest(n, sort_col), use_container_width=True, hide_index=True)
 
                         elif any(w in ql for w in ['أقل','bottom','lowest','أصغر','min']):
                             n = 5
                             for w in ql.split():
                                 try: n = int(w); break
                                 except: pass
-                            sort_col = num_cols[0] if num_cols else emp.columns[0]
+                            sort_col = num_cols[0] if num_cols else sq_data.columns[0]
                             for nc in num_cols:
                                 if nc.lower() in ql: sort_col = nc; break
-                            st.dataframe(emp.nsmallest(n, sort_col), use_container_width=True, hide_index=True)
+                            st.dataframe(sq_data.nsmallest(n, sort_col), use_container_width=True, hide_index=True)
 
                         elif any(w in ql for w in ['عدد','count','كم','how many']):
                             matched_cat = None
@@ -13661,22 +13678,22 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                                 if any(p in ql for p in [cc.lower(), cc.replace('_',' ').lower()]):
                                     matched_cat = cc; break
                             if matched_cat:
-                                vc = emp[matched_cat].value_counts()
+                                vc = sq_data[matched_cat].value_counts()
                                 st.dataframe(vc.reset_index().rename(columns={matched_cat: "الفئة", "count": "العدد"}), use_container_width=True, hide_index=True)
                                 fig = px.pie(names=vc.index, values=vc.values, title=f"توزيع {matched_cat}")
                                 fig.update_layout(font=dict(family="Noto Sans Arabic"), height=350)
                                 st.plotly_chart(fig, use_container_width=True)
                             else:
-                                st.metric("إجمالي الصفوف", f"{len(emp):,}")
+                                st.metric("إجمالي الصفوف", f"{len(sq_data):,}")
 
                         elif any(w in ql for w in ['مجموع','total','sum','إجمالي']):
                             for nc in num_cols:
                                 if nc.lower() in ql or any(p in ql for p in nc.lower().split('_')):
-                                    st.metric(f"مجموع {nc}", f"{emp[nc].sum():,.2f}")
+                                    st.metric(f"مجموع {nc}", f"{sq_data[nc].sum():,.2f}")
                                     break
                             else:
                                 if num_cols:
-                                    sums = {nc: emp[nc].sum() for nc in num_cols}
+                                    sums = {nc: sq_data[nc].sum() for nc in num_cols}
                                     st.dataframe(pd.DataFrame({"العمود": sums.keys(), "المجموع": [f"{v:,.2f}" for v in sums.values()]}), use_container_width=True, hide_index=True)
 
                         elif any(w in ql for w in ['توزيع','distribution','histogram']):
@@ -13690,19 +13707,19 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
 
                         elif any(w in ql for w in ['أعمدة','columns','حقول','fields']):
                             st.write("📋 الأعمدة المتاحة:")
-                            for i, c in enumerate(emp.columns, 1):
-                                st.write(f"  {i}. **{c}** ({emp[c].dtype})")
+                            for i, c in enumerate(sq_data.columns, 1):
+                                st.write(f"  {i}. **{c}** ({sq_data[c].dtype})")
 
                         else:
                             # AI Fallback for complex questions
                             st.info("💡 السؤال يحتاج تحليل ذكي...")
                             try:
-                                cols_info = ", ".join([f"{c}({emp[c].dtype})" for c in emp.columns[:20]])
-                                sample = emp.head(5).to_string()[:1000]
-                                stats = emp.describe().to_string()[:1000] if len(num_cols) > 0 else ""
+                                cols_info = ", ".join([f"{c}({sq_data[c].dtype})" for c in sq_data.columns[:20]])
+                                sample = sq_data.head(5).to_string()[:1000]
+                                stats = sq_data.describe().to_string()[:1000] if len(num_cols) > 0 else ""
                                 resp, err = call_ai_api(
                                     "أنت محلل بيانات. أجب عن السؤال بناءً على البيانات المتاحة بالعربية. اعط أرقام دقيقة.",
-                                    f"السؤال: {q}\n\nالأعمدة: {cols_info}\nالسجلات: {len(emp)}\n\nإحصائيات:\n{stats}\n\nعيّنة:\n{sample}",
+                                    f"السؤال: {q}\n\nالأعمدة: {cols_info}\nالسجلات: {len(sq_data)}\n\nإحصائيات:\n{stats}\n\nعيّنة:\n{sample}",
                                     model_type="hr"
                                 )
                                 if resp:
