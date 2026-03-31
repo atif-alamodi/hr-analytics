@@ -3505,13 +3505,23 @@ def _restore_login():
 
 def login_page():
     st.markdown("""<div style='text-align:center;padding:30px 10px 20px;'>
-        <div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:70px;height:70px;border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:28px;font-weight:800;color:white;'>HR</div>
-        <h2 style='color:#0F4C5C;margin-bottom:4px;font-weight:700;font-size:clamp(1.1rem,3vw,1.6rem);'>منصة تحليلات الموارد البشرية</h2>
+        <div style='background:linear-gradient(135deg,#F97316,#E9C46A);width:70px;height:70px;border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:28px;font-weight:800;color:white;'>HR</div>
+        <h2 style='color:#0E7490;margin-bottom:4px;font-weight:700;font-size:clamp(1.1rem,3vw,1.6rem);'>منصة تحليلات الموارد البشرية</h2>
         <p style='color:#64748B;font-size:clamp(11px,2vw,14px);'>رسال الود لتقنية المعلومات - الإصدار v5</p>
     </div>""", unsafe_allow_html=True)
+
+    # Fix button visibility
+    st.markdown("""<style>
+    .stForm button[kind="formSubmit"] {background:#0E7490 !important;color:white !important;border:none !important;border-radius:8px !important;padding:10px 20px !important;font-weight:600 !important;font-size:14px !important}
+    .stForm button[kind="formSubmit"]:hover {background:#0C5A72 !important}
+    .stForm button:not([kind="formSubmit"]) {background:#E2E8F0 !important;color:#1E293B !important;border:1px solid #CBD5E1 !important;border-radius:8px !important;padding:10px 20px !important;font-weight:600 !important}
+    .stForm button:not([kind="formSubmit"]):hover {background:#CBD5E1 !important}
+    @media (max-width:768px) {.stForm button {width:100% !important;margin-bottom:6px !important}}
+    </style>""", unsafe_allow_html=True)
+
     col1, col2, col3 = st.columns([0.5,3,0.5])
     with col2:
-        login_tab, forgot_tab = st.tabs(["تسجيل الدخول", "استرجاع كلمة المرور"])
+        login_tab, register_tab, forgot_tab = st.tabs(["🔐 تسجيل الدخول", "📝 تسجيل جديد", "🔑 استرجاع كلمة المرور"])
 
         with login_tab:
             with st.form("login_form", clear_on_submit=False):
@@ -3527,15 +3537,22 @@ def login_page():
                     init_users()
                     users = st.session_state.users_db
                     if username in users and users[username]["password"] == hash_pw(password):
-                        st.session_state.logged_in = True
-                        st.session_state.current_user = username
-                        st.session_state.user_role = users[username]["role"]
-                        st.session_state.user_name = users[username]["name"]
-                        st.session_state.user_sections = users[username]["sections"]
-                        st.session_state.user_email = users[username].get("email", "")
-                        st.session_state.user_dept = users[username].get("dept", "")
-                        _save_login_token(username)
-                        st.rerun()
+                        # Check if account is suspended
+                        if users[username].get("suspended"):
+                            st.error("⚠️ هذا الحساب معلّق. تواصل مع مدير النظام.")
+                        # Check if pending approval
+                        elif users[username].get("pending_approval"):
+                            st.warning("⏳ حسابك بانتظار موافقة مدير النظام. سيتم إبلاغك عند التفعيل.")
+                        else:
+                            st.session_state.logged_in = True
+                            st.session_state.current_user = username
+                            st.session_state.user_role = users[username]["role"]
+                            st.session_state.user_name = users[username]["name"]
+                            st.session_state.user_sections = users[username]["sections"]
+                            st.session_state.user_email = users[username].get("email", "")
+                            st.session_state.user_dept = users[username].get("dept", "")
+                            _save_login_token(username)
+                            st.rerun()
                     else:
                         st.error("❌ اسم المستخدم أو كلمة المرور غير صحيحة")
 
@@ -3547,6 +3564,88 @@ def login_page():
                     st.session_state.user_sections = "📊 التحليلات العامة,📤 التقارير والتصدير"
                     st.session_state.user_email = ""
                     st.session_state.user_dept = ""
+
+        # ===== SELF-REGISTRATION TAB =====
+        with register_tab:
+            st.markdown("""
+<div style='background:#F0F9FF;border:1px solid #BAE6FD;border-radius:10px;padding:14px;margin-bottom:16px;font-size:13px;line-height:1.8'>
+📋 <b>سياسة التسجيل:</b><br>
+- البريد الإلكتروني بنطاق <b>@resal.me</b> يُفعّل تلقائياً<br>
+- البريد الإلكتروني من نطاقات أخرى يتطلب <b>موافقة مدير النظام</b><br>
+- جميع الحسابات الجديدة تبدأ بصلاحيات <b>موظف</b> (يمكن ترقيتها لاحقاً)
+</div>
+""", unsafe_allow_html=True)
+
+            with st.form("register_form", clear_on_submit=False):
+                reg_name = st.text_input("الاسم الكامل:", key="reg_name", placeholder="مثال: أحمد محمد العلي")
+                reg_email = st.text_input("البريد الإلكتروني:", key="reg_email", placeholder="you@resal.me")
+                reg_dept = st.selectbox("القسم:", ["تقنية المعلومات","الموارد البشرية","المالية","التسويق","العمليات","خدمة العملاء","الإدارة العليا","أخرى"], key="reg_dept")
+                reg_pass = st.text_input("كلمة المرور:", type="password", key="reg_pass", help="8 أحرف على الأقل")
+                reg_pass2 = st.text_input("تأكيد كلمة المرور:", type="password", key="reg_pass2")
+
+                # PDPL Consent
+                st.markdown("---")
+                st.markdown("##### 🔒 حماية البيانات الشخصية (PDPL)")
+                pdpl_consent = st.checkbox("أوافق على جمع ومعالجة بياناتي الشخصية وفقاً لنظام حماية البيانات الشخصية السعودي (PDPL). يمكنني سحب موافقتي أو طلب حذف بياناتي في أي وقت عبر التواصل مع مدير النظام.", key="reg_pdpl")
+
+                reg_btn = st.form_submit_button("📝 تسجيل", type="primary", use_container_width=True)
+
+                if reg_btn:
+                    # Validation
+                    errors = []
+                    if not reg_name or len(reg_name.strip()) < 3:
+                        errors.append("الاسم يجب أن يكون 3 أحرف على الأقل")
+                    if not reg_email or '@' not in reg_email:
+                        errors.append("البريد الإلكتروني غير صالح")
+                    if not reg_pass or len(reg_pass) < 8:
+                        errors.append("كلمة المرور يجب أن تكون 8 أحرف على الأقل")
+                    if reg_pass != reg_pass2:
+                        errors.append("كلمتا المرور غير متطابقتين")
+                    if not pdpl_consent:
+                        errors.append("يجب الموافقة على سياسة حماية البيانات الشخصية")
+
+                    # Check if email already registered
+                    if not errors:
+                        init_users()
+                        for uname, udata in st.session_state.users_db.items():
+                            if udata.get('email','').lower() == reg_email.lower().strip():
+                                errors.append("هذا البريد الإلكتروني مسجل مسبقاً")
+                                break
+
+                    if errors:
+                        for e in errors:
+                            st.error(f"❌ {e}")
+                    else:
+                        # Create username from email
+                        reg_username = reg_email.split('@')[0].lower().replace('.','_')
+                        # Check domain
+                        email_domain = reg_email.split('@')[1].lower().strip()
+                        is_resal = email_domain == 'resal.me'
+                        pending = not is_resal  # Auto-approve resal.me, others need admin approval
+
+                        init_users()
+                        if reg_username in st.session_state.users_db:
+                            reg_username = reg_username + "_" + str(len(st.session_state.users_db))
+
+                        st.session_state.users_db[reg_username] = {
+                            "password": hash_pw(reg_pass),
+                            "role": "موظف",
+                            "name": reg_name.strip(),
+                            "email": reg_email.strip(),
+                            "dept": reg_dept,
+                            "sections": "🧠 اختبارات الشخصية",
+                            "pending_approval": pending,
+                            "suspended": False,
+                            "pdpl_consent": True,
+                            "pdpl_consent_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            "registered_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        }
+                        db_save_users(st.session_state.users_db)
+
+                        if is_resal:
+                            st.success(f"✅ تم التسجيل بنجاح! اسم المستخدم: **{reg_username}**\n\nيمكنك تسجيل الدخول الآن.")
+                        else:
+                            st.warning(f"⏳ تم التسجيل بنجاح! اسم المستخدم: **{reg_username}**\n\nحسابك بانتظار موافقة مدير النظام لأن بريدك ليس من نطاق @resal.me. سيتم إبلاغك عند التفعيل.")
 
         with forgot_tab:
             st.markdown("#### استرجاع كلمة المرور عبر البريد الإلكتروني")
@@ -3625,10 +3724,112 @@ def user_management_page():
     users = st.session_state.users_db
     user_rows = []
     for uname, udata in users.items():
+        status = "⏳ بانتظار الموافقة" if udata.get("pending_approval") else ("🔴 معلّق" if udata.get("suspended") else "🟢 نشط")
         user_rows.append({"المستخدم": uname, "الاسم": udata["name"], "الدور": udata["role"],
             "البريد": udata.get("email",""), "القسم": udata.get("dept",""),
+            "الحالة": status,
             "الأقسام": "جميع الأقسام" if udata["sections"]=="all" else udata["sections"]})
     st.dataframe(pd.DataFrame(user_rows), use_container_width=True, hide_index=True)
+
+    # === PENDING APPROVALS ===
+    pending_users = {u: d for u, d in users.items() if d.get("pending_approval")}
+    if pending_users:
+        st.markdown("### ⏳ طلبات تسجيل بانتظار الموافقة")
+        st.warning(f"يوجد **{len(pending_users)}** طلب تسجيل بانتظار موافقتك")
+        for pu_name, pu_data in pending_users.items():
+            with st.expander(f"📝 {pu_data['name']} ({pu_data.get('email','')}) - {pu_data.get('dept','')}", expanded=True):
+                pc1, pc2, pc3 = st.columns(3)
+                with pc1:
+                    st.markdown(f"**الاسم:** {pu_data['name']}")
+                    st.markdown(f"**البريد:** {pu_data.get('email','')}")
+                with pc2:
+                    st.markdown(f"**القسم:** {pu_data.get('dept','')}")
+                    st.markdown(f"**تاريخ التسجيل:** {pu_data.get('registered_at','غير محدد')}")
+                with pc3:
+                    email_domain = pu_data.get('email','').split('@')[1] if '@' in pu_data.get('email','') else 'غير محدد'
+                    st.markdown(f"**النطاق:** {email_domain}")
+                    st.markdown(f"**PDPL:** {'✅ وافق' if pu_data.get('pdpl_consent') else '❌ لم يوافق'}")
+                bc1, bc2 = st.columns(2)
+                with bc1:
+                    if st.button(f"✅ قبول {pu_data['name']}", key=f"approve_{pu_name}", type="primary", use_container_width=True):
+                        st.session_state.users_db[pu_name]['pending_approval'] = False
+                        db_save_users(st.session_state.users_db)
+                        st.success(f"✅ تم تفعيل حساب {pu_data['name']}")
+                        st.rerun()
+                with bc2:
+                    if st.button(f"❌ رفض {pu_data['name']}", key=f"reject_{pu_name}", use_container_width=True):
+                        del st.session_state.users_db[pu_name]
+                        db_save_users(st.session_state.users_db)
+                        st.info(f"تم رفض وحذف طلب {pu_data['name']}")
+                        st.rerun()
+
+    # === USER ACTIONS (Edit / Suspend / Delete) ===
+    st.markdown("### ⚙️ إجراءات المستخدمين")
+    action_user = st.selectbox("اختر المستخدم:", [u for u in users.keys() if u != "admin"], key="action_user_select")
+    if action_user:
+        act_data = users[action_user]
+        ac1, ac2, ac3, ac4 = st.columns(4)
+        with ac1:
+            new_role = st.selectbox("تغيير الدور:", list(ROLE_PERMISSIONS.keys()),
+                index=list(ROLE_PERMISSIONS.keys()).index(act_data["role"]) if act_data["role"] in ROLE_PERMISSIONS else 0,
+                key="action_role")
+            if st.button("💾 حفظ الدور", key="save_role", use_container_width=True):
+                st.session_state.users_db[action_user]['role'] = new_role
+                db_save_users(st.session_state.users_db)
+                st.success(f"✅ تم تحديث دور {act_data['name']} إلى {new_role}")
+                st.rerun()
+        with ac2:
+            is_suspended = act_data.get("suspended", False)
+            suspend_label = "🔓 إلغاء التعليق" if is_suspended else "🔒 تعليق الحساب"
+            if st.button(suspend_label, key="toggle_suspend", use_container_width=True):
+                st.session_state.users_db[action_user]['suspended'] = not is_suspended
+                db_save_users(st.session_state.users_db)
+                status_msg = "تم إلغاء التعليق" if is_suspended else "تم تعليق الحساب"
+                st.success(f"✅ {status_msg}: {act_data['name']}")
+                st.rerun()
+        with ac3:
+            new_pass = st.text_input("كلمة مرور جديدة:", type="password", key="new_pass_input")
+            if st.button("🔑 تغيير كلمة المرور", key="change_pass", use_container_width=True):
+                if new_pass and len(new_pass) >= 6:
+                    st.session_state.users_db[action_user]['password'] = hash_pw(new_pass)
+                    db_save_users(st.session_state.users_db)
+                    st.success(f"✅ تم تغيير كلمة مرور {act_data['name']}")
+                else:
+                    st.error("كلمة المرور يجب أن تكون 6 أحرف على الأقل")
+        with ac4:
+            st.markdown(f"**حذف:** {act_data['name']}")
+            if st.button("🗑️ حذف نهائي", key="delete_user", use_container_width=True):
+                st.session_state['_confirm_delete_user'] = action_user
+            if st.session_state.get('_confirm_delete_user') == action_user:
+                st.warning(f"⚠️ هل أنت متأكد من حذف **{act_data['name']}**؟")
+                dc1, dc2 = st.columns(2)
+                with dc1:
+                    if st.button("✅ نعم، احذف", key="confirm_del", type="primary"):
+                        del st.session_state.users_db[action_user]
+                        db_save_users(st.session_state.users_db)
+                        st.session_state.pop('_confirm_delete_user', None)
+                        st.success(f"✅ تم حذف {act_data['name']}")
+                        st.rerun()
+                with dc2:
+                    if st.button("❌ إلغاء", key="cancel_del"):
+                        st.session_state.pop('_confirm_delete_user', None)
+                        st.rerun()
+
+    # === PDPL COMPLIANCE SECTION ===
+    st.markdown("---")
+    st.markdown("### 🔒 التوافق مع نظام حماية البيانات الشخصية (PDPL)")
+    st.markdown("""
+<div style='background:#F0FDF4;border:1px solid #86EFAC;border-radius:10px;padding:16px;font-size:13px;line-height:1.9'>
+<b>✅ المنصة متوافقة مع نظام حماية البيانات الشخصية السعودي (PDPL):</b><br>
+1. <b>الموافقة المسبقة:</b> يتم أخذ موافقة المستخدم على جمع بياناته عند التسجيل<br>
+2. <b>حق الوصول:</b> كل مستخدم يمكنه الاطلاع على بياناته الشخصية<br>
+3. <b>حق التصحيح:</b> يمكن تعديل البيانات عبر مدير النظام<br>
+4. <b>حق الحذف:</b> يمكن طلب حذف الحساب والبيانات (حق النسيان)<br>
+5. <b>الأمان:</b> كلمات المرور مشفرة بـ SHA-256<br>
+6. <b>عزل البيانات:</b> كل مستخدم يرى بياناته فقط (حسب صلاحياته)<br>
+7. <b>سجل التدقيق:</b> تتبع جميع العمليات الحساسة
+</div>
+""", unsafe_allow_html=True)
 
     # SMTP Configuration
     st.markdown("### 📧 إعدادات البريد الإلكتروني (SMTP)")
