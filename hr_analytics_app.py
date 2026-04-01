@@ -6307,7 +6307,6 @@ def main():
                 st.info(f"📜 **{ex_reason}**\n\n{article_info['desc']}")
 
                 # Calculate service period
-                from dateutil.relativedelta import relativedelta
                 service = relativedelta(ex_exit, ex_join)
                 service_years = service.years + service.months / 12
                 service_text = f"{service.years} سنة و {service.months} شهر"
