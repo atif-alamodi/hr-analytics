@@ -2872,7 +2872,34 @@ def norm_cols(df):
     for c in df.columns:
         k = str(c).strip().lower()
         new[c] = COL_MAP.get(k, c)
-    return df.rename(columns=new)
+    df = df.rename(columns=new)
+
+    # Smart numeric conversion: convert text columns that contain numbers
+    salary_keywords = ['راتب','أساسي','سكن','مواصلات','بدل','إجمالي','صافي','خصم','استقطاع',
+        'salary','basic','housing','transport','gross','net','deduction','allowance',
+        'bonus','مكافأ','حوافز','overtime','إضافي','تأمين','gosi','ضريبة','tax',
+        'اجمالي','تقنية','تميز','أخرى','other','total','pay','wage','رقم']
+    for col in df.columns:
+        if df[col].dtype == 'object':
+            col_lower = str(col).lower()
+            # Check if column name suggests it should be numeric
+            is_likely_numeric = any(kw in col_lower for kw in salary_keywords)
+            if is_likely_numeric:
+                try:
+                    # Remove commas, spaces, currency symbols then convert
+                    cleaned = df[col].astype(str).str.replace(',', '', regex=False)
+                    cleaned = cleaned.str.replace('٬', '', regex=False)  # Arabic comma
+                    cleaned = cleaned.str.replace(' ', '', regex=False)
+                    cleaned = cleaned.str.replace('ريال', '', regex=False)
+                    cleaned = cleaned.str.replace('SAR', '', regex=False, case=False)
+                    cleaned = cleaned.str.strip()
+                    converted = pd.to_numeric(cleaned, errors='coerce')
+                    # Only convert if at least 50% of values are valid numbers
+                    valid_pct = converted.notna().sum() / max(len(converted), 1)
+                    if valid_pct >= 0.5:
+                        df[col] = converted
+                except: pass
+    return df
 
 
 # ===== END-OF-SERVICE CALCULATOR (Saudi Labor Law Art 84/85) =====
@@ -5131,6 +5158,7 @@ def main():
                     else:
                         data = pd.read_excel(analyzer_file, engine='xlrd') if analyzer_file.name.endswith('.xls') and not analyzer_file.name.endswith('.xlsx') else pd.read_excel(analyzer_file)
                     st.success(f"✅ تم تحميل {len(data)} سجل | {len(data.columns)} عمود")
+                    data = norm_cols(data)  # Smart numeric conversion
                 except Exception as e:
                     st.error(f"خطأ في قراءة الملف: {e}")
                     data = pd.DataFrame()
@@ -13636,6 +13664,8 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                 st.info("📂 يتم تحليل بيانات الموظفين المرفوعة في القائمة الجانبية")
 
             if len(ga_df) > 0:
+                # Smart type conversion for text columns that contain numbers
+                ga_df = norm_cols(ga_df)
                 st.markdown("---")
                 st.markdown("### 📊 نظرة عامة على البيانات")
 
@@ -13740,6 +13770,7 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                 st.success(f"📂 البيانات من القائمة الجانبية: {len(emp):,} صف × {len(emp.columns)} عمود")
 
             if len(sq_data) > 0:
+                sq_data = norm_cols(sq_data)  # Smart numeric conversion
                 # Show columns info
                 with st.expander("📋 الأعمدة المتاحة"):
                     st.caption(", ".join(sq_data.columns))
