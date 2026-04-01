@@ -4,6 +4,7 @@ plotly
 python-dateutil
 xlsxwriter
 openpyxl
+xlrd
 fpdf2
 python-docx
 psycopg2-binary
