@@ -4634,7 +4634,8 @@ def main():
                 if file_name.endswith('.csv'):
                     emp = norm_cols(pd.read_csv(io.BytesIO(file_bytes)))
                 else:
-                    xl = pd.ExcelFile(io.BytesIO(file_bytes))
+                    _engine = 'xlrd' if file_name.endswith('.xls') and not file_name.endswith('.xlsx') else None
+                    xl = pd.ExcelFile(io.BytesIO(file_bytes), engine=_engine)
                     for s in xl.sheet_names:
                         try:
                             df_s = smart_read(xl, s)
@@ -5128,7 +5129,7 @@ def main():
                     if analyzer_file.name.endswith('.csv'):
                         data = pd.read_csv(analyzer_file)
                     else:
-                        data = pd.read_excel(analyzer_file)
+                        data = pd.read_excel(analyzer_file, engine='xlrd') if analyzer_file.name.endswith('.xls') and not analyzer_file.name.endswith('.xlsx') else pd.read_excel(analyzer_file)
                     st.success(f"✅ تم تحميل {len(data)} سجل | {len(data.columns)} عمود")
                 except Exception as e:
                     st.error(f"خطأ في قراءة الملف: {e}")
@@ -6644,7 +6645,7 @@ def main():
                         if imp_file.name.endswith('.csv'):
                             imp_df = pd.read_csv(io.BytesIO(imp_file.getvalue()))
                         else:
-                            imp_df = pd.read_excel(io.BytesIO(imp_file.getvalue()))
+                            imp_df = pd.read_excel(io.BytesIO(imp_file.getvalue()), engine='xlrd' if imp_file.name.endswith('.xls') and not imp_file.name.endswith('.xlsx') else None)
 
                         st.success(f"✅ تم قراءة {len(imp_df)} صف و {len(imp_df.columns)} عمود")
                         st.caption(f"الأعمدة: {', '.join(imp_df.columns.tolist())}")
@@ -9453,7 +9454,7 @@ def main():
                         # --- XLSX/XLS ---
                         if fn.endswith('.xlsx') or fn.endswith('.xls'):
                             try:
-                                df = pd.read_excel(io.BytesIO(fbytes))
+                                df = pd.read_excel(io.BytesIO(fbytes), engine='xlrd' if st.session_state.get('uploaded_file_name','').endswith('.xls') and not st.session_state.get('uploaded_file_name','').endswith('.xlsx') else None)
                                 text = df.to_string(index=False)
                             except: pass
                             if text: return text
@@ -10017,7 +10018,7 @@ def main():
             intv_file = st.file_uploader("📁 ارفع ملف مقابلات (Excel/CSV - اختياري):", type=["xlsx","xls","csv"], key="intv_file_upload")
             if intv_file:
                 try:
-                    intv_data = pd.read_excel(intv_file) if intv_file.name.endswith(('xlsx','xls')) else pd.read_csv(intv_file)
+                    intv_data = (pd.read_excel(intv_file, engine='xlrd') if intv_file.name.endswith('.xls') and not intv_file.name.endswith('.xlsx') else pd.read_excel(intv_file)) if not intv_file.name.endswith('.csv') else pd.read_csv(intv_file)
                     st.success(f"✅ تم تحميل {len(intv_data)} سجل | الأعمدة: {', '.join(intv_data.columns[:8])}")
                     st.dataframe(intv_data.head(10), use_container_width=True, hide_index=True)
                     if st.button("🤖 تحليل ذكي لبيانات المقابلات", type="primary", key="intv_file_analyze"):
@@ -13612,6 +13613,13 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                 try:
                     if ga_file.name.endswith('.csv'):
                         ga_df = pd.read_csv(ga_file)
+                    elif ga_file.name.endswith('.xls') and not ga_file.name.endswith('.xlsx'):
+                        # Old .xls format needs xlrd engine
+                        try:
+                            ga_df = pd.read_excel(ga_file, engine='xlrd')
+                        except ImportError:
+                            st.error("⚠️ ملف .xls يحتاج مكتبة xlrd. جرّب تحويل الملف إلى .xlsx من Excel ثم أعد الرفع.")
+                            ga_df = pd.DataFrame()
                     else:
                         ga_xl = pd.ExcelFile(ga_file)
                         if len(ga_xl.sheet_names) > 1:
@@ -13621,6 +13629,7 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                         ga_df = pd.read_excel(ga_xl, ga_sheet)
                 except Exception as e:
                     st.error(f"خطأ في قراءة الملف: {e}")
+                    ibox("💡 **نصيحة:** إذا كان الملف بصيغة .xls (القديمة)، حوّله إلى .xlsx من Excel: ملف > حفظ باسم > اختر .xlsx", "warning")
 
             elif len(emp) > 0:
                 ga_df = emp.copy()
@@ -13722,7 +13731,7 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
             sq_data = pd.DataFrame()
             if sq_file:
                 try:
-                    sq_data = pd.read_excel(sq_file) if sq_file.name.endswith(('xlsx','xls')) else pd.read_csv(sq_file)
+                    sq_data = (pd.read_excel(sq_file, engine='xlrd') if sq_file.name.endswith('.xls') and not sq_file.name.endswith('.xlsx') else pd.read_excel(sq_file)) if not sq_file.name.endswith('.csv') else pd.read_csv(sq_file)
                     st.success(f"✅ تم تحميل {len(sq_data)} سجل | {len(sq_data.columns)} عمود")
                 except Exception as e:
                     st.error(f"خطأ في قراءة الملف: {e}")
@@ -14681,7 +14690,7 @@ tr:hover{{background:rgba(227,100,20,0.05)}}
             survey_file = st.file_uploader("ارفع ملف استبيان (Excel/CSV):", type=["xlsx","xls","csv"], key="survey_file_upload")
             if survey_file:
                 try:
-                    sv_data = pd.read_excel(survey_file) if survey_file.name.endswith(('xlsx','xls')) else pd.read_csv(survey_file)
+                    sv_data = (pd.read_excel(survey_file, engine='xlrd') if survey_file.name.endswith('.xls') and not survey_file.name.endswith('.xlsx') else pd.read_excel(survey_file)) if not survey_file.name.endswith('.csv') else pd.read_csv(survey_file)
                     st.success(f"✅ تم تحميل {len(sv_data)} استجابة | الأعمدة: {', '.join(sv_data.columns[:8])}")
                     st.dataframe(sv_data.head(15), use_container_width=True, hide_index=True)
 
