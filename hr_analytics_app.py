@@ -4456,9 +4456,9 @@ def main():
         if st.session_state.user_role == "مدير النظام":
             available_sections.append("👥 إدارة المستخدمين")
 
-        # Restore navigation from session_state (persists across reruns)
-        _saved_sec = st.session_state.get("_last_section", "")
-        _saved_pg = st.session_state.get("_last_page", "")
+        # Restore navigation from URL params (persists across browser refresh)
+        _saved_sec = st.query_params.get("sec", "")
+        _saved_pg = st.query_params.get("pg", "")
         _sec_idx = 0
         if _saved_sec:
             for i, s in enumerate(available_sections):
@@ -4501,9 +4501,16 @@ def main():
         else:
             page = st.radio("📌", ["📚 ميزانية التدريب","💹 ROI التدريب","📋 خطة ADDIE","🏫 جهات التدريب","📥 تصدير التدريب"], label_visibility="collapsed", index=next((i for i,p in enumerate(["📚 ميزانية التدريب","💹 ROI التدريب","📋 خطة ADDIE","🏫 جهات التدريب","📥 تصدير التدريب"]) if p==_saved_pg),0) if _saved_sec==section else 0, key="_nav_p_training")
 
-        # Save navigation state to session_state (persists across reruns within session)
-        st.session_state["_last_section"] = section
-        st.session_state["_last_page"] = page
+        # Save navigation to URL via JavaScript (no Streamlit rerun)
+        import urllib.parse
+        _enc_sec = urllib.parse.quote(section)
+        _enc_pg = urllib.parse.quote(page)
+        st.markdown(f"""<script>
+            var url = new URL(window.parent.location);
+            url.searchParams.set('sec', '{_enc_sec}');
+            url.searchParams.set('pg', '{_enc_pg}');
+            window.parent.history.replaceState(null, '', url);
+        </script>""", unsafe_allow_html=True)
 
         # Logout button
         st.markdown("---")
@@ -4518,11 +4525,14 @@ def main():
                     conn.commit()
                     conn.close()
                 except: pass
-            # Clear query_params token
-            try: del st.query_params["tk"]
+            # Clear URL navigation params
+            try: st.query_params.clear()
             except: pass
-            for key in ['logged_in','current_user','user_role','user_name','user_sections','_login_token','_last_section','_last_page']:
+            for key in ['logged_in','current_user','user_role','user_name','user_sections','_login_token']:
                 st.session_state.pop(key, None)
+            # Clear URL navigation params
+            try: st.query_params.clear()
+            except: pass
             st.rerun()
 
         st.markdown("---")
