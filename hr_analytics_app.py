@@ -4456,9 +4456,9 @@ def main():
         if st.session_state.user_role == "مدير النظام":
             available_sections.append("👥 إدارة المستخدمين")
 
-        # Restore navigation from URL params (persists across refresh)
-        _saved_sec = st.query_params.get("sec", "")
-        _saved_pg = st.query_params.get("pg", "")
+        # Restore navigation from session_state (persists across reruns)
+        _saved_sec = st.session_state.get("_last_section", "")
+        _saved_pg = st.session_state.get("_last_page", "")
         _sec_idx = 0
         if _saved_sec:
             for i, s in enumerate(available_sections):
@@ -4501,12 +4501,9 @@ def main():
         else:
             page = st.radio("📌", ["📚 ميزانية التدريب","💹 ROI التدريب","📋 خطة ADDIE","🏫 جهات التدريب","📥 تصدير التدريب"], label_visibility="collapsed", index=next((i for i,p in enumerate(["📚 ميزانية التدريب","💹 ROI التدريب","📋 خطة ADDIE","🏫 جهات التدريب","📥 تصدير التدريب"]) if p==_saved_pg),0) if _saved_sec==section else 0, key="_nav_p_training")
 
-        # Save navigation state to URL (persists across refresh)
-        try:
-            if st.query_params.get("sec") != section or st.query_params.get("pg") != page:
-                st.query_params["sec"] = section
-                st.query_params["pg"] = page
-        except: pass
+        # Save navigation state to session_state (persists across reruns within session)
+        st.session_state["_last_section"] = section
+        st.session_state["_last_page"] = page
 
         # Logout button
         st.markdown("---")
@@ -4524,11 +4521,7 @@ def main():
             # Clear query_params token
             try: del st.query_params["tk"]
             except: pass
-            try: del st.query_params["sec"]
-            except: pass
-            try: del st.query_params["pg"]
-            except: pass
-            for key in ['logged_in','current_user','user_role','user_name','user_sections','_login_token']:
+            for key in ['logged_in','current_user','user_role','user_name','user_sections','_login_token','_last_section','_last_page']:
                 st.session_state.pop(key, None)
             st.rerun()
 
