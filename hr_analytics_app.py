@@ -1573,142 +1573,205 @@ except: pass
 # ===== STYLES =====
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;500;600;700;800&display=swap');
-*{font-family:'Noto Sans Arabic',sans-serif}
-.main .block-container{padding-top:.8rem;max-width:1400px}
-/* Sidebar - dark theme but keep dropdowns readable */
-[data-testid="stSidebar"]{background:linear-gradient(180deg,#0F4C5C 0%,#1A1A2E 100%)}
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+
+/* ===== Global Reset & Typography ===== */
+*{font-family:'IBM Plex Sans Arabic',sans-serif !important;box-sizing:border-box}
+.main .block-container{padding-top:1rem;max-width:1400px}
+.stApp{background:#F8FAFB !important;background-image:radial-gradient(at 40% 20%,rgba(15,76,92,0.04) 0px,transparent 50%),radial-gradient(at 80% 0%,rgba(227,100,20,0.03) 0px,transparent 50%),radial-gradient(at 0% 50%,rgba(42,157,143,0.03) 0px,transparent 50%) !important}
+
+/* ===== Scrollbar ===== */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(15,76,92,0.2);border-radius:10px}
+::-webkit-scrollbar-thumb:hover{background:rgba(15,76,92,0.4)}
+
+/* ===== Sidebar - Light Theme ===== */
+[data-testid="stSidebar"]{background:linear-gradient(180deg,#FFFFFF 0%,#F1F5F9 100%) !important;border-left:1px solid rgba(15,76,92,0.08) !important}
 [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stRadio label,
 [data-testid="stSidebar"] .stMarkdown, [data-testid="stSidebar"] h1,
 [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
 [data-testid="stSidebar"] h4, [data-testid="stSidebar"] h5,
-[data-testid="stSidebar"] p, [data-testid="stSidebar"] span,
-[data-testid="stSidebar"] .stButton button{color:white !important}
-/* Logout button style (primary in sidebar) */
+[data-testid="stSidebar"] p, [data-testid="stSidebar"] span{color:#1A1A2E !important}
+[data-testid="stSidebar"] hr{border-color:rgba(15,76,92,0.08) !important}
+/* Sidebar buttons */
+[data-testid="stSidebar"] .stButton button{background:linear-gradient(135deg,#0F4C5C,#1A1A2E) !important;color:white !important;border:none !important;border-radius:10px !important;font-weight:600 !important;transition:all 0.3s !important}
+[data-testid="stSidebar"] .stButton button:hover{transform:translateY(-2px) !important;box-shadow:0 4px 15px rgba(15,76,92,0.2) !important}
 [data-testid="stSidebar"] [data-testid="stBaseButton-primary"]{
-    background:rgba(255,255,255,0.08) !important;
-    border:1px solid rgba(255,255,255,0.25) !important;
-    border-radius:8px !important;
+    background:linear-gradient(135deg,#0F4C5C,#1A1A2E) !important;
+    border:none !important;
+    border-radius:10px !important;
     color:white !important;
     font-weight:600 !important;
 }
 [data-testid="stSidebar"] [data-testid="stBaseButton-primary"]:hover{
-    background:rgba(255,255,255,0.18) !important;
-    border-color:rgba(255,255,255,0.4) !important;
+    box-shadow:0 4px 15px rgba(15,76,92,0.2) !important;
+    transform:translateY(-2px) !important;
 }
-/* Keep sidebar inputs/selects readable */
+/* Sidebar inputs readable */
 [data-testid="stSidebar"] input, [data-testid="stSidebar"] select,
-[data-testid="stSidebar"] textarea, [data-testid="stSidebar"] .stSelectbox div[data-baseweb] {color:#333 !important}
-/* Metrics */
-[data-testid="stMetric"]{background:white;border-radius:12px;padding:14px 18px;box-shadow:0 1px 3px rgba(0,0,0,.06);border:1px solid #E2E8F0}
-[data-testid="stMetric"] label{font-size:12px !important;color:#64748B !important}
-[data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:20px !important;font-weight:700 !important;color:#0F4C5C !important}
-/* Headers */
-.main h1{color:#0F4C5C !important;font-weight:800 !important;font-size:1.6em !important}
-.hdr{background:linear-gradient(135deg,#0F4C5C,#1A1A2E);padding:20px 28px;border-radius:14px;margin-bottom:20px;color:white}
-.hdr h1{color:white !important;margin:0;font-size:24px !important}
-.hdr p{color:rgba(255,255,255,.7);margin:4px 0 0;font-size:13px}
-/* Info boxes */
-.ibox{background:#EFF6FF;border-radius:10px;padding:12px 16px;border-right:4px solid #3B82F6;margin-bottom:8px;font-size:13px;line-height:1.7}
-.ibox.warn{background:#FFF7ED;border-right-color:#F97316}
-.ibox.ok{background:#F0FDF4;border-right-color:#22C55E}
-.ibox.bad{background:#FEF2F2;border-right-color:#EF4444}
-/* KPI cards */
-.kpi{background:linear-gradient(135deg,#0F4C5C,#1B4D5C);color:white;border-radius:12px;padding:16px;text-align:center;margin-bottom:10px}
-.kpi h3{font-size:22px;margin:6px 0 2px;font-weight:800;color:white !important}
-.kpi p{font-size:11px;opacity:.7;margin:0;color:white !important}
-/* Tabs - fix overlap */
-.stTabs [data-baseweb="tab-list"]{gap:4px}
-.stTabs [data-baseweb="tab"]{padding:8px 16px;font-size:13px}
-/* Dataframes - better spacing */
-[data-testid="stDataFrame"]{margin-bottom:16px}
-/* Hide defaults */
-#MainMenu,footer{visibility:hidden}
-/* Fix radio buttons in sidebar */
+[data-testid="stSidebar"] textarea, [data-testid="stSidebar"] .stSelectbox div[data-baseweb] {color:#1A1A2E !important}
+/* Sidebar radio navigation */
 [data-testid="stSidebar"] .stRadio > div{gap:2px}
-[data-testid="stSidebar"] .stRadio > div > label{padding:6px 8px;border-radius:8px;font-size:13px}
-[data-testid="stSidebar"] .stRadio > div > label:hover{background:rgba(255,255,255,0.1)}
-/* Fix expander in dark sidebar */
-[data-testid="stSidebar"] .streamlit-expanderHeader{color:white !important}
-/* File uploader in sidebar - make it visible on dark background */
+[data-testid="stSidebar"] .stRadio > div > label{padding:8px 12px;border-radius:10px;font-size:13px;transition:all 0.25s cubic-bezier(0.4,0,0.2,1)}
+[data-testid="stSidebar"] .stRadio > div > label:hover{background:rgba(15,76,92,0.04);transform:translateX(-3px)}
+[data-testid="stSidebar"] .stRadio > div > label[data-checked="true"]{background:linear-gradient(135deg,rgba(227,100,20,0.1),rgba(42,157,143,0.06)) !important;border-right:3px solid #E36414 !important;font-weight:600 !important}
+/* Sidebar expander */
+[data-testid="stSidebar"] .streamlit-expanderHeader{color:#0F4C5C !important}
+/* File uploader in sidebar */
 [data-testid="stSidebar"] [data-testid="stFileUploader"] {
-    background: rgba(255,255,255,0.08) !important;
-    border-radius: 10px !important;
+    background: rgba(15,76,92,0.02) !important;
+    border-radius: 12px !important;
     padding: 8px !important;
-    border: 1px dashed rgba(255,255,255,0.25) !important;
+    border: 2px dashed rgba(15,76,92,0.12) !important;
 }
-[data-testid="stSidebar"] [data-testid="stFileUploader"] label {
-    color: white !important;
-}
+[data-testid="stSidebar"] [data-testid="stFileUploader"] label {color: #0F4C5C !important}
 [data-testid="stSidebar"] [data-testid="stFileUploader"] section {
-    background: rgba(255,255,255,0.06) !important;
-    border: 1px dashed rgba(255,255,255,0.2) !important;
+    background: rgba(15,76,92,0.02) !important;
+    border: 1px dashed rgba(15,76,92,0.1) !important;
+    border-radius: 10px !important;
+}
+[data-testid="stSidebar"] [data-testid="stFileUploader"] section > div {color: #64748B !important}
+[data-testid="stSidebar"] [data-testid="stFileUploader"] button {
+    background: linear-gradient(135deg,#0F4C5C,#2A9D8F) !important;
+    color: white !important;
+    border: none !important;
     border-radius: 8px !important;
 }
-[data-testid="stSidebar"] [data-testid="stFileUploader"] section > div {
-    color: rgba(255,255,255,0.7) !important;
-}
-[data-testid="stSidebar"] [data-testid="stFileUploader"] button {
-    background: rgba(255,255,255,0.15) !important;
-    color: white !important;
-    border: 1px solid rgba(255,255,255,0.3) !important;
-    border-radius: 6px !important;
-}
 [data-testid="stSidebar"] [data-testid="stFileUploader"] button:hover {
-    background: rgba(255,255,255,0.25) !important;
+    box-shadow: 0 4px 12px rgba(15,76,92,0.15) !important;
 }
 [data-testid="stSidebar"] small, [data-testid="stSidebar"] [data-testid="stFileUploader"] small {
-    color: rgba(255,255,255,0.5) !important;
+    color: #94A3B8 !important;
 }
+
+/* ===== KPI Metric Cards (Glass Morphism) ===== */
+[data-testid="stMetric"]{background:rgba(255,255,255,0.88) !important;backdrop-filter:blur(24px) saturate(200%) !important;-webkit-backdrop-filter:blur(24px) saturate(200%) !important;border-radius:14px !important;padding:18px 20px !important;box-shadow:0 1px 3px rgba(15,76,92,0.04),0 4px 12px rgba(15,76,92,0.02) !important;border:1px solid rgba(255,255,255,0.6) !important;transition:all 0.3s cubic-bezier(0.4,0,0.2,1) !important;position:relative !important;overflow:hidden !important}
+[data-testid="stMetric"]:hover{transform:translateY(-3px) !important;box-shadow:0 8px 30px rgba(15,76,92,0.08) !important}
+[data-testid="stMetric"] label{font-size:12px !important;color:#64748B !important;font-weight:500 !important}
+[data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:22px !important;font-weight:700 !important;color:#0F4C5C !important;font-family:'Space Mono','IBM Plex Sans Arabic',monospace !important}
+[data-testid="stMetric"] [data-testid="stMetricDelta"]{font-family:'Space Mono',monospace !important}
+
+/* ===== Typography ===== */
+.main h1{color:#0F4C5C !important;font-weight:700 !important;letter-spacing:-0.02em !important;font-size:1.6em !important}
+h2{color:#0F4C5C !important;font-weight:600 !important}
+h3{color:#1A1A2E !important;font-weight:600 !important}
+
+/* ===== Header Component ===== */
+.hdr{background:linear-gradient(135deg,#0F4C5C,#1A1A2E) !important;padding:22px 28px !important;border-radius:16px !important;margin-bottom:24px !important;color:white !important;position:relative !important;overflow:hidden !important;box-shadow:0 4px 20px rgba(15,76,92,0.15) !important}
+.hdr h1{color:white !important;margin:0 !important;font-size:24px !important;font-weight:700 !important}
+.hdr p{color:rgba(255,255,255,.7) !important;margin:4px 0 0 !important;font-size:13px !important}
+
+/* ===== Info Boxes ===== */
+.ibox{background:rgba(255,255,255,0.88) !important;backdrop-filter:blur(16px) !important;border-radius:12px !important;padding:14px 18px !important;border-right:4px solid #2A9D8F !important;margin-bottom:10px !important;font-size:13px !important;line-height:1.8 !important;box-shadow:0 1px 3px rgba(0,0,0,0.03) !important;transition:all 0.3s !important}
+.ibox:hover{transform:translateX(-3px) !important;box-shadow:0 4px 12px rgba(0,0,0,0.04) !important}
+.ibox.warn{background:rgba(255,247,237,0.9) !important;border-right-color:#E36414 !important}
+.ibox.ok{background:rgba(240,253,244,0.9) !important;border-right-color:#2A9D8F !important}
+.ibox.bad{background:rgba(254,242,242,0.9) !important;border-right-color:#DC2626 !important}
+
+/* ===== KPI Cards (Custom .kpi class) ===== */
+.kpi{background:rgba(255,255,255,0.88) !important;backdrop-filter:blur(24px) !important;color:#1A1A2E !important;border-radius:14px !important;padding:18px !important;text-align:center !important;margin-bottom:12px !important;border:1px solid rgba(255,255,255,0.6) !important;box-shadow:0 1px 3px rgba(15,76,92,0.04),0 4px 12px rgba(15,76,92,0.02) !important;transition:all 0.3s cubic-bezier(0.4,0,0.2,1) !important;position:relative !important;overflow:hidden !important}
+.kpi:hover{transform:translateY(-3px) !important;box-shadow:0 8px 30px rgba(15,76,92,0.08) !important}
+.kpi h3{font-size:24px !important;margin:6px 0 2px !important;font-weight:800 !important;color:#0F4C5C !important;font-family:'Space Mono','IBM Plex Sans Arabic',monospace !important}
+.kpi p{font-size:11px !important;color:#64748B !important;margin:0 !important;font-weight:500 !important}
+
+/* ===== Tabs ===== */
+.stTabs [data-baseweb="tab-list"]{gap:4px !important;background:rgba(255,255,255,0.6) !important;border-radius:12px !important;padding:4px !important}
+.stTabs [data-baseweb="tab"]{border-radius:10px !important;padding:8px 16px !important;font-weight:500 !important;color:#64748B !important;font-size:13px !important;transition:all 0.3s !important}
+.stTabs [data-baseweb="tab"][aria-selected="true"]{background:white !important;color:#0F4C5C !important;font-weight:600 !important;box-shadow:0 1px 3px rgba(0,0,0,0.06) !important}
+
+/* ===== Buttons ===== */
+.stButton button{border-radius:10px !important;font-weight:600 !important;padding:8px 20px !important;transition:all 0.3s cubic-bezier(0.4,0,0.2,1) !important;border:none !important}
+.stButton button:hover{transform:translateY(-2px) !important;box-shadow:0 4px 15px rgba(15,76,92,0.15) !important}
+.stDownloadButton button{background:linear-gradient(135deg,#0F4C5C,#2A9D8F) !important;color:white !important;border-radius:10px !important}
+.stDownloadButton button:hover{transform:translateY(-2px) !important;box-shadow:0 4px 15px rgba(15,76,92,0.2) !important}
+
+/* ===== Expanders ===== */
+.streamlit-expanderHeader{background:rgba(255,255,255,0.88) !important;border-radius:12px !important;border:1px solid rgba(15,76,92,0.06) !important;font-weight:600 !important;color:#0F4C5C !important;transition:all 0.3s !important}
+.streamlit-expanderHeader:hover{box-shadow:0 4px 12px rgba(15,76,92,0.06) !important}
+
+/* ===== DataFrames ===== */
+[data-testid="stDataFrame"]{border-radius:14px !important;overflow:hidden !important;border:1px solid rgba(15,76,92,0.06) !important;box-shadow:0 1px 3px rgba(0,0,0,0.03) !important;margin-bottom:16px}
+
+/* ===== Selectbox / Input ===== */
+.stSelectbox [data-baseweb="select"],.stMultiSelect [data-baseweb="select"]{border-radius:10px !important;border:1px solid rgba(15,76,92,0.12) !important;transition:all 0.3s !important}
+.stSelectbox [data-baseweb="select"]:focus-within,.stMultiSelect [data-baseweb="select"]:focus-within{box-shadow:0 0 0 3px rgba(42,157,143,0.12),0 0 0 1px rgba(42,157,143,0.25) !important;border-color:#2A9D8F !important}
+.stTextInput input,.stTextArea textarea{border-radius:10px !important;border:1px solid rgba(15,76,92,0.12) !important;transition:all 0.3s !important}
+.stTextInput input:focus,.stTextArea textarea:focus{box-shadow:0 0 0 3px rgba(42,157,143,0.12),0 0 0 1px rgba(42,157,143,0.25) !important;border-color:#2A9D8F !important}
+
+/* ===== Alerts ===== */
+.stAlert{border-radius:12px !important;border:none !important}
+.stSuccess{background:rgba(42,157,143,0.06) !important;border-left:4px solid #2A9D8F !important;border-radius:10px !important}
+.stWarning{background:rgba(227,100,20,0.06) !important;border-left:4px solid #E36414 !important;border-radius:10px !important}
+.stError{background:rgba(220,38,38,0.06) !important;border-left:4px solid #DC2626 !important;border-radius:10px !important}
+.stInfo{background:rgba(15,76,92,0.06) !important;border-left:4px solid #0F4C5C !important;border-radius:10px !important}
+
+/* ===== Chat Messages ===== */
+[data-testid="stChatMessage"]{background:rgba(255,255,255,0.88) !important;border-radius:14px !important;border:1px solid rgba(15,76,92,0.04) !important;backdrop-filter:blur(16px) !important;margin-bottom:8px !important}
+
+/* ===== Progress Bars ===== */
+.stProgress > div > div{background:linear-gradient(90deg,#2A9D8F,#E36414) !important;border-radius:10px !important}
+
+/* ===== Forms ===== */
+[data-testid="stForm"]{background:rgba(255,255,255,0.88) !important;backdrop-filter:blur(24px) !important;border-radius:16px !important;padding:24px !important;border:1px solid rgba(255,255,255,0.6) !important;box-shadow:0 4px 20px rgba(15,76,92,0.06) !important}
+
+/* ===== Plotly Charts ===== */
+.js-plotly-plot{border-radius:14px !important;overflow:hidden !important}
+
+/* ===== Columns Gap ===== */
+[data-testid="stHorizontalBlock"]{gap:16px !important}
+
+/* ===== Number Styling ===== */
+[data-testid="stMetricValue"]{font-family:'Space Mono','IBM Plex Sans Arabic',monospace !important}
+
+/* ===== Hide Streamlit Branding ===== */
+#MainMenu,footer,[data-testid="stToolbar"]{visibility:hidden !important}
+
+/* ===== Animations ===== */
+@keyframes fadeInUp{from{opacity:0;transform:translateY(15px)}to{opacity:1;transform:translateY(0)}}
+.main .block-container > div{animation:fadeInUp 0.5s ease-out}
 
 /* ===== RESPONSIVE DESIGN ===== */
 /* Tablet */
 @media (max-width: 1024px) {
     .main .block-container{padding:0.5rem 1rem;max-width:100%}
-    .hdr{padding:14px 18px;border-radius:10px}
+    .hdr{padding:14px 18px;border-radius:12px}
     .hdr h1{font-size:18px !important}
     .hdr p{font-size:11px}
-    .kpi{padding:10px;border-radius:10px}
-    .kpi h3{font-size:18px}
+    .kpi{padding:12px;border-radius:12px}
+    .kpi h3{font-size:20px !important}
     .kpi p{font-size:10px}
-    [data-testid="stMetric"]{padding:10px 12px}
-    [data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:16px !important}
+    [data-testid="stMetric"]{padding:12px 14px}
+    [data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:18px !important}
 }
 /* Mobile */
 @media (max-width: 768px) {
     .main .block-container{padding:0.3rem 0.5rem;max-width:100%}
-    .hdr{padding:12px 14px;border-radius:8px;margin-bottom:12px}
+    .hdr{padding:12px 14px;border-radius:10px;margin-bottom:12px}
     .hdr h1{font-size:16px !important}
     .hdr p{font-size:10px}
-    .kpi{padding:8px;border-radius:8px;margin-bottom:6px}
-    .kpi h3{font-size:16px}
+    .kpi{padding:10px;border-radius:10px;margin-bottom:6px}
+    .kpi h3{font-size:16px !important}
     .kpi p{font-size:9px}
     .ibox{padding:8px 10px;font-size:12px;border-radius:8px}
-    [data-testid="stMetric"]{padding:8px 10px;border-radius:8px}
+    [data-testid="stMetric"]{padding:8px 10px;border-radius:10px}
     [data-testid="stMetric"] label{font-size:10px !important}
     [data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:14px !important}
     .main h1{font-size:1.2em !important}
-    /* Make columns stack on mobile */
     [data-testid="column"]{min-width:100% !important;width:100% !important}
-    /* Sidebar auto-collapse on mobile */
     [data-testid="stSidebar"]{min-width:0 !important}
-    /* Smaller tables */
     [data-testid="stDataFrame"]{font-size:11px}
-    /* Tabs smaller */
     .stTabs [data-baseweb="tab"]{padding:6px 10px;font-size:11px}
     .stTabs [data-baseweb="tab-list"]{gap:2px;overflow-x:auto}
-    /* Charts full width */
     .js-plotly-plot{width:100% !important}
     .js-plotly-plot .plotly{width:100% !important}
-    /* Forms compact */
     .stTextInput, .stSelectbox, .stNumberInput{margin-bottom:4px}
-    /* Buttons full width */
     .stButton > button{font-size:13px;padding:8px 12px}
 }
 /* Small mobile */
 @media (max-width: 480px) {
     .hdr h1{font-size:14px !important}
-    .kpi h3{font-size:14px}
+    .kpi h3{font-size:14px !important}
     .kpi{padding:6px}
     [data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:12px !important}
     .stTabs [data-baseweb="tab"]{padding:4px 8px;font-size:10px}
@@ -3573,46 +3636,50 @@ def _restore_login():
     return False
 
 def login_page():
-    st.markdown("""<div style='text-align:center;padding:30px 10px 20px;'>
-        <div style='background:linear-gradient(135deg,#F97316,#E9C46A);width:70px;height:70px;border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:28px;font-weight:800;color:white;'>HR</div>
-        <h2 style='color:#0E7490;margin-bottom:4px;font-weight:700;font-size:clamp(1.1rem,3vw,1.6rem);'>منصة تحليلات الموارد البشرية</h2>
-        <p style='color:#64748B;font-size:clamp(11px,2vw,14px);'>رسال الود لتقنية المعلومات - الإصدار v5</p>
+    st.markdown("""<div style='text-align:center;padding:50px 10px 30px;'>
+        <div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:88px;height:88px;border-radius:20px;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:36px;font-weight:800;color:white;box-shadow:0 8px 30px rgba(227,100,20,0.25);'>HR</div>
+        <h2 style='color:#0F4C5C;margin-bottom:4px;font-weight:700;font-size:clamp(1.2rem,3vw,1.8rem);'>منصة تحليلات الموارد البشرية</h2>
+        <p style='color:#64748B;font-size:clamp(11px,2vw,14px);'>رسال الود لتقنية المعلومات</p>
     </div>""", unsafe_allow_html=True)
 
     # Fix button visibility on login page
     st.markdown("""<style>
-    /* ALL form buttons - make visible */
+    /* ALL form buttons - new design */
     .stForm [data-testid="stFormSubmitButton"] button {
-        background: #0E7490 !important;
+        background: linear-gradient(135deg,#E36414,#E9C46A) !important;
         color: white !important;
         border: none !important;
-        border-radius: 8px !important;
+        border-radius: 12px !important;
         padding: 12px 24px !important;
         font-weight: 700 !important;
         font-size: 15px !important;
         min-height: 45px !important;
+        box-shadow: 0 4px 15px rgba(227,100,20,0.2) !important;
+        transition: all 0.3s cubic-bezier(0.4,0,0.2,1) !important;
     }
     .stForm [data-testid="stFormSubmitButton"] button:hover {
-        background: #0C5A72 !important;
-        box-shadow: 0 4px 12px rgba(14,116,144,0.3) !important;
+        transform: translateY(-2px) !important;
+        box-shadow: 0 8px 25px rgba(227,100,20,0.3) !important;
     }
     /* Secondary buttons in forms */
     .stForm [data-testid="stFormSubmitButton"]:nth-of-type(2) button {
-        background: #E2E8F0 !important;
-        color: #1E293B !important;
-        border: 2px solid #94A3B8 !important;
+        background: rgba(255,255,255,0.88) !important;
+        color: #0F4C5C !important;
+        border: 1px solid rgba(15,76,92,0.15) !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.03) !important;
     }
     .stForm [data-testid="stFormSubmitButton"]:nth-of-type(2) button:hover {
-        background: #CBD5E1 !important;
+        background: rgba(255,255,255,1) !important;
+        box-shadow: 0 4px 12px rgba(15,76,92,0.08) !important;
     }
     /* Fallback: target ALL buttons inside stForm */
     .stForm button {
-        color: #1E293B !important;
+        color: #1A1A2E !important;
         min-height: 42px !important;
         font-weight: 600 !important;
     }
     .stForm button[kind="primary"], .stForm button[type="primary"] {
-        background: #0E7490 !important;
+        background: linear-gradient(135deg,#E36414,#E9C46A) !important;
         color: white !important;
     }
     /* Registration form button */
@@ -4475,7 +4542,7 @@ def main():
 
     # Sidebar
     with st.sidebar:
-        st.markdown(f"<div style='text-align:center;padding:20px 0;'><div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:56px;height:56px;border-radius:12px;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:22px;font-weight:800;color:white;'>HR</div><h2 style='margin:0;font-size:16px;'>تحليلات الموارد البشرية</h2><p style='opacity:.6;font-size:11px;'>رسال الود لتقنية المعلومات v5</p><div style='background:rgba(255,255,255,.1);border-radius:6px;padding:6px 10px;margin-top:8px;font-size:11px'>👤 {st.session_state.user_name} <span style='opacity:.6'>| {st.session_state.user_role}</span></div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align:center;padding:24px 0 16px;'><div style='background:linear-gradient(135deg,#E36414,#E9C46A);width:60px;height:60px;border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:24px;font-weight:800;color:white;box-shadow:0 4px 15px rgba(227,100,20,0.25);'>HR</div><h2 style='margin:0;font-size:16px;color:#0F4C5C !important;font-weight:700;'>رسال الود</h2><p style='color:#64748B !important;font-size:11px;margin-top:2px;'>تحليلات الموارد البشرية v5</p><div style='background:linear-gradient(135deg,rgba(15,76,92,0.06),rgba(42,157,143,0.04));border-radius:10px;padding:8px 12px;margin-top:10px;font-size:11px;border:1px solid rgba(15,76,92,0.06);color:#0F4C5C !important;'>👤 {st.session_state.user_name} <span style='color:#64748B !important;'>| {st.session_state.user_role}</span></div></div>", unsafe_allow_html=True)
         st.markdown("---")
 
         # Filter sections by access
@@ -12095,9 +12162,9 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                 st.markdown("---")
                 for idx, msg in enumerate(st.session_state.labor_chat):
                     if msg['role'] == 'user':
-                        st.markdown(f"<div style='background:#1e3a5f;color:white;padding:12px;border-radius:10px;margin:8px 0'>👤 {msg['content']}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='background:linear-gradient(135deg,#0F4C5C,#1A1A2E);color:white;padding:14px 18px;border-radius:16px 16px 4px 16px;margin:8px 0;box-shadow:0 2px 8px rgba(15,76,92,0.12)'>👤 {msg['content']}</div>", unsafe_allow_html=True)
                     else:
-                        st.markdown(f"<div style='background:#f0f4f8;color:#333;padding:12px;border-radius:10px;margin:8px 0;border-right:4px solid #0F4C5C'>⚖️ {msg['content']}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='background:rgba(255,255,255,0.88);color:#1A1A2E;padding:14px 18px;border-radius:16px 16px 16px 4px;margin:8px 0;border-right:4px solid #2A9D8F;box-shadow:0 1px 3px rgba(0,0,0,0.03);backdrop-filter:blur(16px)'>⚖️ {msg['content']}</div>", unsafe_allow_html=True)
                         fc1, fc2, fc3 = st.columns([1,1,8])
                         q_text = st.session_state.labor_chat[idx-1]['content'] if idx > 0 else ""
                         q_hash = hashlib.md5(q_text.encode()).hexdigest()[:10] if q_text else ""
@@ -12254,9 +12321,9 @@ GOSI: قديم (قبل 7/2024) موظف 9.75% + شركة 11.75% | جديد (بع
                 st.markdown("---")
                 for idx, msg in enumerate(st.session_state.hr_chat):
                     if msg['role'] == 'user':
-                        st.markdown(f"<div style='background:#1e3a5f;color:white;padding:12px;border-radius:10px;margin:8px 0'>👤 {msg['content']}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='background:linear-gradient(135deg,#0F4C5C,#1A1A2E);color:white;padding:14px 18px;border-radius:16px 16px 4px 16px;margin:8px 0;box-shadow:0 2px 8px rgba(15,76,92,0.12)'>👤 {msg['content']}</div>", unsafe_allow_html=True)
                     else:
-                        st.markdown(f"<div style='background:#f0faf5;color:#333;padding:12px;border-radius:10px;margin:8px 0;border-right:4px solid #2A9D8F'>📚 {msg['content']}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='background:rgba(255,255,255,0.88);color:#1A1A2E;padding:14px 18px;border-radius:16px 16px 16px 4px;margin:8px 0;border-right:4px solid #2A9D8F;box-shadow:0 1px 3px rgba(0,0,0,0.03);backdrop-filter:blur(16px)'>📚 {msg['content']}</div>", unsafe_allow_html=True)
                         fc1, fc2, fc3 = st.columns([1,1,8])
                         q_text = st.session_state.hr_chat[idx-1]['content'] if idx > 0 else ""
                         q_hash = hashlib.md5(q_text.encode()).hexdigest()[:10] if q_text else ""
