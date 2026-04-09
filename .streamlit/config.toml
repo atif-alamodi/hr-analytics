@@ -12,7 +12,7 @@ fastReruns = true
 
 [theme]
 primaryColor = "#E36414"
-backgroundColor = "#F8FAFB"
-secondaryBackgroundColor = "#FFFFFF"
-textColor = "#1A1A2E"
+backgroundColor = "#0E1117"
+secondaryBackgroundColor = "#1E1E2E"
+textColor = "#FAFAFA"
 font = "sans serif"
