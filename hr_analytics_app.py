@@ -1575,414 +1575,206 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
 
-/* ══════════════════════════════════════════════════════
-   WORLD-CLASS UX/UI - Glass Morphism + Teal/Ember/Gold
-   Matching localhost:3000 React Design System
-   ══════════════════════════════════════════════════════ */
+/* ===== Global Reset & Typography ===== */
+*{font-family:'IBM Plex Sans Arabic',sans-serif !important;box-sizing:border-box}
+.main .block-container{padding-top:1rem;max-width:1400px}
+.stApp{background:#F8FAFB !important;background-image:radial-gradient(at 40% 20%,rgba(15,76,92,0.04) 0px,transparent 50%),radial-gradient(at 80% 0%,rgba(227,100,20,0.03) 0px,transparent 50%),radial-gradient(at 0% 50%,rgba(42,157,143,0.03) 0px,transparent 50%) !important}
 
-/* ===== 1. GLOBAL FOUNDATION ===== */
-*{font-family:'IBM Plex Sans Arabic',sans-serif !important;box-sizing:border-box;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
-html{scroll-behavior:smooth}
-.main .block-container{padding:1.2rem 2rem 3rem;max-width:1400px}
-.stApp{
-    background:#F8FAFB !important;
-    background-image:
-        radial-gradient(at 40% 20%,rgba(15,76,92,0.06) 0px,transparent 50%),
-        radial-gradient(at 80% 0%,rgba(227,100,20,0.04) 0px,transparent 50%),
-        radial-gradient(at 0% 50%,rgba(42,157,143,0.04) 0px,transparent 50%),
-        radial-gradient(at 90% 80%,rgba(233,196,106,0.03) 0px,transparent 50%) !important;
-    background-attachment:fixed !important;
-}
-/* Subtle dot pattern overlay */
-.stApp::before{
-    content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
-    background-image:radial-gradient(rgba(15,76,92,0.03) 1px,transparent 1px);
-    background-size:28px 28px;
-}
-::selection{background:rgba(42,157,143,0.2);color:inherit}
-
-/* ===== 2. SCROLLBAR ===== */
-::-webkit-scrollbar{width:6px;height:6px}
+/* ===== Scrollbar ===== */
+::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:linear-gradient(180deg,rgba(15,76,92,0.2),rgba(42,157,143,0.15));border-radius:10px}
-::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,rgba(15,76,92,0.35),rgba(42,157,143,0.3))}
+::-webkit-scrollbar-thumb{background:rgba(15,76,92,0.2);border-radius:10px}
+::-webkit-scrollbar-thumb:hover{background:rgba(15,76,92,0.4)}
 
-/* ===== 3. SIDEBAR - Premium Light Design ===== */
-[data-testid="stSidebar"]{
-    background:linear-gradient(180deg,#FFFFFF 0%,#F8FAFB 50%,#F1F5F9 100%) !important;
-    border-left:1px solid rgba(15,76,92,0.06) !important;
-    box-shadow:-4px 0 24px rgba(15,76,92,0.03) !important;
-}
-[data-testid="stSidebar"] > div:first-child{
-    background:transparent !important;
-    padding-top:0 !important;
-}
-/* Sidebar text colors */
-[data-testid="stSidebar"] label,[data-testid="stSidebar"] .stRadio label,
-[data-testid="stSidebar"] .stMarkdown,[data-testid="stSidebar"] h1,
-[data-testid="stSidebar"] h2,[data-testid="stSidebar"] h3,
-[data-testid="stSidebar"] h4,[data-testid="stSidebar"] h5,
-[data-testid="stSidebar"] p,[data-testid="stSidebar"] span{color:#1A1A2E !important}
-[data-testid="stSidebar"] hr{border:none !important;height:1px !important;background:linear-gradient(90deg,transparent,rgba(15,76,92,0.08),transparent) !important;margin:12px 0 !important}
-/* Sidebar navigation radio */
-[data-testid="stSidebar"] .stRadio > div{gap:1px !important}
-[data-testid="stSidebar"] .stRadio > div > label{
-    padding:10px 14px !important;border-radius:12px !important;font-size:13.5px !important;
-    transition:all 0.3s cubic-bezier(0.4,0,0.2,1) !important;
-    border-right:3px solid transparent !important;margin:1px 0 !important;
-    position:relative !important;
-}
-[data-testid="stSidebar"] .stRadio > div > label:hover{
-    background:linear-gradient(135deg,rgba(15,76,92,0.03),rgba(42,157,143,0.02)) !important;
-    transform:translateX(-4px) !important;
-}
-[data-testid="stSidebar"] .stRadio > div > label[data-checked="true"],
-[data-testid="stSidebar"] .stRadio [data-baseweb="radio"] input:checked + div + div{
-    background:linear-gradient(135deg,rgba(227,100,20,0.08),rgba(42,157,143,0.04)) !important;
-    border-right:3px solid #E36414 !important;font-weight:600 !important;
-    color:#0F4C5C !important;
-}
+/* ===== Sidebar - Light Theme ===== */
+[data-testid="stSidebar"]{background:linear-gradient(180deg,#FFFFFF 0%,#F1F5F9 100%) !important;border-left:1px solid rgba(15,76,92,0.08) !important}
+[data-testid="stSidebar"] label, [data-testid="stSidebar"] .stRadio label,
+[data-testid="stSidebar"] .stMarkdown, [data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
+[data-testid="stSidebar"] h4, [data-testid="stSidebar"] h5,
+[data-testid="stSidebar"] p, [data-testid="stSidebar"] span{color:#1A1A2E !important}
+[data-testid="stSidebar"] hr{border-color:rgba(15,76,92,0.08) !important}
 /* Sidebar buttons */
-[data-testid="stSidebar"] .stButton button{
-    background:linear-gradient(135deg,#0F4C5C,#1A1A2E) !important;color:white !important;
-    border:none !important;border-radius:12px !important;font-weight:600 !important;
-    transition:all 0.3s cubic-bezier(0.4,0,0.2,1) !important;
-    box-shadow:0 2px 8px rgba(15,76,92,0.12) !important;
-}
-[data-testid="stSidebar"] .stButton button:hover{
-    transform:translateY(-2px) !important;
-    box-shadow:0 6px 20px rgba(15,76,92,0.2) !important;
-}
+[data-testid="stSidebar"] .stButton button{background:linear-gradient(135deg,#0F4C5C,#1A1A2E) !important;color:white !important;border:none !important;border-radius:10px !important;font-weight:600 !important;transition:all 0.3s !important}
+[data-testid="stSidebar"] .stButton button:hover{transform:translateY(-2px) !important;box-shadow:0 4px 15px rgba(15,76,92,0.2) !important}
 [data-testid="stSidebar"] [data-testid="stBaseButton-primary"]{
     background:linear-gradient(135deg,#0F4C5C,#1A1A2E) !important;
-    border:none !important;border-radius:12px !important;color:white !important;
-    font-weight:600 !important;box-shadow:0 2px 8px rgba(15,76,92,0.12) !important;
+    border:none !important;
+    border-radius:10px !important;
+    color:white !important;
+    font-weight:600 !important;
 }
 [data-testid="stSidebar"] [data-testid="stBaseButton-primary"]:hover{
-    box-shadow:0 6px 20px rgba(15,76,92,0.2) !important;transform:translateY(-2px) !important;
+    box-shadow:0 4px 15px rgba(15,76,92,0.2) !important;
+    transform:translateY(-2px) !important;
 }
-/* Sidebar inputs */
-[data-testid="stSidebar"] input,[data-testid="stSidebar"] select,
-[data-testid="stSidebar"] textarea,[data-testid="stSidebar"] .stSelectbox div[data-baseweb]{color:#1A1A2E !important}
+/* Sidebar inputs readable */
+[data-testid="stSidebar"] input, [data-testid="stSidebar"] select,
+[data-testid="stSidebar"] textarea, [data-testid="stSidebar"] .stSelectbox div[data-baseweb] {color:#1A1A2E !important}
+/* Sidebar radio navigation */
+[data-testid="stSidebar"] .stRadio > div{gap:2px}
+[data-testid="stSidebar"] .stRadio > div > label{padding:8px 12px;border-radius:10px;font-size:13px;transition:all 0.25s cubic-bezier(0.4,0,0.2,1)}
+[data-testid="stSidebar"] .stRadio > div > label:hover{background:rgba(15,76,92,0.04);transform:translateX(-3px)}
+[data-testid="stSidebar"] .stRadio > div > label[data-checked="true"]{background:linear-gradient(135deg,rgba(227,100,20,0.1),rgba(42,157,143,0.06)) !important;border-right:3px solid #E36414 !important;font-weight:600 !important}
 /* Sidebar expander */
-[data-testid="stSidebar"] .streamlit-expanderHeader{color:#0F4C5C !important;font-weight:600 !important}
-/* Sidebar file uploader */
-[data-testid="stSidebar"] [data-testid="stFileUploader"]{
-    background:linear-gradient(135deg,rgba(15,76,92,0.02),rgba(42,157,143,0.01)) !important;
-    border-radius:14px !important;padding:10px !important;
-    border:2px dashed rgba(15,76,92,0.1) !important;transition:all 0.3s !important;
+[data-testid="stSidebar"] .streamlit-expanderHeader{color:#0F4C5C !important}
+/* File uploader in sidebar */
+[data-testid="stSidebar"] [data-testid="stFileUploader"] {
+    background: rgba(15,76,92,0.02) !important;
+    border-radius: 12px !important;
+    padding: 8px !important;
+    border: 2px dashed rgba(15,76,92,0.12) !important;
 }
-[data-testid="stSidebar"] [data-testid="stFileUploader"]:hover{
-    border-color:rgba(42,157,143,0.25) !important;
-    background:linear-gradient(135deg,rgba(15,76,92,0.03),rgba(42,157,143,0.02)) !important;
+[data-testid="stSidebar"] [data-testid="stFileUploader"] label {color: #0F4C5C !important}
+[data-testid="stSidebar"] [data-testid="stFileUploader"] section {
+    background: rgba(15,76,92,0.02) !important;
+    border: 1px dashed rgba(15,76,92,0.1) !important;
+    border-radius: 10px !important;
 }
-[data-testid="stSidebar"] [data-testid="stFileUploader"] label{color:#0F4C5C !important}
-[data-testid="stSidebar"] [data-testid="stFileUploader"] section{
-    background:rgba(255,255,255,0.5) !important;border:1px dashed rgba(15,76,92,0.08) !important;border-radius:10px !important;
+[data-testid="stSidebar"] [data-testid="stFileUploader"] section > div {color: #64748B !important}
+[data-testid="stSidebar"] [data-testid="stFileUploader"] button {
+    background: linear-gradient(135deg,#0F4C5C,#2A9D8F) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 8px !important;
 }
-[data-testid="stSidebar"] [data-testid="stFileUploader"] section > div{color:#64748B !important}
-[data-testid="stSidebar"] [data-testid="stFileUploader"] button{
-    background:linear-gradient(135deg,#0F4C5C,#2A9D8F) !important;color:white !important;
-    border:none !important;border-radius:8px !important;
+[data-testid="stSidebar"] [data-testid="stFileUploader"] button:hover {
+    box-shadow: 0 4px 12px rgba(15,76,92,0.15) !important;
 }
-[data-testid="stSidebar"] small,[data-testid="stSidebar"] [data-testid="stFileUploader"] small{color:#94A3B8 !important}
+[data-testid="stSidebar"] small, [data-testid="stSidebar"] [data-testid="stFileUploader"] small {
+    color: #94A3B8 !important;
+}
 
-/* ===== 4. KPI METRIC CARDS - Glass Morphism ===== */
-[data-testid="stMetric"]{
-    background:rgba(255,255,255,0.92) !important;
-    backdrop-filter:blur(24px) saturate(200%) !important;
-    -webkit-backdrop-filter:blur(24px) saturate(200%) !important;
-    border-radius:16px !important;padding:20px 22px !important;
-    box-shadow:0 1px 2px rgba(15,76,92,0.04),0 4px 16px rgba(15,76,92,0.03) !important;
-    border:1px solid rgba(255,255,255,0.7) !important;
-    transition:all 0.35s cubic-bezier(0.4,0,0.2,1) !important;
-    position:relative !important;overflow:hidden !important;
-}
-[data-testid="stMetric"]::before{
-    content:'';position:absolute;top:-50%;right:-50%;width:100%;height:100%;
-    background:radial-gradient(circle,rgba(42,157,143,0.06) 0%,transparent 70%);
-    pointer-events:none;transition:opacity 0.4s;opacity:0;
-}
-[data-testid="stMetric"]:hover::before{opacity:1}
-[data-testid="stMetric"]::after{
-    content:'';position:absolute;bottom:0;left:0;right:0;height:3px;
-    background:linear-gradient(90deg,#2A9D8F,#E36414);opacity:0;transition:opacity 0.35s;
-}
-[data-testid="stMetric"]:hover{
-    transform:translateY(-4px) !important;
-    box-shadow:0 8px 32px rgba(15,76,92,0.08),0 2px 8px rgba(15,76,92,0.04) !important;
-}
-[data-testid="stMetric"]:hover::after{opacity:1}
-[data-testid="stMetric"] label{font-size:12px !important;color:#64748B !important;font-weight:500 !important;letter-spacing:0.01em !important}
-[data-testid="stMetric"] [data-testid="stMetricValue"]{
-    font-size:24px !important;font-weight:700 !important;color:#0F4C5C !important;
-    font-family:'Space Mono','IBM Plex Sans Arabic',monospace !important;
-    letter-spacing:-0.02em !important;
-}
-[data-testid="stMetric"] [data-testid="stMetricDelta"]{font-family:'Space Mono',monospace !important;font-size:12px !important}
+/* ===== KPI Metric Cards (Glass Morphism) ===== */
+[data-testid="stMetric"]{background:rgba(255,255,255,0.88) !important;backdrop-filter:blur(24px) saturate(200%) !important;-webkit-backdrop-filter:blur(24px) saturate(200%) !important;border-radius:14px !important;padding:18px 20px !important;box-shadow:0 1px 3px rgba(15,76,92,0.04),0 4px 12px rgba(15,76,92,0.02) !important;border:1px solid rgba(255,255,255,0.6) !important;transition:all 0.3s cubic-bezier(0.4,0,0.2,1) !important;position:relative !important;overflow:hidden !important}
+[data-testid="stMetric"]:hover{transform:translateY(-3px) !important;box-shadow:0 8px 30px rgba(15,76,92,0.08) !important}
+[data-testid="stMetric"] label{font-size:12px !important;color:#64748B !important;font-weight:500 !important}
+[data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:22px !important;font-weight:700 !important;color:#0F4C5C !important;font-family:'Space Mono','IBM Plex Sans Arabic',monospace !important}
+[data-testid="stMetric"] [data-testid="stMetricDelta"]{font-family:'Space Mono',monospace !important}
 
-/* ===== 5. TYPOGRAPHY ===== */
+/* ===== Typography ===== */
 .main h1{color:#0F4C5C !important;font-weight:700 !important;letter-spacing:-0.02em !important;font-size:1.6em !important}
-.main h2{color:#0F4C5C !important;font-weight:600 !important;font-size:1.3em !important}
-.main h3{color:#1A1A2E !important;font-weight:600 !important}
-.main p{color:#334155 !important;line-height:1.7 !important}
+h2{color:#0F4C5C !important;font-weight:600 !important}
+h3{color:#1A1A2E !important;font-weight:600 !important}
 
-/* ===== 6. HEADER COMPONENT (.hdr) ===== */
-.hdr{
-    background:linear-gradient(135deg,#0F4C5C 0%,#0c3d4a 40%,#1A1A2E 100%) !important;
-    padding:28px 32px !important;border-radius:18px !important;margin-bottom:28px !important;
-    color:white !important;position:relative !important;overflow:hidden !important;
-    box-shadow:0 4px 24px rgba(15,76,92,0.18),0 1px 3px rgba(0,0,0,0.06) !important;
-}
-.hdr::before{
-    content:'';position:absolute;top:-60%;right:-30%;width:80%;height:160%;
-    background:radial-gradient(ellipse,rgba(42,157,143,0.12) 0%,transparent 70%);pointer-events:none;
-}
-.hdr::after{
-    content:'';position:absolute;bottom:-40%;left:-20%;width:60%;height:100%;
-    background:radial-gradient(ellipse,rgba(227,100,20,0.06) 0%,transparent 70%);pointer-events:none;
-}
-.hdr h1{color:white !important;margin:0 !important;font-size:26px !important;font-weight:700 !important;position:relative;z-index:1}
-.hdr p{color:rgba(255,255,255,.7) !important;margin:6px 0 0 !important;font-size:13.5px !important;position:relative;z-index:1}
+/* ===== Header Component ===== */
+.hdr{background:linear-gradient(135deg,#0F4C5C,#1A1A2E) !important;padding:22px 28px !important;border-radius:16px !important;margin-bottom:24px !important;color:white !important;position:relative !important;overflow:hidden !important;box-shadow:0 4px 20px rgba(15,76,92,0.15) !important}
+.hdr h1{color:white !important;margin:0 !important;font-size:24px !important;font-weight:700 !important}
+.hdr p{color:rgba(255,255,255,.7) !important;margin:4px 0 0 !important;font-size:13px !important}
 
-/* ===== 7. INFO BOXES (.ibox) ===== */
-.ibox{
-    background:rgba(255,255,255,0.92) !important;backdrop-filter:blur(20px) !important;
-    border-radius:14px !important;padding:16px 20px !important;
-    border-right:4px solid #2A9D8F !important;margin-bottom:12px !important;
-    font-size:13.5px !important;line-height:1.8 !important;
-    box-shadow:0 1px 3px rgba(0,0,0,0.02),0 2px 8px rgba(15,76,92,0.02) !important;
-    transition:all 0.3s cubic-bezier(0.4,0,0.2,1) !important;
-}
-.ibox:hover{transform:translateX(-4px) !important;box-shadow:0 4px 16px rgba(15,76,92,0.06) !important}
-.ibox.warn{background:rgba(255,247,237,0.95) !important;border-right-color:#E36414 !important}
-.ibox.ok{background:rgba(237,250,248,0.95) !important;border-right-color:#2A9D8F !important}
-.ibox.bad{background:rgba(254,242,242,0.95) !important;border-right-color:#DC2626 !important}
+/* ===== Info Boxes ===== */
+.ibox{background:rgba(255,255,255,0.88) !important;backdrop-filter:blur(16px) !important;border-radius:12px !important;padding:14px 18px !important;border-right:4px solid #2A9D8F !important;margin-bottom:10px !important;font-size:13px !important;line-height:1.8 !important;box-shadow:0 1px 3px rgba(0,0,0,0.03) !important;transition:all 0.3s !important}
+.ibox:hover{transform:translateX(-3px) !important;box-shadow:0 4px 12px rgba(0,0,0,0.04) !important}
+.ibox.warn{background:rgba(255,247,237,0.9) !important;border-right-color:#E36414 !important}
+.ibox.ok{background:rgba(240,253,244,0.9) !important;border-right-color:#2A9D8F !important}
+.ibox.bad{background:rgba(254,242,242,0.9) !important;border-right-color:#DC2626 !important}
 
-/* ===== 8. KPI CARDS (.kpi class) ===== */
-.kpi{
-    background:rgba(255,255,255,0.92) !important;backdrop-filter:blur(24px) !important;
-    color:#1A1A2E !important;border-radius:16px !important;padding:22px 18px !important;
-    text-align:center !important;margin-bottom:14px !important;
-    border:1px solid rgba(255,255,255,0.7) !important;
-    box-shadow:0 1px 2px rgba(15,76,92,0.04),0 4px 16px rgba(15,76,92,0.03) !important;
-    transition:all 0.35s cubic-bezier(0.4,0,0.2,1) !important;
-    position:relative !important;overflow:hidden !important;
-}
-.kpi::before{
-    content:'';position:absolute;top:-50%;right:-50%;width:100%;height:100%;
-    background:radial-gradient(circle,rgba(42,157,143,0.06) 0%,transparent 70%);
-    pointer-events:none;transition:opacity 0.4s;opacity:0;
-}
-.kpi:hover::before{opacity:1}
-.kpi::after{
-    content:'';position:absolute;bottom:0;left:0;right:0;height:3px;
-    background:linear-gradient(90deg,#2A9D8F,#E36414);opacity:0;transition:opacity 0.35s;
-}
-.kpi:hover{transform:translateY(-4px) !important;box-shadow:0 8px 32px rgba(15,76,92,0.08) !important}
-.kpi:hover::after{opacity:1}
-.kpi h3{font-size:26px !important;margin:8px 0 4px !important;font-weight:800 !important;color:#0F4C5C !important;font-family:'Space Mono','IBM Plex Sans Arabic',monospace !important;position:relative;z-index:1}
-.kpi p{font-size:11.5px !important;color:#64748B !important;margin:0 !important;font-weight:500 !important;position:relative;z-index:1}
+/* ===== KPI Cards (Custom .kpi class) ===== */
+.kpi{background:rgba(255,255,255,0.88) !important;backdrop-filter:blur(24px) !important;color:#1A1A2E !important;border-radius:14px !important;padding:18px !important;text-align:center !important;margin-bottom:12px !important;border:1px solid rgba(255,255,255,0.6) !important;box-shadow:0 1px 3px rgba(15,76,92,0.04),0 4px 12px rgba(15,76,92,0.02) !important;transition:all 0.3s cubic-bezier(0.4,0,0.2,1) !important;position:relative !important;overflow:hidden !important}
+.kpi:hover{transform:translateY(-3px) !important;box-shadow:0 8px 30px rgba(15,76,92,0.08) !important}
+.kpi h3{font-size:24px !important;margin:6px 0 2px !important;font-weight:800 !important;color:#0F4C5C !important;font-family:'Space Mono','IBM Plex Sans Arabic',monospace !important}
+.kpi p{font-size:11px !important;color:#64748B !important;margin:0 !important;font-weight:500 !important}
 
-/* ===== 9. TABS ===== */
-.stTabs [data-baseweb="tab-list"]{
-    gap:4px !important;background:rgba(255,255,255,0.5) !important;
-    border-radius:14px !important;padding:5px !important;
-    border:1px solid rgba(15,76,92,0.04) !important;
-}
-.stTabs [data-baseweb="tab"]{
-    border-radius:10px !important;padding:10px 18px !important;font-weight:500 !important;
-    color:#64748B !important;font-size:13px !important;
-    transition:all 0.3s cubic-bezier(0.4,0,0.2,1) !important;
-}
-.stTabs [data-baseweb="tab"]:hover{background:rgba(15,76,92,0.03) !important;color:#0F4C5C !important}
-.stTabs [data-baseweb="tab"][aria-selected="true"]{
-    background:white !important;color:#0F4C5C !important;font-weight:600 !important;
-    box-shadow:0 2px 8px rgba(15,76,92,0.06) !important;
-}
-/* Tab indicator line */
-.stTabs [data-baseweb="tab-highlight"]{background:#E36414 !important;height:3px !important;border-radius:3px !important}
+/* ===== Tabs ===== */
+.stTabs [data-baseweb="tab-list"]{gap:4px !important;background:rgba(255,255,255,0.6) !important;border-radius:12px !important;padding:4px !important}
+.stTabs [data-baseweb="tab"]{border-radius:10px !important;padding:8px 16px !important;font-weight:500 !important;color:#64748B !important;font-size:13px !important;transition:all 0.3s !important}
+.stTabs [data-baseweb="tab"][aria-selected="true"]{background:white !important;color:#0F4C5C !important;font-weight:600 !important;box-shadow:0 1px 3px rgba(0,0,0,0.06) !important}
 
-/* ===== 10. BUTTONS ===== */
-.stButton button{
-    border-radius:12px !important;font-weight:600 !important;padding:10px 24px !important;
-    transition:all 0.3s cubic-bezier(0.4,0,0.2,1) !important;border:none !important;
-    letter-spacing:0.01em !important;
-}
-.stButton button:hover{transform:translateY(-2px) !important;box-shadow:0 6px 20px rgba(15,76,92,0.12) !important}
-.stButton button:active{transform:translateY(0) !important}
-.stDownloadButton button{
-    background:linear-gradient(135deg,#0F4C5C,#2A9D8F) !important;color:white !important;
-    border-radius:12px !important;box-shadow:0 2px 8px rgba(15,76,92,0.12) !important;
-}
-.stDownloadButton button:hover{transform:translateY(-2px) !important;box-shadow:0 6px 20px rgba(15,76,92,0.2) !important}
+/* ===== Buttons ===== */
+.stButton button{border-radius:10px !important;font-weight:600 !important;padding:8px 20px !important;transition:all 0.3s cubic-bezier(0.4,0,0.2,1) !important;border:none !important}
+.stButton button:hover{transform:translateY(-2px) !important;box-shadow:0 4px 15px rgba(15,76,92,0.15) !important}
+.stDownloadButton button{background:linear-gradient(135deg,#0F4C5C,#2A9D8F) !important;color:white !important;border-radius:10px !important}
+.stDownloadButton button:hover{transform:translateY(-2px) !important;box-shadow:0 4px 15px rgba(15,76,92,0.2) !important}
 
-/* ===== 11. EXPANDERS ===== */
-[data-testid="stExpander"]{
-    background:rgba(255,255,255,0.88) !important;border-radius:14px !important;
-    border:1px solid rgba(15,76,92,0.05) !important;overflow:hidden !important;
-    box-shadow:0 1px 3px rgba(0,0,0,0.02) !important;transition:all 0.3s !important;
-    margin-bottom:8px !important;
-}
-[data-testid="stExpander"]:hover{box-shadow:0 4px 16px rgba(15,76,92,0.05) !important}
-[data-testid="stExpander"] summary,.streamlit-expanderHeader{
-    font-weight:600 !important;color:#0F4C5C !important;padding:14px 18px !important;
-}
+/* ===== Expanders ===== */
+.streamlit-expanderHeader{background:rgba(255,255,255,0.88) !important;border-radius:12px !important;border:1px solid rgba(15,76,92,0.06) !important;font-weight:600 !important;color:#0F4C5C !important;transition:all 0.3s !important}
+.streamlit-expanderHeader:hover{box-shadow:0 4px 12px rgba(15,76,92,0.06) !important}
 
-/* ===== 12. DATAFRAMES ===== */
-[data-testid="stDataFrame"]{
-    border-radius:16px !important;overflow:hidden !important;
-    border:1px solid rgba(15,76,92,0.05) !important;
-    box-shadow:0 1px 3px rgba(0,0,0,0.02),0 2px 8px rgba(15,76,92,0.02) !important;
-    margin-bottom:16px !important;
-}
+/* ===== DataFrames ===== */
+[data-testid="stDataFrame"]{border-radius:14px !important;overflow:hidden !important;border:1px solid rgba(15,76,92,0.06) !important;box-shadow:0 1px 3px rgba(0,0,0,0.03) !important;margin-bottom:16px}
 
-/* ===== 13. INPUTS & SELECTS ===== */
-.stSelectbox [data-baseweb="select"],.stMultiSelect [data-baseweb="select"]{
-    border-radius:12px !important;border:1.5px solid rgba(15,76,92,0.1) !important;
-    transition:all 0.3s !important;background:rgba(255,255,255,0.9) !important;
-}
-.stSelectbox [data-baseweb="select"]:focus-within,.stMultiSelect [data-baseweb="select"]:focus-within{
-    box-shadow:0 0 0 3px rgba(42,157,143,0.1),0 0 0 1px rgba(42,157,143,0.3) !important;
-    border-color:#2A9D8F !important;
-}
-.stTextInput input,.stTextArea textarea,.stNumberInput input{
-    border-radius:12px !important;border:1.5px solid rgba(15,76,92,0.1) !important;
-    transition:all 0.3s !important;background:rgba(255,255,255,0.9) !important;
-    padding:10px 14px !important;
-}
-.stTextInput input:focus,.stTextArea textarea:focus,.stNumberInput input:focus{
-    box-shadow:0 0 0 3px rgba(42,157,143,0.1),0 0 0 1px rgba(42,157,143,0.3) !important;
-    border-color:#2A9D8F !important;
-}
+/* ===== Selectbox / Input ===== */
+.stSelectbox [data-baseweb="select"],.stMultiSelect [data-baseweb="select"]{border-radius:10px !important;border:1px solid rgba(15,76,92,0.12) !important;transition:all 0.3s !important}
+.stSelectbox [data-baseweb="select"]:focus-within,.stMultiSelect [data-baseweb="select"]:focus-within{box-shadow:0 0 0 3px rgba(42,157,143,0.12),0 0 0 1px rgba(42,157,143,0.25) !important;border-color:#2A9D8F !important}
+.stTextInput input,.stTextArea textarea{border-radius:10px !important;border:1px solid rgba(15,76,92,0.12) !important;transition:all 0.3s !important}
+.stTextInput input:focus,.stTextArea textarea:focus{box-shadow:0 0 0 3px rgba(42,157,143,0.12),0 0 0 1px rgba(42,157,143,0.25) !important;border-color:#2A9D8F !important}
 
-/* ===== 14. ALERTS ===== */
-[data-testid="stAlert"]{border-radius:14px !important;border:none !important;backdrop-filter:blur(12px) !important}
-div[data-testid="stAlert"] > div[role="alert"]{border-radius:14px !important}
-.stSuccess,.element-container .stAlert[data-baseweb="notification"][kind="positive"]{
-    background:rgba(42,157,143,0.06) !important;border-left:4px solid #2A9D8F !important;border-radius:12px !important;
-}
-.stWarning{background:rgba(227,100,20,0.06) !important;border-left:4px solid #E36414 !important;border-radius:12px !important}
-.stError{background:rgba(220,38,38,0.06) !important;border-left:4px solid #DC2626 !important;border-radius:12px !important}
-.stInfo{background:rgba(15,76,92,0.06) !important;border-left:4px solid #0F4C5C !important;border-radius:12px !important}
+/* ===== Alerts ===== */
+.stAlert{border-radius:12px !important;border:none !important}
+.stSuccess{background:rgba(42,157,143,0.06) !important;border-left:4px solid #2A9D8F !important;border-radius:10px !important}
+.stWarning{background:rgba(227,100,20,0.06) !important;border-left:4px solid #E36414 !important;border-radius:10px !important}
+.stError{background:rgba(220,38,38,0.06) !important;border-left:4px solid #DC2626 !important;border-radius:10px !important}
+.stInfo{background:rgba(15,76,92,0.06) !important;border-left:4px solid #0F4C5C !important;border-radius:10px !important}
 
-/* ===== 15. CHAT MESSAGES ===== */
-[data-testid="stChatMessage"]{
-    background:rgba(255,255,255,0.92) !important;border-radius:16px !important;
-    border:1px solid rgba(15,76,92,0.04) !important;
-    backdrop-filter:blur(20px) !important;margin-bottom:10px !important;
-    box-shadow:0 1px 3px rgba(0,0,0,0.02) !important;
-    transition:all 0.3s !important;
-}
-[data-testid="stChatMessage"]:hover{box-shadow:0 4px 16px rgba(15,76,92,0.05) !important}
+/* ===== Chat Messages ===== */
+[data-testid="stChatMessage"]{background:rgba(255,255,255,0.88) !important;border-radius:14px !important;border:1px solid rgba(15,76,92,0.04) !important;backdrop-filter:blur(16px) !important;margin-bottom:8px !important}
 
-/* ===== 16. PROGRESS BARS ===== */
+/* ===== Progress Bars ===== */
 .stProgress > div > div{background:linear-gradient(90deg,#2A9D8F,#E36414) !important;border-radius:10px !important}
-.stProgress > div{background:rgba(15,76,92,0.06) !important;border-radius:10px !important}
 
-/* ===== 17. FORMS ===== */
-[data-testid="stForm"]{
-    background:rgba(255,255,255,0.92) !important;backdrop-filter:blur(24px) !important;
-    border-radius:18px !important;padding:28px !important;
-    border:1px solid rgba(255,255,255,0.7) !important;
-    box-shadow:0 4px 24px rgba(15,76,92,0.05),0 1px 3px rgba(0,0,0,0.02) !important;
-}
+/* ===== Forms ===== */
+[data-testid="stForm"]{background:rgba(255,255,255,0.88) !important;backdrop-filter:blur(24px) !important;border-radius:16px !important;padding:24px !important;border:1px solid rgba(255,255,255,0.6) !important;box-shadow:0 4px 20px rgba(15,76,92,0.06) !important}
 
-/* ===== 18. PLOTLY CHARTS ===== */
-.js-plotly-plot{border-radius:16px !important;overflow:hidden !important}
-.js-plotly-plot .main-svg{border-radius:16px !important}
+/* ===== Plotly Charts ===== */
+.js-plotly-plot{border-radius:14px !important;overflow:hidden !important}
 
-/* ===== 19. COLUMNS ===== */
-[data-testid="stHorizontalBlock"]{gap:18px !important}
+/* ===== Columns Gap ===== */
+[data-testid="stHorizontalBlock"]{gap:16px !important}
 
-/* ===== 20. MULTISELECT TAGS ===== */
-[data-baseweb="tag"]{border-radius:8px !important;background:rgba(15,76,92,0.06) !important;border:1px solid rgba(15,76,92,0.1) !important}
-
-/* ===== 21. TOOLTIPS ===== */
-[data-baseweb="tooltip"]{border-radius:10px !important;backdrop-filter:blur(12px) !important}
-
-/* ===== 22. SLIDERS ===== */
-.stSlider > div > div > div{background:#2A9D8F !important}
-.stSlider [data-baseweb="slider"] div[role="slider"]{
-    background:linear-gradient(135deg,#E36414,#E9C46A) !important;
-    border:2px solid white !important;box-shadow:0 2px 8px rgba(227,100,20,0.3) !important;
-}
-
-/* ===== 23. CHECKBOXES & RADIO ===== */
-.stCheckbox label span[data-checked="true"],.stRadio label div[data-checked="true"]{
-    background:#2A9D8F !important;border-color:#2A9D8F !important;
-}
-
-/* ===== 24. COLUMN CONTAINERS (Glass Cards) ===== */
-[data-testid="stVerticalBlockBorderWrapper"]{
-    border:none !important;border-radius:16px !important;
-}
-/* Give chart areas a subtle card feel */
-[data-testid="stVerticalBlockBorderWrapper"] > div{border-radius:16px !important}
-
-/* ===== 25. SPINNER ===== */
-.stSpinner > div > div{border-top-color:#E36414 !important}
-
-/* ===== 26. NUMBER DISPLAY ===== */
+/* ===== Number Styling ===== */
 [data-testid="stMetricValue"]{font-family:'Space Mono','IBM Plex Sans Arabic',monospace !important}
 
-/* ===== 27. HIDE STREAMLIT BRANDING ===== */
+/* ===== Hide Streamlit Branding ===== */
 #MainMenu,footer,[data-testid="stToolbar"]{visibility:hidden !important}
-header[data-testid="stHeader"]{background:transparent !important}
 
-/* ===== 28. ANIMATIONS ===== */
-@keyframes fadeInUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-@keyframes fadeInRight{from{opacity:0;transform:translateX(-20px)}to{opacity:1;transform:translateX(0)}}
-@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
-@keyframes pulseGlow{0%,100%{box-shadow:0 0 0 0 rgba(42,157,143,0)}50%{box-shadow:0 0 0 6px rgba(42,157,143,0.08)}}
-@keyframes gradientShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
-.main .block-container > div > div{animation:fadeInUp 0.6s cubic-bezier(0.16,1,0.3,1) both}
-.main .block-container > div > div:nth-child(2){animation-delay:0.05s}
-.main .block-container > div > div:nth-child(3){animation-delay:0.1s}
-.main .block-container > div > div:nth-child(4){animation-delay:0.15s}
-.main .block-container > div > div:nth-child(5){animation-delay:0.2s}
-.main .block-container > div > div:nth-child(6){animation-delay:0.25s}
+/* ===== Animations ===== */
+@keyframes fadeInUp{from{opacity:0;transform:translateY(15px)}to{opacity:1;transform:translateY(0)}}
+.main .block-container > div{animation:fadeInUp 0.5s ease-out}
 
-/* ===== 29. RESPONSIVE DESIGN ===== */
+/* ===== RESPONSIVE DESIGN ===== */
+/* Tablet */
 @media (max-width: 1024px) {
     .main .block-container{padding:0.5rem 1rem;max-width:100%}
-    .hdr{padding:18px 22px;border-radius:14px}
-    .hdr h1{font-size:20px !important}
-    .kpi{padding:14px;border-radius:14px}
+    .hdr{padding:14px 18px;border-radius:12px}
+    .hdr h1{font-size:18px !important}
+    .hdr p{font-size:11px}
+    .kpi{padding:12px;border-radius:12px}
     .kpi h3{font-size:20px !important}
-    [data-testid="stMetric"]{padding:14px 16px}
+    .kpi p{font-size:10px}
+    [data-testid="stMetric"]{padding:12px 14px}
     [data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:18px !important}
 }
+/* Mobile */
 @media (max-width: 768px) {
     .main .block-container{padding:0.3rem 0.5rem;max-width:100%}
-    .hdr{padding:14px 16px;border-radius:12px;margin-bottom:14px}
-    .hdr h1{font-size:17px !important}
-    .hdr p{font-size:11px}
-    .kpi{padding:10px;border-radius:12px;margin-bottom:8px}
+    .hdr{padding:12px 14px;border-radius:10px;margin-bottom:12px}
+    .hdr h1{font-size:16px !important}
+    .hdr p{font-size:10px}
+    .kpi{padding:10px;border-radius:10px;margin-bottom:6px}
     .kpi h3{font-size:16px !important}
-    .kpi p{font-size:9px !important}
-    .ibox{padding:10px 12px;font-size:12px;border-radius:10px}
-    [data-testid="stMetric"]{padding:10px 12px;border-radius:12px}
+    .kpi p{font-size:9px}
+    .ibox{padding:8px 10px;font-size:12px;border-radius:8px}
+    [data-testid="stMetric"]{padding:8px 10px;border-radius:10px}
     [data-testid="stMetric"] label{font-size:10px !important}
-    [data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:15px !important}
+    [data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:14px !important}
     .main h1{font-size:1.2em !important}
     [data-testid="column"]{min-width:100% !important;width:100% !important}
     [data-testid="stSidebar"]{min-width:0 !important}
     [data-testid="stDataFrame"]{font-size:11px}
-    .stTabs [data-baseweb="tab"]{padding:6px 10px !important;font-size:11px !important}
-    .stTabs [data-baseweb="tab-list"]{gap:2px !important;overflow-x:auto}
+    .stTabs [data-baseweb="tab"]{padding:6px 10px;font-size:11px}
+    .stTabs [data-baseweb="tab-list"]{gap:2px;overflow-x:auto}
     .js-plotly-plot{width:100% !important}
     .js-plotly-plot .plotly{width:100% !important}
-    .stTextInput,.stSelectbox,.stNumberInput{margin-bottom:4px}
-    .stButton > button{font-size:13px;padding:8px 12px !important}
-    [data-testid="stHorizontalBlock"]{gap:8px !important}
+    .stTextInput, .stSelectbox, .stNumberInput{margin-bottom:4px}
+    .stButton > button{font-size:13px;padding:8px 12px}
 }
+/* Small mobile */
 @media (max-width: 480px) {
     .hdr h1{font-size:14px !important}
     .kpi h3{font-size:14px !important}
-    .kpi{padding:8px}
-    [data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:13px !important}
-    .stTabs [data-baseweb="tab"]{padding:4px 8px !important;font-size:10px !important}
+    .kpi{padding:6px}
+    [data-testid="stMetric"] [data-testid="stMetricValue"]{font-size:12px !important}
+    .stTabs [data-baseweb="tab"]{padding:4px 8px;font-size:10px}
 }
 </style>
 """, unsafe_allow_html=True)
